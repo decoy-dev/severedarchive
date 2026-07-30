@@ -1,0 +1,61 @@
+@import 'tailwindcss';
+@import '@fontsource/share-tech-mono';
+
+:root {
+  --void: #07090b;
+  --panel: rgba(10, 13, 16, 0.78);
+  --panel-solid: #0b0e11;
+  --text: #c9d2d8;
+  --bright: #eff3f5;
+  --dim: #6e7a83;
+  --hair: rgba(201, 210, 216, 0.16);
+  --hair-bright: rgba(201, 210, 216, 0.34);
+  --acid: #b6ff2e;
+  --alert: #ff3524;
+  --mono: 'Share Tech Mono', ui-monospace, monospace;
+  --frame: clamp(16px, 4.5vw, 56px);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root { height: 100%; }
+body {
+  background: var(--void);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow: hidden;               /* single screen — never scrolls */
+  overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+video { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+.stage { position: fixed; inset: 0; height: 100dvh; overflow: hidden; }
+
+/* background video layer */
+.bg-video { position: absolute; inset: 0; z-index: 0; }
+
+/* glass margin: four strips around the window */
+.glass-strip { position: absolute; z-index: 1; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); background: rgba(7, 9, 11, 0.35); }
+.glass-strip.top    { top: 0; left: 0; right: 0; height: var(--frame); }
+.glass-strip.bottom { bottom: 0; left: 0; right: 0; height: var(--frame); }
+.glass-strip.left   { top: var(--frame); bottom: var(--frame); left: 0; width: var(--frame); }
+.glass-strip.right  { top: var(--frame); bottom: var(--frame); right: 0; width: var(--frame); }
+/* lite tier: no live blur */
+[data-tier='lite'] .glass-strip { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(7, 9, 11, 0.82); }
+
+/* the terminal window */
+.terminal-window {
+  position: absolute; inset: var(--frame); z-index: 2;
+  background: var(--panel);
+  border: 1px solid var(--hair-bright);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.terminal-window::after {   /* static scanlines */
+  content: ''; position: absolute; inset: 0; z-index: 40; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 3px);
+}
