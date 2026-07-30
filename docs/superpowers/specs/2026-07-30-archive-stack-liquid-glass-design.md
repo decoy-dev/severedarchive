@@ -21,6 +21,14 @@
 - Choice persists in `localStorage` (`severedarchive.archiveView`); default `stack`.
 - Works on all viewports; on mobile the stack is the same model (front card near-full-width, slivers along the right edge).
 
+### Reactive backdrop
+
+- The fullscreen background video always mirrors the front-of-stack video: bringing a card to front crossfades the backdrop (~600ms, opacity-only, two layered `<video>` elements) to that file's **thumb encode** (240p — it sits behind blur(18px) glass and the margin blur, so the low bitrate is invisible and decode cost stays trivial).
+- Initial backdrop = `file01` thumb (the default front). The static `bg.mp4` is no longer referenced by the app (the media pipeline still produces it; file stays as a fallback asset).
+- The backdrop persists across tab switches and the grid toggle — it always reflects the last stack front.
+- Lite tier: backdrop is the front file's poster `<img>`, swapped instantly (no crossfade). Reduced motion: instant swap, no crossfade.
+- Transient playing-video count during a crossfade: 3 (front full-res + outgoing bg + incoming bg), settling to 2.
+
 ### Tiers / motion
 
 - Playback: front card full-res playing + background video = 2 playing videos max in stack view (lighter than the grid's 5). Slivers are poster `<img>`s — never videos.
