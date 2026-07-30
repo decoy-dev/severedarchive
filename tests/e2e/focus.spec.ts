@@ -16,6 +16,13 @@ test('clicking a card zooms it to focus; Esc returns it', async ({ page, viewpor
   if (viewport!.width <= 1024) {
     await expect(page.locator('.grid-pager')).toHaveCount(0)
   }
+  // the FLIP zoom must not introduce any page scroll while a card is focused
+  const scroll = await page.evaluate(() => ({
+    doc: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+    body: document.body.scrollHeight - document.body.clientHeight,
+  }))
+  expect(scroll.doc).toBeLessThanOrEqual(1)
+  expect(scroll.body).toBeLessThanOrEqual(1)
   await page.keyboard.press('Escape')
   await expect(page.locator('.archive-grid')).toHaveAttribute('data-focused', '')
 })
