@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Fetched/synthesized media pipeline sources (not committed; run scripts/fetch-media.sh)
+raw/
+
 # Playwright
 /test-results/
 /playwright-report/
