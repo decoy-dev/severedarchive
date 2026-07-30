@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { animate } from 'animejs'
 import BackgroundVideo from './components/BackgroundVideo'
 import TerminalWindow, { type TabId } from './components/TerminalWindow'
+import ArchiveGrid from './components/ArchiveGrid'
 import AboutPanel from './components/AboutPanel'
 import LinksPanel from './components/LinksPanel'
 import { readPerfTier } from './lib/perfTier'
@@ -37,7 +38,7 @@ export default function App() {
       <div className="glass-strip top" /><div className="glass-strip bottom" />
       <div className="glass-strip left" /><div className="glass-strip right" />
       <TerminalWindow tab={tab} onTab={setTab} onBell={() => {}} bodyRef={bodyRef}>
-        {tab === 'archive' && <div className="panel">ARCHIVE LOADING…</div>}
+        {tab === 'archive' && <ArchiveGrid tier={tier} />}
         {tab === 'about' && <AboutPanel />}
         {tab === 'links' && <LinksPanel />}
       </TerminalWindow>

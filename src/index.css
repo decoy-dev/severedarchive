@@ -103,3 +103,32 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .link-go { color: var(--dim); }
 .link-row:hover { border-color: var(--acid); }
 .link-row:hover .link-go { color: var(--acid); }
+
+/* ── archive grid ── */
+.archive-grid { display: flex; flex-direction: column; }
+.grid-cards {
+  flex: 1 1 auto; min-height: 0;
+  display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 12px;
+}
+@media (max-width: 1024px) { .grid-cards { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .grid-cards { grid-template-columns: 1fr; } }
+
+.file-card {
+  display: flex; flex-direction: column; min-height: 0; text-align: left;
+  border: 1px solid var(--hair); background: var(--panel-solid);
+}
+.file-card:hover { border-color: var(--hair-bright); }
+.file-card-media { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.file-card-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.file-card-label {
+  display: flex; justify-content: space-between; gap: 8px;
+  padding: 8px 10px; font-size: 10px; letter-spacing: 0.04em;
+  border-top: 1px solid var(--hair); color: var(--text); flex: 0 0 auto;
+}
+
+.grid-pager {
+  display: flex; align-items: center; gap: 14px; justify-content: center;
+  padding-top: 10px; flex: 0 0 auto; font-size: 11px; color: var(--dim);
+}
+.grid-pager button { color: var(--text); padding: 2px 8px; border: 1px solid var(--hair); }
+.grid-pager button:hover { color: var(--acid); border-color: var(--acid); }
