@@ -18,6 +18,12 @@
     <meta name="description" content="severedarchive — motion + visual art. Renders set to sound." />
   </head>
   <body>
+    <svg width="0" height="0" style="position: absolute" color-interpolation-filters="sRGB" aria-hidden="true">
+      <filter id="liquid-refraction" x="0" y="0" width="100%" height="100%">
+        <feImage href="" result="map" preserveAspectRatio="none" id="liquid-refraction-map" />
+        <feDisplacementMap in="SourceGraphic" in2="map" scale="22" xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+    </svg>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -14,7 +14,7 @@
   --alert: #ff3524;
   --mono: 'Share Tech Mono', ui-monospace, monospace;
   --frame: clamp(16px, 4.5vw, 56px);
-  --glass-fill: rgba(10, 13, 16, 0.42);
+  --glass-fill: rgba(10, 13, 16, 0.5); /* tuned up from 0.42 — dim text washed out over bright videos */
   --glass-blur: 18px;
   --glass-rim: rgba(255, 255, 255, 0.28);
   --glass-rim-dark: rgba(0, 0, 0, 0.35);
@@ -208,6 +208,64 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   .archive-grid.has-focus .grid-cards { grid-template-columns: repeat(2, 1fr); }
   .archive-grid.has-focus .file-card:not(.is-focus) { display: none; } /* stage takes the whole window on mobile */
   .archive-grid.has-focus .file-card.is-focus { grid-column: 1 / -1; grid-row: 1 / -1; }
+}
+
+/* ── archive stack ── */
+.archive-panel { display: flex; flex-direction: column; }
+.view-toggle { display: flex; gap: 0; justify-content: flex-end; flex: 0 0 auto; padding-bottom: 8px; }
+.view-toggle button { padding: 5px 12px; font-size: 10px; letter-spacing: 0.06em; color: var(--dim); border: 1px solid var(--hair); margin-left: -1px; }
+.view-toggle button.is-active { color: var(--acid); background: rgba(182, 255, 46, 0.05); border-color: var(--hair-bright); }
+.view-toggle button:hover:not(.is-active) { color: var(--text); }
+
+.archive-stack { flex: 1 1 auto; min-height: 0; position: relative; display: flex; }
+/* The stage is a GLASS FRAME: 14px padding band where the backdrop shows through
+   (this band is what the base glass — and Task 6's refraction — acts on);
+   the video sits inset inside it. Without the band, backdrop-filter would be
+   fully covered by the opaque video and invisible. */
+.stack-stage { position: absolute; inset: 0 132px 52px 0; padding: 14px; overflow: hidden; }
+.stack-stage video { width: 100%; height: 100%; object-fit: cover; position: relative; z-index: 2; }
+.stack-slivers { position: absolute; top: 0; right: 0; bottom: 52px; width: 128px; }
+/* Slivers pack left-to-right and nearly fill the zone (5 × 24px of 128px), so a
+   zone the full size of .stack-slivers would sit BELOW every sliver button in
+   z-order and never receive the pointer at its own center. Pin it to the bare
+   right-edge strip instead, above the slivers, so it's reliably hoverable
+   (mouseenter/leave are bound to the whole .stack-slivers container anyway —
+   this element only needs to be a hit-testable target for hover). */
+.stack-fan-zone { position: absolute; top: 0; right: 0; bottom: 0; width: 12px; z-index: 10; }
+.stack-sliver {
+  position: absolute; top: 0; height: 100%; overflow: hidden;
+  border: 1px solid var(--hair); background: var(--panel-solid);
+  transform-origin: top left;
+}
+.stack-sliver img { width: 72px; height: 100%; object-fit: cover; opacity: 0.55; }
+.archive-stack[data-fanned='true'] .stack-sliver img { opacity: 0.85; }
+.stack-sliver .sliver-label {
+  position: absolute; top: 8px; left: 4px; font-size: 9px; letter-spacing: 0.08em;
+  writing-mode: vertical-rl; color: var(--text); opacity: 0; transition: opacity 150ms;
+}
+.archive-stack[data-fanned='true'] .sliver-label { opacity: 1; }
+.stack-sliver:hover { border-color: var(--acid); }
+.stack-hud {
+  position: absolute; left: 0; right: 132px; bottom: 0; height: 40px;
+  display: flex; justify-content: space-between; align-items: center; padding: 0 12px; font-size: 11px;
+}
+.stack-hud > * { position: relative; z-index: 2; }
+.stack-hud button { border: 1px solid var(--hair); padding: 4px 10px; }
+.stack-hud button:hover { color: var(--acid); border-color: var(--acid); }
+
+.archive-stack[data-fanned='true'] .stack-slivers { width: 384px; z-index: 5; }
+.archive-stack[data-fanned='true'] .stack-stage { /* stage stays put; fan overlays it from the right */ }
+
+.stack-stage.liquid {
+  /* refraction chained with a lighter blur so the bend reads through the frame band */
+  backdrop-filter: url(#liquid-refraction) blur(6px) saturate(1.4);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.6) brightness(1.08); /* non-Chromium ignores url(); .glass fallback look */
+}
+
+@media (max-width: 640px) {
+  .stack-stage { inset: 0 44px 48px 0; }
+  .stack-slivers { width: 40px; bottom: 48px; }
+  .stack-hud { right: 44px; height: 36px; }
 }
 
 /* ── boot ── */

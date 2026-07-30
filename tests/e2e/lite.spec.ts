@@ -1,15 +1,13 @@
 import { test, expect } from '@playwright/test'
+import { gotoGrid } from './helpers'
 
 test('lite tier renders poster images and drops the glass-strip blur', async ({ page }) => {
   // reduced-motion must be emulated before the first page.goto so perfTier reads
   // lite on initial mount (perfTier is read once, via useState(readPerfTier)).
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.goto('./')
-  await expect(page.locator('.stage')).toHaveAttribute('data-booted', 'true', { timeout: 6000 })
+  // grid cards (the assertions below) live behind the STACK/GRID toggle now.
+  await gotoGrid(page)
   await expect(page.locator('.stage')).toHaveAttribute('data-tier', 'lite')
-
-  await page.getByRole('button', { name: 'Acknowledge' }).click()
-  await expect(page.locator('[data-notification]')).toHaveCount(0)
 
   // unfocused grid cards render <img> posters, not <video>, on lite
   const cardCount = await page.locator('[data-card]').count()

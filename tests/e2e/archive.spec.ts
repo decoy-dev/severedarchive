@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test'
+import { gotoGrid } from './helpers'
 
 test('archive shows the exact per-breakpoint card count, with a pager only when paginated', async ({ page, viewport }) => {
-  await page.goto('./')
+  await gotoGrid(page)
   const width = viewport!.width
   const expectedPerPage = width <= 640 ? 3 : width <= 1024 ? 4 : 6
   const cards = page.locator('[data-card]')
@@ -20,7 +21,7 @@ test('archive shows the exact per-breakpoint card count, with a pager only when 
 })
 
 test('no more videos playing than the cap allows', async ({ page }) => {
-  await page.goto('./')
+  await gotoGrid(page)
   await page.waitForTimeout(800)
   const playing = await page.evaluate(
     () => [...document.querySelectorAll('video')].filter((v) => !v.paused).length,

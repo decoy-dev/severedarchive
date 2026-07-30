@@ -2,18 +2,20 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { animate } from 'animejs'
 import BackgroundVideo from './components/BackgroundVideo'
 import TerminalWindow, { type TabId } from './components/TerminalWindow'
-import ArchiveGrid from './components/ArchiveGrid'
+import ArchivePanel from './components/ArchivePanel'
 import AboutPanel from './components/AboutPanel'
 import LinksPanel from './components/LinksPanel'
 import BootSequence from './components/BootSequence'
 import HomeNotification from './components/HomeNotification'
 import { readPerfTier, prefersReducedMotion } from './lib/perfTier'
+import { ARCHIVE } from './data/archive'
 
 export default function App() {
   const [tier] = useState(readPerfTier)
   const [booted, setBooted] = useState(false)
   const [tab, setTabState] = useState<TabId>('archive')
   const [noticeOpen, setNoticeOpen] = useState(true)
+  const [backdropId, setBackdropId] = useState(ARCHIVE[0].id)
   const bodyRef = useRef<HTMLDivElement | null>(null)
 
   const setTab = (t: TabId) => {
@@ -38,7 +40,7 @@ export default function App() {
 
   return (
     <div className="stage" data-tier={tier} data-booted={booted ? 'true' : 'false'}>
-      <BackgroundVideo tier={tier} />
+      <BackgroundVideo tier={tier} fileId={backdropId} />
       <div className="glass-strip top" /><div className="glass-strip bottom" />
       <div className="glass-strip left" /><div className="glass-strip right" />
       {!booted ? (
@@ -46,7 +48,7 @@ export default function App() {
       ) : (
         <>
           <TerminalWindow tab={tab} onTab={setTab} onBell={() => setNoticeOpen(true)} bodyRef={bodyRef}>
-            {tab === 'archive' && <ArchiveGrid tier={tier} />}
+            {tab === 'archive' && <ArchivePanel tier={tier} onFrontChange={setBackdropId} />}
             {tab === 'about' && <AboutPanel />}
             {tab === 'links' && <LinksPanel />}
           </TerminalWindow>

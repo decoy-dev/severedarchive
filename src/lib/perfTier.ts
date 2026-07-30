@@ -26,3 +26,15 @@ export function readPerfTier(): PerfTier {
 export function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
+
+// Chromium is currently the only engine that resolves an SVG filter reference
+// inside backdrop-filter; other engines either ignore the whole declaration or
+// throw on CSS.supports. Gate the refraction effect on that support probe so
+// non-Chromium browsers fall back to the plain .glass look.
+export function supportsLiquidRefraction(): boolean {
+  try {
+    return CSS.supports('backdrop-filter', 'url(#liquid-refraction)')
+  } catch {
+    return false
+  }
+}

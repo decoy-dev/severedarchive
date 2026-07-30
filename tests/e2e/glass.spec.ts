@@ -10,6 +10,6 @@ test('terminal window is glass on full tier, opaque on lite', async ({ page, vie
     expect(bf).toContain('blur(18px)')
     expect(bf).toContain('saturate(1.6)')
     const bg = await page.locator('.terminal-window').evaluate((el) => getComputedStyle(el).backgroundColor)
-    expect(bg).toContain('0.42') // translucent fill, not the old 0.78 panel
+    expect(bg).toContain('0.5') // translucent fill, not the old 0.78 panel
   }
 })

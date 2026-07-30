@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test'
+import { gotoGrid } from './helpers'
 
 test('clicking a card zooms it to focus; Esc returns it', async ({ page, viewport }) => {
-  await page.goto('./')
+  await gotoGrid(page)
   const first = page.locator('[data-card]').first()
   const before = await first.boundingBox()
   await first.click()
@@ -28,7 +29,7 @@ test('clicking a card zooms it to focus; Esc returns it', async ({ page, viewpor
 })
 
 test('focused video uses the full-res source', async ({ page }) => {
-  await page.goto('./')
+  await gotoGrid(page)
   await page.locator('[data-card]').first().click()
   await page.waitForTimeout(300)
   const src = await page.locator('[data-card].is-focus video').getAttribute('src')
@@ -36,13 +37,11 @@ test('focused video uses the full-res source', async ({ page }) => {
 })
 
 test('re-clicking the focused card returns it to the grid', async ({ page }) => {
-  await page.goto('./')
   // on mobile the focused card fills the whole window, and its center now falls
   // under the still-open home notification (an alertdialog, z-index above the
-  // window) — dismiss it first, same pattern window.spec.ts uses for this class
-  // of overlap.
-  await page.getByRole('button', { name: 'Acknowledge' }).click()
-  await expect(page.locator('[data-notification]')).toHaveCount(0)
+  // window) — gotoGrid dismisses it before entering grid view, same pattern
+  // window.spec.ts uses for this class of overlap.
+  await gotoGrid(page)
   const first = page.locator('[data-card]').first()
   await first.click()
   await expect(page.locator('.archive-grid')).toHaveAttribute('data-focused', /file\d+/)
@@ -55,7 +54,7 @@ test('clicking a different card switches focus to it', async ({ page, viewport }
   // card can't be clicked there — the switch path only applies at wider breakpoints.
   test.skip(viewport!.width <= 640, 'unfocused cards are hidden while focused on mobile')
 
-  await page.goto('./')
+  await gotoGrid(page)
   const cards = page.locator('[data-card]')
   const firstId = await cards.nth(0).getAttribute('data-file-id')
   const secondId = await cards.nth(1).getAttribute('data-file-id')
@@ -71,7 +70,7 @@ test('clicking a different card switches focus to it', async ({ page, viewport }
 })
 
 test('the Close file button returns focus to the grid', async ({ page }) => {
-  await page.goto('./')
+  await gotoGrid(page)
   await page.locator('[data-card]').first().click()
   await expect(page.locator('.archive-grid')).toHaveAttribute('data-focused', /file\d+/)
   await page.getByRole('button', { name: 'Close file' }).click()
@@ -84,7 +83,7 @@ test('the focus-stage video actually plays, not just loads', async ({ page }) =>
   // tablet) is where the src-swap-resets-playback bug lived, so assert on both,
   // just skip the "returned card resumes" half on lite where unfocused cards are
   // static posters.
-  await page.goto('./')
+  await gotoGrid(page)
   await page.locator('[data-card]').first().click()
   const video = page.locator('[data-card].is-focus video')
   await expect(video).toHaveCount(1)
@@ -104,7 +103,7 @@ test('the focus-stage video actually plays, not just loads', async ({ page }) =>
 test('the returned card resumes playback after Esc (full tier)', async ({ page, viewport }) => {
   test.skip(viewport!.width <= 640, 'unfocused cards are static posters on lite/mobile')
 
-  await page.goto('./')
+  await gotoGrid(page)
   const first = page.locator('[data-card]').first()
   await first.click()
   await expect(page.locator('.archive-grid')).toHaveAttribute('data-focused', /file\d+/)
