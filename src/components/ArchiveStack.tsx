@@ -13,6 +13,9 @@ export default function ArchiveStack({ tier, onFrontChange }: { tier: PerfTier; 
   const [frontIndex, setFrontIndex] = useState(0)
   const [fanned, setFanned] = useState(false)
   const [volume, setVolume] = useState(0) // 0 = muted; placeholder encodes are silent but real content has sound
+  const [stageAr, setStageAr] = useState(16 / 9) // follows the front video's intrinsic ratio (supports 9:16, 3:4, ...)
+  const [stageSize, setStageSize] = useState<{ w: number; h: number } | null>(null)
+  const areaRef = useRef<HTMLDivElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const director = useMemo(() => new VideoDirector(1), [])
   const front = ARCHIVE[frontIndex]
@@ -38,6 +41,23 @@ export default function ArchiveStack({ tier, onFrontChange }: { tier: PerfTier; 
   const swipe = useSwipe(next, prev)
 
   useEffect(() => () => window.clearTimeout(flashTimer.current), [])
+
+  // The glass stage hugs the video's aspect ratio: size it to fit the available
+  // area (which shrinks while the fan is open — the fan PUSHES the stage, it
+  // does not overlay it). ResizeObserver re-fires during the area's push
+  // transition, so the stage glides along with it.
+  useEffect(() => {
+    const el = areaRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      const { width, height } = el.getBoundingClientRect()
+      if (!width || !height) return
+      const w = Math.min(width, height * stageAr)
+      setStageSize({ w, h: w / stageAr })
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [stageAr])
 
   useEffect(() => { onFrontChange(front.id) }, [front.id, onFrontChange])
 
@@ -78,13 +98,20 @@ export default function ArchiveStack({ tier, onFrontChange }: { tier: PerfTier; 
 
   return (
     <div className="archive-stack" data-front={front.id} data-fanned={fanned ? 'true' : 'false'}>
-      <div className={`stack-stage glass${liquid ? ' liquid' : ''}`} ref={stageRef} data-stack-front {...swipe}>
-        <div className="stage-incoming" ref={incomingRef}>
-          <video ref={videoRef} src={fullSrc(front.id)} poster={posterSrc(front.id)} muted={volume === 0} loop playsInline />
+      <div className="stack-stage-area" ref={areaRef}>
+        <div className={`stack-stage glass${liquid ? ' liquid' : ''}`} ref={stageRef} data-stack-front {...swipe}
+          style={stageSize ? { width: stageSize.w, height: stageSize.h } : undefined}>
+          <div className="stage-incoming" ref={incomingRef}>
+            <video ref={videoRef} src={fullSrc(front.id)} poster={posterSrc(front.id)} muted={volume === 0} loop playsInline
+              onLoadedMetadata={(e) => {
+                const v = e.currentTarget
+                if (v.videoWidth && v.videoHeight) setStageAr(v.videoWidth / v.videoHeight)
+              }} />
+          </div>
+          {outgoingId && outgoingId !== front.id && (
+            <img className="stage-outgoing" ref={outgoingRef} src={posterSrc(outgoingId)} alt="" />
+          )}
         </div>
-        {outgoingId && outgoingId !== front.id && (
-          <img className="stage-outgoing" ref={outgoingRef} src={posterSrc(outgoingId)} alt="" />
-        )}
       </div>
       <div className="stack-slivers" onMouseEnter={() => setFanned(true)} onMouseLeave={() => setFanned(false)}>
         <div className="stack-fan-zone" aria-hidden="true" />

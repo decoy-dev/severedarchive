@@ -19,7 +19,11 @@ export default function ArchivePanel({ tier, onFrontChange }: { tier: PerfTier; 
         <button aria-label="Stack view" className={view === 'stack' ? 'is-active' : ''} onClick={() => pick('stack')}>STACK</button>
         <button aria-label="Grid view" className={view === 'grid' ? 'is-active' : ''} onClick={() => pick('grid')}>GRID</button>
       </div>
-      {view === 'stack' ? <ArchiveStack tier={tier} onFrontChange={onFrontChange} /> : <ArchiveGrid tier={tier} />}
+      {/* relative wrapper: ArchiveGrid's .panel positions absolute against it
+          instead of blanketing the whole archive-panel (which hid the toggle) */}
+      <div className="archive-panel-body">
+        {view === 'stack' ? <ArchiveStack tier={tier} onFrontChange={onFrontChange} /> : <ArchiveGrid tier={tier} />}
+      </div>
     </div>
   )
 }
