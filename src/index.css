@@ -95,6 +95,10 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
    boxes) — restore it here since .terminal-window's own rule precedes .glass in
    the cascade and would otherwise lose the tie on equal specificity. */
 .terminal-window.glass { position: absolute; }
+/* .glass::before (sheen, z-index: 1) paints above unpositioned children; content
+   children of any glass surface need position:relative + z-index:2 to stack above
+   the sheen and remain legible. Future glass hosts in Tasks 3/4 should apply this
+   pattern to their own child content layers (tabs, footers, controls, etc.). */
 
 /* ── window chrome ── */
 .tw-titlebar {
