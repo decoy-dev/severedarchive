@@ -31,7 +31,7 @@
 - Create: `package.json`, `vite.config.ts`, `tsconfig.json`, `index.html`, `src/main.tsx`, `src/App.tsx`, `src/index.css`, `playwright.config.ts`, `tests/e2e/smoke.spec.ts`, `.gitignore`
 
 **Interfaces:**
-- Produces: CSS custom properties (`--void --panel --text --bright --dim --hair --hair-bright --acid --alert --mono --frame`), classes `.stage`, `.terminal-window`, `.glass-frame`, `.scanlines`; npm scripts `dev build preview test e2e`; Playwright projects `desktop` (1440×900), `tablet` (768×1024), `mobile` (390×844) with `webServer` on port 4173 and `baseURL http://localhost:4173/severedarchive/`.
+- Produces: CSS custom properties (`--void --panel --text --bright --dim --hair --hair-bright --acid --alert --mono --frame`), classes `.stage`, `.terminal-window`, `.glass-strip` (with `.top/.bottom/.left/.right` modifiers; scanlines are `.terminal-window::after`); npm scripts `dev build preview test e2e`; Playwright projects `desktop` (1440×900), `tablet` (768×1024), `mobile` (390×844) with `webServer` on port 4173 and `baseURL http://localhost:4173/severedarchive/`.
 
 - [ ] **Step 1: Scaffold project**
 
