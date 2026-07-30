@@ -21,7 +21,7 @@ export default function HomeNotification({ onDismiss }: { onDismiss: () => void 
   }
 
   return (
-    <div className="notification" data-notification role="alertdialog" aria-label="Incoming transmission">
+    <div className="notification glass" data-notification role="alertdialog" aria-label="Incoming transmission">
       <div className="notification-inner" ref={ref}>
         <div className="notification-head">
           <span className="notification-dot" />

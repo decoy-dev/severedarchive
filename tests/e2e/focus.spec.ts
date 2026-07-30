@@ -37,6 +37,12 @@ test('focused video uses the full-res source', async ({ page }) => {
 
 test('re-clicking the focused card returns it to the grid', async ({ page }) => {
   await page.goto('./')
+  // on mobile the focused card fills the whole window, and its center now falls
+  // under the still-open home notification (an alertdialog, z-index above the
+  // window) — dismiss it first, same pattern window.spec.ts uses for this class
+  // of overlap.
+  await page.getByRole('button', { name: 'Acknowledge' }).click()
+  await expect(page.locator('[data-notification]')).toHaveCount(0)
   const first = page.locator('[data-card]').first()
   await first.click()
   await expect(page.locator('.archive-grid')).toHaveAttribute('data-focused', /file\d+/)

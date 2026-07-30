@@ -55,7 +55,7 @@ export default function ArchiveGrid({ tier }: { tier: PerfTier }) {
         ))}
       </div>
       {focusedFile && (
-        <div className="focus-hud">
+        <div className="focus-hud glass">
           <span className="focus-meta">
             FILE_{focusedFile.index} // {focusedFile.name}.{focusedFile.ext}
             <span className="tw-dim"> · {focusedFile.tagline.toUpperCase()} · {focusedFile.year}</span>

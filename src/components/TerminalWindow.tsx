@@ -31,7 +31,7 @@ export default function TerminalWindow({
   }, [])
 
   return (
-    <section className="terminal-window" data-tab={tab} ref={rootRef}>
+    <section className="terminal-window glass" data-tab={tab} ref={rootRef}>
       <header className="tw-titlebar">
         <span className="tw-title">SEVEREDARCHIVE <span className="tw-dim">// FILE SYSTEM</span></span>
         <span className="tw-status">
