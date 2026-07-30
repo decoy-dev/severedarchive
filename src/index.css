@@ -59,3 +59,47 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   content: ''; position: absolute; inset: 0; z-index: 40; pointer-events: none;
   background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 3px);
 }
+
+/* ── window chrome ── */
+.tw-titlebar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px; height: 42px; flex: 0 0 auto;
+  border-bottom: 1px solid var(--hair-bright);
+  font-size: 12px; letter-spacing: 0.04em; color: var(--bright);
+}
+.tw-dim { color: var(--dim); }
+.tw-status { display: flex; gap: 16px; align-items: center; font-size: 11px; }
+.tw-bell { border: 1px solid var(--hair); padding: 3px 8px; color: var(--text); }
+.tw-bell:hover { border-color: var(--acid); color: var(--acid); }
+
+.tw-tabs { display: flex; gap: 0; padding: 10px 14px 0; flex: 0 0 auto; }
+.tw-tab {
+  padding: 7px 16px; font-size: 11px; letter-spacing: 0.06em;
+  color: var(--dim); border: 1px solid var(--hair); border-bottom: 0; margin-right: -1px;
+  background: rgba(7, 9, 11, 0.4);
+}
+.tw-tab.is-active { color: var(--acid); background: rgba(182, 255, 46, 0.05); border-color: var(--hair-bright); }
+.tw-tab:hover:not(.is-active) { color: var(--text); }
+
+.tw-body { flex: 1 1 auto; min-height: 0; border: 1px solid var(--hair-bright); margin: 0 14px; position: relative; overflow: hidden; }
+.tw-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  height: 36px; padding: 0 14px; flex: 0 0 auto; font-size: 11px;
+}
+
+/* ── panels ── */
+.panel { position: absolute; inset: 0; padding: clamp(16px, 3vw, 32px); overflow: hidden; }
+.panel-block { border: 1px solid var(--hair); padding: 12px 16px; margin-bottom: 12px; max-width: 560px; }
+.panel-label { display: block; font-size: 10px; letter-spacing: 0.1em; color: var(--dim); margin-bottom: 6px; }
+.panel-big { font-size: clamp(18px, 2.4vw, 26px); letter-spacing: 0.02em; color: var(--bright); } /* Share Tech Mono is single-weight — no bold anywhere */
+
+.links-panel { display: flex; flex-direction: column; justify-content: center; gap: 12px; max-width: 560px; }
+.link-row {
+  display: grid; grid-template-columns: 110px 1fr auto; align-items: center; gap: 12px;
+  border: 1px solid var(--hair); padding: 14px 16px;
+}
+.link-row .panel-label { margin: 0; }
+.link-value { color: var(--bright); font-size: 14px; }
+.link-go { color: var(--dim); }
+.link-row:hover { border-color: var(--acid); }
+.link-row:hover .link-go { color: var(--acid); }
