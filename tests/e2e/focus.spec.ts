@@ -8,7 +8,9 @@ test('clicking a card zooms it to focus; Esc returns it', async ({ page }) => {
   await expect(page.locator('.archive-grid')).toHaveAttribute('data-focused', /file\d+/)
   await page.waitForTimeout(500) // FLIP settles
   const after = await page.locator('[data-card].is-focus').boundingBox()
-  expect(after!.width).toBeGreaterThan(before!.width * 1.5)
+  const beforeArea = before!.width * before!.height
+  const afterArea = after!.width * after!.height
+  expect(afterArea).toBeGreaterThan(beforeArea * 1.5)
   await expect(page.getByRole('button', { name: 'Toggle sound' })).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.locator('.archive-grid')).toHaveAttribute('data-focused', '')

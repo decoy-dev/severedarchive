@@ -111,7 +111,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 12px;
 }
 @media (max-width: 1024px) { .grid-cards { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 640px) { .grid-cards { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .grid-cards { grid-template-columns: 1fr; } }
 
 .file-card {
   display: flex; flex-direction: column; min-height: 0; text-align: left;
