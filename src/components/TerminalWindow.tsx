@@ -1,4 +1,5 @@
-import type { ReactNode, RefObject } from 'react'
+import { useEffect, useRef, type ReactNode, type RefObject } from 'react'
+import { animate } from 'animejs'
 
 export type TabId = 'archive' | 'about' | 'links'
 const TABS: { id: TabId; label: string }[] = [
@@ -17,8 +18,18 @@ export default function TerminalWindow({
   footer?: ReactNode
   children: ReactNode
 }) {
+  const rootRef = useRef<HTMLElement | null>(null)
+  const entered = useRef(false)
+
+  // spec: the window draws in after boot, rather than appearing as an instant swap
+  useEffect(() => {
+    if (!rootRef.current || entered.current) return
+    entered.current = true
+    animate(rootRef.current, { opacity: [0, 1], scale: [0.985, 1], duration: 300, ease: 'outQuad' })
+  }, [])
+
   return (
-    <section className="terminal-window" data-tab={tab}>
+    <section className="terminal-window" data-tab={tab} ref={rootRef}>
       <header className="tw-titlebar">
         <span className="tw-title">SEVEREDARCHIVE <span className="tw-dim">// FILE SYSTEM</span></span>
         <span className="tw-status">

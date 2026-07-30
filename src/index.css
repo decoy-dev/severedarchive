@@ -54,6 +54,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   border: 1px solid var(--hair-bright);
   display: flex; flex-direction: column;
   overflow: hidden;
+  opacity: 0; /* drawn in by TerminalWindow's mount effect once boot completes */
 }
 .terminal-window::after {   /* static scanlines */
   content: ''; position: absolute; inset: 0; z-index: 40; pointer-events: none;
@@ -175,8 +176,11 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .notification {
   position: absolute; z-index: 5; width: min(360px, calc(100vw - 2 * var(--frame) - 24px));
   top: calc(var(--frame) + 54px); right: calc(var(--frame) + 14px);
-  background: var(--panel-solid); border: 1px solid var(--hair-bright); opacity: 0;
+  background: var(--panel-solid); border: 1px solid var(--hair-bright);
 }
+/* entrance/dismiss animation targets this inner wrapper, not .notification itself —
+   .notification owns the mobile centering transform and must stay untouched by JS */
+.notification-inner { opacity: 0; }
 .notification-head {
   display: flex; align-items: center; gap: 8px; padding: 8px 12px;
   border-bottom: 1px solid var(--hair-bright); font-size: 11px; color: var(--bright);
@@ -185,9 +189,9 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .notification-body { padding: 14px 12px; font-size: 11px; }
 .notification-ack {
   display: block; width: 100%; padding: 10px 12px; text-align: center;
-  border-top: 1px solid var(--hair-bright); color: var(--acid); font-size: 11px; letter-spacing: 0.08em;
+  border-top: 1px solid var(--hair-bright); color: var(--text); font-size: 11px; letter-spacing: 0.08em;
 }
-.notification-ack:hover { background: rgba(182, 255, 46, 0.07); }
+.notification-ack:hover, .notification-ack:focus-visible { color: var(--acid); background: rgba(182, 255, 46, 0.07); }
 @media (max-width: 640px) {
   .notification { left: 50%; right: auto; transform: translateX(-50%); top: 30%; }
 }

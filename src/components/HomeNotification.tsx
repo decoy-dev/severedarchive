@@ -2,6 +2,9 @@ import { useEffect, useRef } from 'react'
 import { animate } from 'animejs'
 
 export default function HomeNotification({ onDismiss }: { onDismiss: () => void }) {
+  // animate an inner wrapper, never the outer .notification element — the outer owns
+  // the mobile centering transform (translateX(-50%)), and anime's inline `transform`
+  // writes would otherwise clobber that positioning rule.
   const ref = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -15,18 +18,20 @@ export default function HomeNotification({ onDismiss }: { onDismiss: () => void 
   }
 
   return (
-    <div className="notification" data-notification ref={ref} role="alertdialog" aria-label="Incoming transmission">
-      <div className="notification-head">
-        <span className="notification-dot" />
-        INCOMING TRANSMISSION
+    <div className="notification" data-notification role="alertdialog" aria-label="Incoming transmission">
+      <div className="notification-inner" ref={ref}>
+        <div className="notification-head">
+          <span className="notification-dot" />
+          INCOMING TRANSMISSION
+        </div>
+        <div className="notification-body">
+          <p className="panel-big">SEVEREDARCHIVE</p>
+          <p className="tw-dim">MOTION + VISUAL ART // RENDERS SET TO SOUND</p>
+        </div>
+        <button className="notification-ack" aria-label="Acknowledge" onClick={dismiss}>
+          [ ACKNOWLEDGE ]
+        </button>
       </div>
-      <div className="notification-body">
-        <p className="panel-big">SEVEREDARCHIVE</p>
-        <p className="tw-dim">MOTION + VISUAL ART // RENDERS SET TO SOUND</p>
-      </div>
-      <button className="notification-ack" aria-label="Acknowledge" onClick={dismiss}>
-        [ ACKNOWLEDGE ]
-      </button>
     </div>
   )
 }
