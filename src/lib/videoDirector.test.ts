@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
+import type { Mock } from 'vitest'
 import { VideoDirector, type Playable } from './videoDirector'
 
-const fake = (): Playable & { play: ReturnType<typeof vi.fn>; pause: ReturnType<typeof vi.fn> } => ({
+const fake = (): Playable & { play: Mock; pause: Mock } => ({
   play: vi.fn(), pause: vi.fn(),
 })
 
