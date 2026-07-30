@@ -195,3 +195,20 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 @media (max-width: 640px) {
   .notification { left: 50%; right: auto; transform: translateX(-50%); top: 30%; }
 }
+
+/* ── mobile: purpose-built layout ── */
+@media (max-width: 640px) {
+  :root { --frame: 10px; }
+  .tw-titlebar { height: 38px; font-size: 11px; }
+  .tw-title { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .tw-status { flex: 0 0 auto; }
+  .tw-status > .tw-dim { display: none; } /* "SESSION OPEN" — dropped so title + bell fit one line */
+  .tw-footer { display: none; }
+  .terminal-window { flex-direction: column; }
+  .tw-tabs { order: 3; padding: 0; border-top: 1px solid var(--hair-bright); }
+  .tw-tab { flex: 1 1 0; text-align: center; padding: 13px 0; border: 0; margin: 0; background: transparent; }
+  .tw-tab.is-active { background: rgba(182, 255, 46, 0.06); }
+  .tw-body { order: 2; margin: 10px 10px 0; }
+  .panel { padding: 12px; }
+  .panel-block { padding: 10px 12px; }
+}

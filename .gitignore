@@ -20,6 +20,7 @@ raw/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+/shots/
 
 # Editor directories and files
 .vscode/*
