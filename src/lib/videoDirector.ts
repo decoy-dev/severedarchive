@@ -1,10 +1,9 @@
-export type Playable = { play(): void; pause(): void }
+export type Playable = { play(): void; pause(): void; readonly paused: boolean }
 
 export class VideoDirector {
   private order: string[] = []
   private els = new Map<string, Playable>()
   private focus: string | null = null
-  private playing = new Set<string>()
   private maxPlaying: number
 
   constructor(maxPlaying = 4) {
@@ -17,10 +16,16 @@ export class VideoDirector {
     this.apply()
   }
   unregister(id: string) {
+    const el = this.els.get(id)
+    if (el && !el.paused) el.pause()
     this.els.delete(id)
     this.order = this.order.filter((x) => x !== id)
-    this.playing.delete(id)
-    if (this.focus === id) this.focus = null
+    // Deliberately do not clear `this.focus` here even if it equals `id`: FileCard
+    // re-registers (unregister immediately followed by register of the same id)
+    // whenever `focused` changes, including the moment a card *becomes* focused —
+    // clearing focus here would erase the focus that was just set. apply() already
+    // guards a dangling focus reference via `this.els.has(this.focus)`, so a
+    // focus id with no matching element is always safely a no-op.
     this.apply()
   }
   setFocus(id: string | null) {
@@ -28,7 +33,10 @@ export class VideoDirector {
     this.apply()
   }
   playingIds(): string[] {
-    return this.order.filter((id) => this.playing.has(id))
+    return this.order.filter((id) => {
+      const el = this.els.get(id)
+      return !!el && !el.paused
+    })
   }
   private apply() {
     const desired = new Set<string>()
@@ -37,12 +45,13 @@ export class VideoDirector {
       if (desired.size >= this.maxPlaying) break
       desired.add(id)
     }
+    // Judge against the element's actual paused state, not a shadow "is playing"
+    // ledger — a src swap (thumb <-> full) resets the element to paused underneath
+    // us, and a stale ledger would never notice and never reissue play().
     for (const [id, el] of this.els) {
       const should = desired.has(id)
-      const is = this.playing.has(id)
-      if (should && !is) { el.play(); this.playing.add(id) }
-      if (!should && is) { el.pause(); this.playing.delete(id) }
-      if (!should && !is) el.pause()
+      if (should && el.paused) el.play()
+      else if (!should && !el.paused) el.pause()
     }
   }
 }

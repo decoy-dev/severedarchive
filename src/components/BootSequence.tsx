@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { createTimeline, stagger } from 'animejs'
+import { prefersReducedMotion } from '../lib/perfTier'
 
 const LINES = [
   '> SEVEREDARCHIVE OS v2.6',
@@ -16,6 +17,10 @@ export default function BootSequence({ onDone }: { onDone: () => void }) {
   useEffect(() => {
     if (!ref.current || done.current) return
     done.current = true
+    if (prefersReducedMotion()) {
+      onDone()
+      return
+    }
     const rows = ref.current.querySelectorAll('.boot-line')
     const tl = createTimeline({ defaults: { ease: 'linear' } })
     tl.add(rows, { opacity: [0, 1], duration: 60, delay: stagger(140) })

@@ -7,7 +7,7 @@ import AboutPanel from './components/AboutPanel'
 import LinksPanel from './components/LinksPanel'
 import BootSequence from './components/BootSequence'
 import HomeNotification from './components/HomeNotification'
-import { readPerfTier } from './lib/perfTier'
+import { readPerfTier, prefersReducedMotion } from './lib/perfTier'
 
 export default function App() {
   const [tier] = useState(readPerfTier)
@@ -18,7 +18,7 @@ export default function App() {
 
   const setTab = (t: TabId) => {
     setTabState(t)
-    if (bodyRef.current) animate(bodyRef.current, { opacity: [0.15, 1], duration: 180, ease: 'outQuad' })
+    if (bodyRef.current && !prefersReducedMotion()) animate(bodyRef.current, { opacity: [0.15, 1], duration: 180, ease: 'outQuad' })
   }
 
   // spec: arrow keys switch tabs
@@ -30,7 +30,7 @@ export default function App() {
         const i = order.indexOf(cur)
         return order[(i + (e.key === 'ArrowRight' ? 1 : order.length - 1)) % order.length]
       })
-      if (bodyRef.current) animate(bodyRef.current, { opacity: [0.15, 1], duration: 180, ease: 'outQuad' })
+      if (bodyRef.current && !prefersReducedMotion()) animate(bodyRef.current, { opacity: [0.15, 1], duration: 180, ease: 'outQuad' })
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

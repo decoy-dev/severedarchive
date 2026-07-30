@@ -1,4 +1,5 @@
 import { animate } from 'animejs'
+import { prefersReducedMotion } from './perfTier'
 
 export function captureRects(els: HTMLElement[]): Map<HTMLElement, DOMRect> {
   return new Map(els.map((el) => [el, el.getBoundingClientRect()]))
@@ -9,6 +10,9 @@ export function playFlip(
   els: HTMLElement[],
   opts: { duration?: number } = {},
 ) {
+  // Elements already sit at their final (post-layout) position/size by the time
+  // this runs — the FLIP is purely cosmetic. Skip it outright under reduced motion.
+  if (prefersReducedMotion()) return
   const duration = opts.duration ?? 420
   for (const el of els) {
     const before = prev.get(el)

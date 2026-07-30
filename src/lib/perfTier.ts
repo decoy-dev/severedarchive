@@ -13,8 +13,16 @@ export function detectPerfTier(env: {
 
 export function readPerfTier(): PerfTier {
   return detectPerfTier({
-    reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    reducedMotion: prefersReducedMotion(),
     deviceMemory: (navigator as Navigator & { deviceMemory?: number }).deviceMemory,
     width: window.innerWidth,
   })
+}
+
+// Distinct from PerfTier: tier governs video load/playback cost, this governs
+// whether decorative UI motion (boot timeline, FLIP zoom, entrances, tab
+// transitions) runs at all. A small/low-memory device can be full-motion-eligible
+// UI-wise while still being 'lite' tier for video, and vice versa.
+export function prefersReducedMotion(): boolean {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }

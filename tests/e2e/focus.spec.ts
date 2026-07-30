@@ -71,3 +71,44 @@ test('the Close file button returns focus to the grid', async ({ page }) => {
   await page.getByRole('button', { name: 'Close file' }).click()
   await expect(page.locator('.archive-grid')).toHaveAttribute('data-focused', '')
 })
+
+test('the focus-stage video actually plays, not just loads', async ({ page }) => {
+  // lite tier (mobile) shows posters, not <video>, while unfocused, but the
+  // focus-stage element is still a real <video> there too — full tier (desktop/
+  // tablet) is where the src-swap-resets-playback bug lived, so assert on both,
+  // just skip the "returned card resumes" half on lite where unfocused cards are
+  // static posters.
+  await page.goto('./')
+  await page.locator('[data-card]').first().click()
+  const video = page.locator('[data-card].is-focus video')
+  await expect(video).toHaveCount(1)
+
+  const isPlaying = async () =>
+    video.evaluate((v: HTMLVideoElement) => ({ paused: v.paused, currentTime: v.currentTime }))
+
+  await page.waitForTimeout(300) // let the src swap + play() settle
+  const first = await isPlaying()
+  expect(first.paused).toBe(false)
+  await page.waitForTimeout(500)
+  const second = await isPlaying()
+  expect(second.paused).toBe(false)
+  expect(second.currentTime).toBeGreaterThan(first.currentTime)
+})
+
+test('the returned card resumes playback after Esc (full tier)', async ({ page, viewport }) => {
+  test.skip(viewport!.width <= 640, 'unfocused cards are static posters on lite/mobile')
+
+  await page.goto('./')
+  const first = page.locator('[data-card]').first()
+  await first.click()
+  await expect(page.locator('.archive-grid')).toHaveAttribute('data-focused', /file\d+/)
+  await page.waitForTimeout(300)
+
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.archive-grid')).toHaveAttribute('data-focused', '')
+  await page.waitForTimeout(300) // let the src swap back to thumb + resumed play() settle
+
+  const returnedVideo = first.locator('video')
+  const paused = await returnedVideo.evaluate((v: HTMLVideoElement) => v.paused)
+  expect(paused).toBe(false)
+})

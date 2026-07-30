@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from 'react'
 import { animate } from 'animejs'
+import { prefersReducedMotion } from '../lib/perfTier'
 
 export type TabId = 'archive' | 'about' | 'links'
 const TABS: { id: TabId; label: string }[] = [
@@ -25,6 +26,7 @@ export default function TerminalWindow({
   useEffect(() => {
     if (!rootRef.current || entered.current) return
     entered.current = true
+    if (prefersReducedMotion()) { rootRef.current.style.opacity = '1'; return }
     animate(rootRef.current, { opacity: [0, 1], scale: [0.985, 1], duration: 300, ease: 'outQuad' })
   }, [])
 
