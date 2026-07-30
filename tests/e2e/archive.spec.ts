@@ -1,13 +1,22 @@
 import { test, expect } from '@playwright/test'
 
-test('archive shows file cards with terminal labels and a pager when overflowing', async ({ page }) => {
+test('archive shows the exact per-breakpoint card count, with a pager only when paginated', async ({ page, viewport }) => {
   await page.goto('./')
+  const width = viewport!.width
+  const expectedPerPage = width <= 640 ? 3 : width <= 1024 ? 4 : 6
   const cards = page.locator('[data-card]')
   await expect(cards.first()).toBeVisible()
-  const count = await cards.count()
-  expect(count).toBeGreaterThanOrEqual(2)
-  expect(count).toBeLessThanOrEqual(6)
+  await expect(cards).toHaveCount(expectedPerPage)
   await expect(page.getByText('FILE_001')).toBeVisible()
+
+  const pager = page.locator('.grid-pager')
+  if (expectedPerPage < 6) {
+    // 6 archive files exceed the per-page count on tablet/mobile → pager shows
+    await expect(pager).toBeVisible()
+  } else {
+    // desktop shows all 6 files on one page → no pager
+    await expect(pager).toHaveCount(0)
+  }
 })
 
 test('no more videos playing than the cap allows', async ({ page }) => {

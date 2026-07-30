@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-function compute(w: number): number {
+export function compute(w: number): number {
   if (w <= 640) return 3
   if (w <= 1024) return 4
   return 6
