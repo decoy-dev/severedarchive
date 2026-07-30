@@ -618,10 +618,15 @@ test('arrow keys switch tabs', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'ARCHIVE' })).toHaveAttribute('aria-selected', 'true')
 })
 
-test('background video is present and muted-autoplay', async ({ page }) => {
+test('background layer renders per tier: muted video (full) or poster image (lite)', async ({ page, viewport }) => {
   await page.goto('./')
-  const muted = await page.locator('.bg-video video').evaluate((v: HTMLVideoElement) => v.muted)
-  expect(muted).toBe(true)
+  if (viewport!.width < 480) {
+    // lite tier on small screens renders the poster <img>, not a <video>
+    await expect(page.locator('.bg-video img')).toBeVisible()
+  } else {
+    const muted = await page.locator('.bg-video video').evaluate((v: HTMLVideoElement) => v.muted)
+    expect(muted).toBe(true)
+  }
 })
 ```
 
