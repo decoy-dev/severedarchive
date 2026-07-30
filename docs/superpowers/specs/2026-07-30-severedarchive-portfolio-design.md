@@ -13,7 +13,7 @@ Videos are the content: they appear as "files" in an archive grid, playing as sm
 ## Visual language
 
 - **Palette:** near-black panels, white/grey terminal text, hairline grey borders. Neutral/mono overall — the client's videos carry the color. One restrained silver/ice base accent plus a single hot accent — acid green — used only for active states; red appears solely in the notification alert. No gradients-as-depth, no amber/cyan phosphor cosplay.
-- **Type:** terminal monospace (JetBrains Mono or similar) for everything; dense uppercase micro-labels (`FILE_001 // CHROME_SEQ.MP4`, `CONNECTED`, fake cache/PID readouts).
+- **Type:** Share Tech Mono for everything (single weight — emphasis via size/color/spacing, never bold); dense uppercase micro-labels (`FILE_001 // CHROME_SEQ.MP4`, `CONNECTED`, fake cache/PID readouts).
 - **Texture:** static repeating-gradient scanlines over panels (never animated), notched/bracketed panel outlines à la BRT screen.
 - **Glass:** `backdrop-filter: blur` on the margin frame only. Weak-device fallback: pre-rendered dark vignette frame, no live blur.
 
