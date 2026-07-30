@@ -111,7 +111,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 12px;
 }
 @media (max-width: 1024px) { .grid-cards { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 640px) { .grid-cards { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .grid-cards { grid-template-columns: repeat(2, 1fr); } }
 
 .file-card {
   display: flex; flex-direction: column; min-height: 0; text-align: left;
@@ -132,3 +132,37 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 }
 .grid-pager button { color: var(--text); padding: 2px 8px; border: 1px solid var(--hair); }
 .grid-pager button:hover { color: var(--acid); border-color: var(--acid); }
+
+/* focus mode: focused card becomes the stage, others form a strip below */
+.archive-grid.has-focus .grid-cards {
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: 1fr auto;
+}
+.archive-grid.has-focus .file-card { grid-row: 2; aspect-ratio: 16 / 10; }
+.archive-grid.has-focus .file-card.is-focus {
+  grid-row: 1; grid-column: 1 / -1; aspect-ratio: auto;
+  border-color: var(--acid);
+}
+.file-card.is-focus .file-card-label { color: var(--bright); }
+
+/* BRT-style corner brackets on the focus stage (spec: bracketed panel outlines) */
+.file-card.is-focus { position: relative; }
+.file-card.is-focus::before, .file-card.is-focus::after {
+  content: ''; position: absolute; width: 14px; height: 14px; z-index: 2; pointer-events: none;
+}
+.file-card.is-focus::before { top: -1px; left: -1px; border-top: 2px solid var(--acid); border-left: 2px solid var(--acid); }
+.file-card.is-focus::after { bottom: -1px; right: -1px; border-bottom: 2px solid var(--acid); border-right: 2px solid var(--acid); }
+
+.focus-hud {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding-top: 10px; flex: 0 0 auto; font-size: 11px;
+}
+.focus-controls { display: flex; gap: 8px; }
+.focus-controls button { border: 1px solid var(--hair); padding: 4px 10px; }
+.focus-controls button:hover { color: var(--acid); border-color: var(--acid); }
+
+@media (max-width: 640px) {
+  .archive-grid.has-focus .grid-cards { grid-template-columns: repeat(2, 1fr); }
+  .archive-grid.has-focus .file-card:not(.is-focus) { display: none; } /* stage takes the whole window on mobile */
+  .archive-grid.has-focus .file-card.is-focus { grid-column: 1 / -1; grid-row: 1 / -1; }
+}
