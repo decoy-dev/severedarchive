@@ -166,3 +166,28 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   .archive-grid.has-focus .file-card:not(.is-focus) { display: none; } /* stage takes the whole window on mobile */
   .archive-grid.has-focus .file-card.is-focus { grid-column: 1 / -1; grid-row: 1 / -1; }
 }
+
+/* ── boot ── */
+.boot { position: absolute; inset: var(--frame); z-index: 3; padding: 24px; background: var(--panel-solid); border: 1px solid var(--hair-bright); font-size: 12px; }
+.boot-line { opacity: 0; margin-bottom: 4px; color: var(--text); }
+
+/* ── notification ── */
+.notification {
+  position: absolute; z-index: 5; width: min(360px, calc(100vw - 2 * var(--frame) - 24px));
+  top: calc(var(--frame) + 54px); right: calc(var(--frame) + 14px);
+  background: var(--panel-solid); border: 1px solid var(--hair-bright); opacity: 0;
+}
+.notification-head {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  border-bottom: 1px solid var(--hair-bright); font-size: 11px; color: var(--bright);
+}
+.notification-dot { width: 8px; height: 8px; background: var(--alert); flex: 0 0 auto; }
+.notification-body { padding: 14px 12px; font-size: 11px; }
+.notification-ack {
+  display: block; width: 100%; padding: 10px 12px; text-align: center;
+  border-top: 1px solid var(--hair-bright); color: var(--acid); font-size: 11px; letter-spacing: 0.08em;
+}
+.notification-ack:hover { background: rgba(182, 255, 46, 0.07); }
+@media (max-width: 640px) {
+  .notification { left: 50%; right: auto; transform: translateX(-50%); top: 30%; }
+}

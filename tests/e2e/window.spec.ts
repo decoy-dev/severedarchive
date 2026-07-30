@@ -2,6 +2,12 @@ import { test, expect } from '@playwright/test'
 
 test('tabs switch panels', async ({ page }) => {
   await page.goto('./')
+  await expect(page.locator('.stage')).toHaveAttribute('data-booted', 'true', { timeout: 6000 })
+  // the home notification's dim subtext repeats "MOTION + VISUAL ART", ambiguating the
+  // panel-text assertion below — dismiss it first (Task 7 added the notification) and
+  // wait for it to fully unmount, since a strict-mode-ambiguous locator isn't retried.
+  await page.getByRole('button', { name: 'Acknowledge' }).click()
+  await expect(page.locator('[data-notification]')).toHaveCount(0)
   await page.getByRole('tab', { name: 'ABOUT' }).click()
   await expect(page.getByText('MOTION + VISUAL ART')).toBeVisible()
   await page.getByRole('tab', { name: 'LINKS' }).click()
@@ -10,6 +16,9 @@ test('tabs switch panels', async ({ page }) => {
 
 test('arrow keys switch tabs', async ({ page }) => {
   await page.goto('./')
+  await expect(page.locator('.stage')).toHaveAttribute('data-booted', 'true', { timeout: 6000 })
+  await page.getByRole('button', { name: 'Acknowledge' }).click()
+  await expect(page.locator('[data-notification]')).toHaveCount(0)
   await page.keyboard.press('ArrowRight')
   await expect(page.getByText('MOTION + VISUAL ART')).toBeVisible()
   await page.keyboard.press('ArrowLeft')

@@ -1,0 +1,32 @@
+import { useEffect, useRef } from 'react'
+import { animate } from 'animejs'
+
+export default function HomeNotification({ onDismiss }: { onDismiss: () => void }) {
+  const ref = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (ref.current)
+      animate(ref.current, { opacity: [0, 1], translateY: [10, 0], scale: [0.96, 1], duration: 380, ease: 'outExpo' })
+  }, [])
+
+  const dismiss = () => {
+    if (!ref.current) return onDismiss()
+    animate(ref.current, { opacity: [1, 0], scale: [1, 0.97], duration: 160, ease: 'inQuad', onComplete: onDismiss })
+  }
+
+  return (
+    <div className="notification" data-notification ref={ref} role="alertdialog" aria-label="Incoming transmission">
+      <div className="notification-head">
+        <span className="notification-dot" />
+        INCOMING TRANSMISSION
+      </div>
+      <div className="notification-body">
+        <p className="panel-big">SEVEREDARCHIVE</p>
+        <p className="tw-dim">MOTION + VISUAL ART // RENDERS SET TO SOUND</p>
+      </div>
+      <button className="notification-ack" aria-label="Acknowledge" onClick={dismiss}>
+        [ ACKNOWLEDGE ]
+      </button>
+    </div>
+  )
+}
