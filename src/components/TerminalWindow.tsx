@@ -26,9 +26,9 @@ export default function TerminalWindow({
           <button className="tw-bell" onClick={onBell} aria-label="Show notification">ALERT [1]</button>
         </span>
       </header>
-      <nav className="tw-tabs" aria-label="Sections">
+      <nav className="tw-tabs" role="tablist" aria-label="Sections">
         {TABS.map((t) => (
-          <button key={t.id} aria-selected={tab === t.id}
+          <button key={t.id} role="tab" aria-selected={tab === t.id}
             className={tab === t.id ? 'tw-tab is-active' : 'tw-tab'}
             onClick={() => onTab(t.id)}>
             {t.label}
