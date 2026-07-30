@@ -31,4 +31,4 @@ The archive ships with stock/placeholder clips. To replace them:
 
 ## Deployment
 
-Pushing to `main` runs `.github/workflows/deploy.yml`, which builds the site and publishes `dist/` to GitHub Pages.
+Pushing to `main` is supposed to run `.github/workflows/deploy.yml`, which builds the site and publishes `dist/` to GitHub Pages. The automatic push trigger has not fired reliably on this repository, so if a push does not start a run within a minute or two, dispatch it manually with `gh workflow run deploy.yml --ref main`.
