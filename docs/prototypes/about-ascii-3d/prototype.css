@@ -1,0 +1,78 @@
+:root {
+  color-scheme: dark;
+  background: #020402;
+}
+
+* { box-sizing: border-box; }
+
+html,
+body,
+.ascii-object {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: #020402;
+}
+
+.ascii-object {
+  position: relative;
+  color: #b6ff2e;
+  background: transparent;
+  contain: strict;
+  pointer-events: none;
+}
+
+.ascii-object > div {
+  position: absolute !important;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  overflow: hidden;
+  color: inherit !important;
+  background: transparent !important;
+  text-shadow: 0 0 7px rgba(182, 255, 46, .22);
+}
+
+.ascii-object table {
+  display: block;
+  width: 100%;
+  height: 100%;
+  color: inherit !important;
+  background: transparent !important;
+}
+
+.ascii-object td,
+.ascii-object span {
+  color: inherit !important;
+  background: transparent !important;
+}
+
+.static-fallback {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: min(62vw, 560px);
+  max-height: 82vh;
+  transform: translate(-50%, -50%);
+  filter: invert(87%) sepia(94%) saturate(874%) hue-rotate(31deg) brightness(111%);
+  opacity: .82;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ascii-object > div { text-shadow: none; }
+}

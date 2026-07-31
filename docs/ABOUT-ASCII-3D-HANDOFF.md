@@ -1,16 +1,32 @@
 # Claude handoff — About-page ASCII 3D upload object
 
-**Date:** 2026-07-31  
-**Status:** Asset prepared; implementation not started  
-**Target:** `ABOUT` tab in severedarchive  
-**Source asset:** `public/assets/about-upload-mark.svg`  
+**Date:** 2026-07-31
+**Status:** Finished standalone result; React integration remains
+**Target:** `ABOUT` tab in severedarchive
+**Source asset:** `public/assets/about-upload-mark.svg`
+**Finished prototype:** `docs/prototypes/about-ascii-3d/index.html`
+**Motion capture:** `docs/prototypes/about-ascii-3d/about-ascii-3d-preview.webm`
 **Regeneration script:** `scripts/trace-about-symbol.py`
+
+## What Claude is receiving
+
+The visual problem is already solved and browser-verified. Do not reinterpret it from this document alone. Run the self-contained prototype and port its tuned source into React:
+
+```bash
+python3 -m http.server 4179
+```
+
+Then open `http://127.0.0.1:4179/docs/prototypes/about-ascii-3d/`.
+
+The reference contains the working SVG extrusion, bevel, dual materials, lighting, transparent ASCII pass, faster centered anime.js motion, 24fps redraw cap, lite tier, reduced-motion static pose, resize handling, fallback, and disposal. It intentionally contains no About-page UI. Its vendored libraries make it runnable without changing the application first.
+
+Claude's task is integration, not visual exploration: preserve the final parameters in `prototype.js`, translate its lifecycle into `AboutAsciiObject.tsx`, adapt the reference CSS to the existing About panel, install `three`, and verify it inside the real terminal window.
 
 ## Request
 
-Add the supplied hands/floppy/upload mark to the About page as a genuinely three-dimensional, beveled object rendered through an ASCII filter. It should rotate and sway slowly around its own center, with its centroid held on the camera's z-axis—no orbital drift around the panel.
+Add the supplied hands/floppy/upload mark to the About page as a genuinely three-dimensional, beveled object rendered through an ASCII filter. It should rotate and sway at the verified prototype speed around its own center, with its centroid held on the camera's z-axis—no orbital drift around the panel.
 
-The effect should feel like a recovered terminal artifact, not a generic spinning-logo demo: acid-green monochrome characters, visible changes in face/edge density as the object turns, slow irregular sway, and no mouse-controlled orbit.
+The effect should feel like a recovered terminal artifact, not a generic spinning-logo demo: acid-green monochrome characters, visible changes in face/edge density as the object turns, brisk irregular sway, and no mouse-controlled orbit.
 
 ## Prepared geometry source
 
@@ -35,10 +51,10 @@ python3 scripts/trace-about-symbol.py \
 
 ## Intended visual result
 
-- The About copy remains readable and primary.
-- On desktop/tablet, the ASCII object occupies roughly the right 42–48% of the panel and is vertically centered.
-- On narrow mobile, it becomes a large, low-opacity background watermark behind the copy; it must not add page height or create scroll.
-- Characters use Share Tech Mono and the existing `--acid` color. Do not introduce another font or a new gradient.
+- The standalone reference shows only the centered ASCII object on a neutral dark stage.
+- No terminal frame, About copy, panels, axes, captions, labels, or destination-page styling belong to this artifact.
+- Claude should integrate the effect into the existing About page without copying speculative surrounding UI from the prototype.
+- Characters use the existing `--acid` color and `AsciiEffect`'s calibrated Courier New metrics. Do not override its font family without recalibrating the character grid in every supported browser.
 - The object should show a bright front face, darker side faces, and a narrow specular band when it sways. The ASCII pass translates that lighting into character density.
 - Keep the surrounding background transparent so the existing glass/video environment remains visible. There must not be a rectangular black canvas.
 
@@ -60,17 +76,17 @@ const data = await new SVGLoader().loadAsync(
 )
 const shapes = data.paths.flatMap((path) => path.toShapes())
 const geometry = new THREE.ExtrudeGeometry(shapes, {
-  depth: 18,
+  depth: 20,
   steps: 1,
   curveSegments: 8,
   bevelEnabled: true,
-  bevelThickness: 2.4,
-  bevelSize: 1.8,
+  bevelThickness: 3,
+  bevelSize: 2.1,
   bevelSegments: 3,
 })
 ```
 
-Those extrusion numbers are starting values, not arbitrary requirements. Tune by eye so the side faces remain readable through the ASCII filter without making the mark look inflated.
+These are the visually verified prototype values. Preserve them initially; only retune if the real About-panel dimensions materially change their appearance.
 
 SVG coordinates point downward. Flip y once, compute the bounding box, translate the geometry so its center is `(0, 0, 0)`, then scale the parent group to fit the camera. Do not visually center it with hand-authored x/y offsets; centering from actual bounds is what keeps rotation pinned to the z-axis.
 
@@ -82,18 +98,18 @@ Create the renderer with an alpha channel, then use `AsciiEffect.domElement` ins
 const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false })
 renderer.setClearColor(0x000000, 0)
 
-const effect = new AsciiEffect(renderer, ' .:-=+*#%@', {
-  resolution: 0.17,
+const effect = new AsciiEffect(renderer, ' .,:;irsXA253hMHGS#9B&@', {
+  resolution: 0.18,
   scale: 1,
   color: false,
   alpha: true,
   block: false,
-  invert: true,
-  strResolution: 'medium',
+  invert: false,
+  strResolution: 'low',
 })
 ```
 
-The exact `invert` value must be judged in the browser. The acceptance criterion is a blank/transparent field with dense characters only where the object is lit—not a full rectangle of background characters.
+`invert: false` is the verified setting for this material/light/background combination. It produces a blank transparent field with dense characters only where the object is lit. Keep `strResolution: 'low'`: its negative letter-spacing calibrates Courier's character-grid width to the sampled canvas. The `medium` setting makes the left-anchored raster wider than its renderer and visibly shifts the object right.
 
 Style `effect.domElement` through a class, not inline one-off colors:
 
@@ -102,7 +118,7 @@ Style `effect.domElement` through a class, not inline one-off colors:
 - `pointer-events: none`
 - `color: var(--acid)`
 - `background: transparent`
-- `font-family: var(--mono)` / Share Tech Mono
+- retain `AsciiEffect`'s own `courier new, monospace` font declaration; a branded-font override changes the sampling-grid width across browsers
 - tight line height, tuned so the silhouette has no horizontal banding
 - `contain: strict`
 
@@ -122,16 +138,16 @@ Avoid bloom, postprocessing, particles, orbit controls, drop shadows, or another
 
 Use the project's anime.js v4, scoped to the component, to animate a small motion-state object or the group rotation. The renderer reads that state each frame.
 
-Motion should be slow, asymmetric, and centered:
+Motion should be brisk, asymmetric, and centered:
 
 | Channel | Range | Suggested duration |
 |---|---:|---:|
-| yaw / `rotation.y` | `-0.32` to `0.32` rad | 6.4s alternate |
-| pitch / `rotation.x` | `-0.08` to `0.11` rad | 5.1s alternate |
-| roll / `rotation.z` | `-0.035` to `0.035` rad | 7.3s alternate |
-| depth / `position.z` | `-5` to `5` local units | 4.8s alternate |
+| yaw / `rotation.y` | `-0.52` to `0.52` rad | 3.6s alternate |
+| pitch / `rotation.x` | `-0.14` to `0.18` rad | 3.0s alternate |
+| roll / `rotation.z` | `-0.065` to `0.065` rad | 4.2s alternate |
+| depth / `position.z` | `-5` to `5` local units | 2.6s alternate |
 
-Use `inOutSine` or an equivalent smooth periodic ease. Keep `position.x` and `position.y` at zero. Do not perform a full perpetual 360° product spin—the slow face-to-edge sway will preserve recognition and make the extrusion legible.
+Use `inOutSine` or an equivalent smooth periodic ease. Keep `position.x` and `position.y` at zero. Do not perform a full perpetual 360° product spin—the face-to-edge sway preserves recognition while making the extrusion legible.
 
 Cap ASCII redraws to roughly 24fps even if the animation loop runs at display refresh. `AsciiEffect` rebuilds DOM text and is much more expensive than a normal canvas render.
 
@@ -159,28 +175,17 @@ Pass the performance tier into `AboutPanel` and then into `AboutAsciiObject` rat
 
 Suggested tiers:
 
-- normal: resolution `0.17`, capped near 24fps;
-- lite: resolution `0.11–0.13`, capped near 12fps, simpler material and no bevel increase;
+- normal: resolution `0.18`, capped at 24fps;
+- lite: resolution `0.12`, capped at 12fps, one bevel segment;
 - failed WebGL/load: show the prepared SVG as a static, low-opacity fallback.
 
 For `prefers-reduced-motion`, render a single three-quarter pose and stop the animation loop after the first successful render. The ASCII treatment remains; only the sway is removed.
 
-## Layout
+## Integration boundary
 
-Reshape `.about-panel` into a two-layer composition without introducing scrolling:
+The prototype deliberately makes no About-page layout decisions. Port only the `.ascii-object` host and its rendering lifecycle. Do not copy or invent supporting panels, captions, axes, labels, borders, terminal chrome, or replacement About copy around it.
 
-```text
-┌────────────────────────────────────────────┐
-│ OPERATOR / FIELD / BACKSTORY / TOOLING     │
-│ copy column                    ASCII OBJ   │
-│                                 centered   │
-└────────────────────────────────────────────┘
-```
-
-- Keep copy within approximately 52–58% width on desktop.
-- The object host is absolute or occupies the second grid column with `min-height: 0` and `overflow: hidden`.
-- At widths where the copy needs the full panel, place the object behind it, reduce opacity, and add a subtle solid/gradient-free scrim using the existing panel color only if contrast needs help.
-- Confirm the terminal body and document remain zero-scroll at 1440, 768, and 390 widths.
+Claude should place the host within the existing About implementation using the smallest layout change needed, then confirm the terminal body and document remain zero-scroll at 1440, 768, and 390 widths.
 
 The object is decorative. The effect DOM should be `aria-hidden="true"`; keep a concise accessible description on the containing figure or provide visually hidden text. It must never enter the tab order.
 
@@ -193,6 +198,8 @@ Automated checks:
 3. Reduced-motion mode does not schedule continuous frames.
 4. The static SVG fallback appears when WebGL initialization or asset loading fails.
 5. No vertical document scroll at 1440, 768, or 390.
+6. In Chromium and Firefox, the effect DOM rect matches its host within 1 CSS pixel and causes no horizontal overflow.
+7. Across deterministic left-extreme, front, and right-extreme poses, the time-averaged visible ASCII bounding-box center stays within 2% of the host center; no individual pose exceeds 7%.
 
 Manual visual checks:
 
@@ -200,8 +207,7 @@ Manual visual checks:
 2. Turning exposes visibly different side-face character density, proving it is 3D rather than a CSS-rotated flat image.
 3. Rotation stays centered; the object does not orbit or wobble laterally.
 4. The ASCII field has no visible rectangular background.
-5. Copy contrast remains comfortable on every frame of the background video.
-6. Repeated tab switching leaves no CPU/GPU activity from an unmounted About object.
+5. Repeated tab switching leaves no CPU/GPU activity from an unmounted About object.
 
 ## Sequencing note
 
@@ -213,4 +219,3 @@ Treat this as its own coherent task. Do not fold it into the explorer/media-life
 - Three.js `SVGLoader`: https://threejs.org/docs/pages/SVGLoader.html
 - Three.js `ExtrudeGeometry`: https://threejs.org/docs/pages/ExtrudeGeometry.html
 - Three.js migration note: `SVGLoader.createShapes()` is deprecated in favor of `ShapePath.toShapes()` as of r185: https://github.com/mrdoob/three.js/wiki/Migration-Guide#184--185
-
