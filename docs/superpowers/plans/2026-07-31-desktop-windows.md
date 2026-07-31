@@ -1138,7 +1138,21 @@ git commit -m "Add desktop shell with window state, bounded dragging, and the bu
 
 ---
 
-## Phase 4 — Explorer
+---
+
+# ⛔ TASKS 10–17 BELOW ARE SUPERSEDED — DO NOT IMPLEMENT THEM
+
+**Superseded 2026-07-31 by `docs/superpowers/specs/2026-07-31-ownership-contract.md`.** Tasks 1–9 above are complete and accurate; everything from here down is retained only as history.
+
+**Why:** a fresh-context preflight found that Tasks 10 and 11 as written **crash the page**. Task 10 renders the preview `<video>` with `key={file.id}`; Task 11 moves that node out with `appendChild`. React 19 calls `parentInstance.removeChild(child)` unguarded, so once a node is away in a window, hovering a different row makes React delete against the wrong parent — `NotFoundError` in the commit phase, root unmounts, page blanks. The trigger is a mouse move. Each task is locally correct; only their interaction is fatal.
+
+Also invalidated below: `createLayout` (collides with React's inline styles — replaced by a single-element FLIP per owner ruling 8), `reparentKeepsPlaying()` (no longer needed — Chromium, WebKit and Firefox all verified to keep playing across a reparent), Task 14's lite-tier `<img>` (contradicts its own test, since 390px is lite tier), and `cascadePosition(cur.length, …)` (collides after a close).
+
+**The remaining work is Slices A–F in the ownership contract, §5.** That document carries the acceptance criteria and the one proving test per slice. Read it instead.
+
+---
+
+## Phase 4 — Explorer *(superseded — history only)*
 
 ### Task 10: Two-column explorer
 
