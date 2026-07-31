@@ -13,6 +13,11 @@
   --acid: #b6ff2e;
   --alert: #ff3524;
   --mono: 'Share Tech Mono', ui-monospace, monospace;
+  /* type scale — 12px is a hard floor; no literal below --fs-xs anywhere */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-base: 15px;
+  --fs-lg: 17px;
   --frame: clamp(16px, 4.5vw, 56px);
   --glass-fill: rgba(10, 13, 16, 0.5); /* tuned up from 0.42 — dim text washed out over bright videos */
   --glass-blur: 18px;
@@ -27,7 +32,7 @@ body {
   background: var(--void);
   color: var(--text);
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: var(--fs-base);
   line-height: 1.5;
   overflow: hidden;               /* single screen — never scrolls */
   overscroll-behavior: none;
@@ -57,7 +62,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 /* build stamp: always visible bottom-right, above the glass strips */
 .build-tag {
   position: absolute; right: 6px; bottom: 4px; z-index: 6;
-  font-size: 9px; letter-spacing: 0.05em; color: var(--dim);
+  font-size: var(--fs-xs); letter-spacing: 0.05em; color: var(--dim);
   pointer-events: none; user-select: none;
 }
 
@@ -113,19 +118,19 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 /* ── window chrome ── */
 .tw-titlebar {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0 14px; height: 42px; flex: 0 0 auto;
+  padding: 0 14px; height: 44px; flex: 0 0 auto;
   border-bottom: 1px solid var(--hair-bright);
-  font-size: 12px; letter-spacing: 0.04em; color: var(--bright);
+  font-size: var(--fs-base); letter-spacing: 0.04em; color: var(--bright);
   position: relative; z-index: 2;
 }
 .tw-dim { color: var(--dim); }
-.tw-status { display: flex; gap: 16px; align-items: center; font-size: 11px; }
+.tw-status { display: flex; gap: 16px; align-items: center; font-size: var(--fs-sm); }
 .tw-bell { border: 1px solid var(--hair); padding: 3px 8px; color: var(--text); }
 .tw-bell:hover { border-color: var(--acid); color: var(--acid); }
 
 .tw-tabs { display: flex; gap: 0; padding: 10px 14px 0; flex: 0 0 auto; position: relative; z-index: 2; }
 .tw-tab {
-  padding: 7px 16px; font-size: 11px; letter-spacing: 0.06em;
+  padding: 9px 18px; font-size: var(--fs-sm); letter-spacing: 0.06em;
   color: var(--dim); border: 1px solid var(--hair); border-bottom: 0; margin-right: -1px;
   background: rgba(10, 13, 16, 0.35);
 }
@@ -135,14 +140,14 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .tw-body { flex: 1 1 auto; min-height: 0; border: 1px solid var(--hair-bright); margin: 0 14px; position: relative; z-index: 2; overflow: hidden; }
 .tw-footer {
   display: flex; justify-content: space-between; align-items: center;
-  height: 36px; padding: 0 14px; flex: 0 0 auto; font-size: 11px;
+  height: 36px; padding: 0 14px; flex: 0 0 auto; font-size: var(--fs-sm);
   position: relative; z-index: 2;
 }
 
 /* ── panels ── */
 .panel { position: absolute; inset: 0; padding: clamp(16px, 3vw, 32px); overflow: hidden; }
 .panel-block { border: 1px solid var(--hair); padding: 12px 16px; margin-bottom: 12px; max-width: 560px; }
-.panel-label { display: block; font-size: 10px; letter-spacing: 0.1em; color: var(--dim); margin-bottom: 6px; }
+.panel-label { display: block; font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--dim); margin-bottom: 6px; }
 .panel-big { font-size: clamp(18px, 2.4vw, 26px); letter-spacing: 0.02em; color: var(--bright); } /* Share Tech Mono is single-weight — no bold anywhere */
 
 .links-panel { display: flex; flex-direction: column; justify-content: center; gap: 12px; max-width: 560px; }
@@ -151,7 +156,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   border: 1px solid var(--hair); padding: 14px 16px;
 }
 .link-row .panel-label { margin: 0; }
-.link-value { color: var(--bright); font-size: 14px; }
+.link-value { color: var(--bright); font-size: var(--fs-base); }
 .link-go { color: var(--dim); }
 .link-row:hover { border-color: var(--acid); }
 .link-row:hover .link-go { color: var(--acid); }
@@ -174,13 +179,13 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .file-card-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .file-card-label {
   display: flex; justify-content: space-between; gap: 8px;
-  padding: 8px 10px; font-size: 10px; letter-spacing: 0.04em;
+  padding: 8px 10px; font-size: var(--fs-xs); letter-spacing: 0.04em;
   border-top: 1px solid var(--hair); color: var(--text); flex: 0 0 auto;
 }
 
 .grid-pager {
   display: flex; align-items: center; gap: 14px; justify-content: center;
-  padding-top: 10px; flex: 0 0 auto; font-size: 11px; color: var(--dim);
+  padding-top: 10px; flex: 0 0 auto; font-size: var(--fs-sm); color: var(--dim);
 }
 .grid-pager button { color: var(--text); padding: 2px 8px; border: 1px solid var(--hair); }
 .grid-pager button:hover { color: var(--acid); border-color: var(--acid); }
@@ -207,7 +212,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 .focus-hud {
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
-  padding-top: 10px; flex: 0 0 auto; font-size: 11px;
+  padding-top: 10px; flex: 0 0 auto; font-size: var(--fs-sm);
 }
 .focus-meta, .focus-controls { position: relative; z-index: 2; }
 .focus-controls { display: flex; gap: 8px; }
@@ -226,7 +231,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .archive-panel-body { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
 .archive-panel-body > .archive-grid { padding: 0; } /* outer panel already pads */
 .view-toggle { display: flex; gap: 0; justify-content: flex-end; flex: 0 0 auto; padding-bottom: 8px; }
-.view-toggle button { padding: 5px 12px; font-size: 10px; letter-spacing: 0.06em; color: var(--dim); border: 1px solid var(--hair); margin-left: -1px; }
+.view-toggle button { padding: 7px 14px; font-size: var(--fs-xs); letter-spacing: 0.06em; color: var(--dim); border: 1px solid var(--hair); margin-left: -1px; }
 .view-toggle button.is-active { color: var(--acid); background: rgba(182, 255, 46, 0.05); border-color: var(--hair-bright); }
 .view-toggle button:hover:not(.is-active) { color: var(--text); }
 
@@ -281,14 +286,14 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .stack-sliver img { width: 72px; height: 100%; object-fit: cover; opacity: 0.55; }
 .archive-stack[data-fanned='true'] .stack-sliver img { opacity: 0.85; }
 .stack-sliver .sliver-label {
-  position: absolute; top: 8px; left: 4px; font-size: 9px; letter-spacing: 0.08em;
+  position: absolute; top: 8px; left: 4px; font-size: var(--fs-xs); letter-spacing: 0.08em;
   writing-mode: vertical-rl; color: var(--text); opacity: 0; transition: opacity 150ms;
 }
 .archive-stack[data-fanned='true'] .sliver-label { opacity: 1; }
 .stack-sliver:hover { border-color: var(--acid); }
 .stack-hud {
   position: absolute; left: 0; right: 132px; bottom: 0; height: 40px;
-  display: flex; justify-content: space-between; align-items: center; padding: 0 12px; font-size: 11px;
+  display: flex; justify-content: space-between; align-items: center; padding: 0 12px; font-size: var(--fs-sm);
 }
 .stack-hud > * { position: relative; z-index: 2; }
 .stack-hud button { border: 1px solid var(--hair); padding: 4px 10px; }
@@ -296,7 +301,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 /* terminal volume slider */
 .vol-control { display: flex; align-items: center; gap: 8px; }
-.vol-readout { color: var(--text); font-size: 10px; min-width: 3ch; }
+.vol-readout { color: var(--text); font-size: var(--fs-xs); min-width: 3ch; }
 .vol-control input[type='range'] {
   appearance: none; -webkit-appearance: none; width: 110px; height: 14px;
   background: transparent; cursor: pointer;
@@ -331,7 +336,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 }
 
 /* ── boot ── */
-.boot { position: absolute; inset: var(--frame); z-index: 3; padding: 24px; background: var(--panel-solid); border: 1px solid var(--hair-bright); font-size: 12px; }
+.boot { position: absolute; inset: var(--frame); z-index: 3; padding: 24px; background: var(--panel-solid); border: 1px solid var(--hair-bright); font-size: var(--fs-base); }
 .boot-line { opacity: 0; margin-bottom: 4px; color: var(--text); }
 
 /* ── notification ── */
@@ -344,13 +349,13 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .notification-inner { opacity: 0; position: relative; z-index: 2; }
 .notification-head {
   display: flex; align-items: center; gap: 8px; padding: 8px 12px;
-  border-bottom: 1px solid var(--hair-bright); font-size: 11px; color: var(--bright);
+  border-bottom: 1px solid var(--hair-bright); font-size: var(--fs-sm); color: var(--bright);
 }
 .notification-dot { width: 8px; height: 8px; background: var(--alert); flex: 0 0 auto; }
-.notification-body { padding: 14px 12px; font-size: 11px; }
+.notification-body { padding: 14px 12px; font-size: var(--fs-sm); }
 .notification-ack {
   display: block; width: 100%; padding: 10px 12px; text-align: center;
-  border-top: 1px solid var(--hair-bright); color: var(--text); font-size: 11px; letter-spacing: 0.08em;
+  border-top: 1px solid var(--hair-bright); color: var(--text); font-size: var(--fs-sm); letter-spacing: 0.08em;
 }
 .notification-ack:hover, .notification-ack:focus-visible { color: var(--acid); background: rgba(182, 255, 46, 0.07); }
 @media (max-width: 640px) {
@@ -360,7 +365,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 /* ── mobile: purpose-built layout ── */
 @media (max-width: 640px) {
   :root { --frame: 10px; }
-  .tw-titlebar { height: 38px; font-size: 11px; }
+  .tw-titlebar { height: 44px; font-size: var(--fs-sm); }
   .tw-title { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .tw-status { flex: 0 0 auto; }
   .tw-status > .tw-dim { display: none; } /* "SESSION OPEN" — dropped so title + bell fit one line */
