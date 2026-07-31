@@ -17,6 +17,10 @@
 - **Colour:** accent `#b6ff2e` (`--acid`) on active/hover states only. `#ff3524` (`--alert`) is now unused — the notification that owned it is deleted.
 - **Zero scrolling, ever**, at 1440 / 768 / 390. The one sanctioned exception is the explorer list's internal scroll region (Task 14), and only if the row list genuinely cannot fit.
 - **Animation:** transform and opacity only. anime.js v4 modular API (`import { animate, createTimeline, stagger } from 'animejs'`) — never the v3 `anime({...})` global.
+  **Sanctioned exceptions** (ruled by Chris, 2026-07-31 — extends the existing list in CONTEXT.md, which already sanctions the sliver width lerp). Do not flag these as defects; do not add new ones without asking:
+  1. Task 7 — the volume control expands via `max-width`.
+  2. Task 12 — the degraded preview transitions `filter`.
+  3. Task 14 — the mobile file row uses native `overflow-x` scrolling. The page itself still never scrolls.
 - **Reduced motion:** every animation added here must check `prefersReducedMotion()` from `src/lib/perfTier.ts` and degrade to an instant state change.
 - **Lite tier:** `[data-tier='lite']` drops `backdrop-filter` from file windows entirely.
 - **Playwright is ALWAYS headless.** Never launch a headed browser.
