@@ -6,7 +6,7 @@ import ArchivePanel from './components/ArchivePanel'
 import AboutPanel from './components/AboutPanel'
 import LinksPanel from './components/LinksPanel'
 import BootSequence from './components/BootSequence'
-import HomeNotification from './components/HomeNotification'
+import Desktop from './components/Desktop'
 import { readPerfTier, prefersReducedMotion } from './lib/perfTier'
 import { DEFAULT_FRONT_ID } from './data/archive'
 
@@ -14,7 +14,6 @@ export default function App() {
   const [tier] = useState(readPerfTier)
   const [booted, setBooted] = useState(false)
   const [tab, setTabState] = useState<TabId>('archive')
-  const [noticeOpen, setNoticeOpen] = useState(true)
   const [backdropId, setBackdropId] = useState(DEFAULT_FRONT_ID)
   const bodyRef = useRef<HTMLDivElement | null>(null)
 
@@ -47,14 +46,13 @@ export default function App() {
       {!booted ? (
         <BootSequence onDone={() => setBooted(true)} />
       ) : (
-        <>
+        <Desktop>
           <TerminalWindow tab={tab} onTab={setTab} bodyRef={bodyRef}>
             {tab === 'archive' && <ArchivePanel tier={tier} onFrontChange={setBackdropId} />}
             {tab === 'about' && <AboutPanel />}
             {tab === 'links' && <LinksPanel />}
           </TerminalWindow>
-          {noticeOpen && <HomeNotification onDismiss={() => setNoticeOpen(false)} />}
-        </>
+        </Desktop>
       )}
       <span className="build-tag" aria-hidden="true">{__BUILD_ID__}</span>
     </div>

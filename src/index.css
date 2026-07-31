@@ -83,12 +83,25 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   pointer-events: none; user-select: none;
 }
 
-/* the terminal window */
+/* the desktop shell: owns the terminal window, the file windows and the cap
+   refusal. absolute + inset:0 makes its box exactly the stage, which is what every
+   draggable uses as its bounds container. z-index 2 keeps it above the glass strips
+   and level with the wordmark (later in DOM order, so it paints over it) while
+   still leaving the wordmark inside the windows' backdrop-filter sample. */
+.desktop { position: absolute; inset: 0; z-index: 2; }
+
+/* the terminal window — explicitly sized rather than `inset`, which a
+   transform-based drag fights (inset re-anchors the box the transform moves) */
 .terminal-window {
-  position: absolute; inset: var(--frame); z-index: 3;
+  position: absolute;
+  top: var(--frame); left: var(--frame);
+  width: calc(100% - var(--frame) * 2);
+  height: calc(100% - var(--frame) * 2);
+  z-index: 3;
   display: flex; flex-direction: column;
   overflow: hidden;
   opacity: 0; /* drawn in by TerminalWindow's mount effect once boot completes */
+  will-change: transform;   /* dragged via anime.js transforms */
 }
 .terminal-window::after {   /* static scanlines */
   content: ''; position: absolute; inset: 0; z-index: 40; pointer-events: none;
@@ -122,10 +135,10 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   box-shadow: none;
 }
 [data-tier='lite'] .glass::before { display: none; }
-/* .glass sets position:relative; .terminal-window needs position:absolute (it's
-   positioned via `inset: var(--frame)`, which only stretches non-static/relative
-   boxes) — restore it here since .terminal-window's own rule precedes .glass in
-   the cascade and would otherwise lose the tie on equal specificity. */
+/* .glass sets position:relative; .terminal-window needs position:absolute (it is
+   offset from the desktop with top/left, which only detach a non-static box) —
+   restore it here since .terminal-window's own rule precedes .glass in the cascade
+   and would otherwise lose the tie on equal specificity. */
 .terminal-window.glass { position: absolute; }
 /* .glass::before (sheen, z-index: 1) paints above unpositioned children; content
    children of any glass surface need position:relative + z-index:2 to stack above
@@ -447,6 +460,18 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .fw-body video { width: 100%; height: 100%; object-fit: contain; }
 
 [data-tier='lite'] .file-window { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--panel-solid); }
+
+/* ── cap refusal: white flash + overprint type, both opacity-driven ── */
+.refusal { position: absolute; inset: 0; z-index: 50; pointer-events: none; display: grid; place-items: center; }
+.refusal-flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
+.refusal-text {
+  position: relative; opacity: 0;
+  font-family: var(--display);   /* sanctioned display exception — wordmark + this */
+  font-size: clamp(48px, 9vw, 160px);
+  letter-spacing: -0.03em;
+  color: var(--alert);
+  mix-blend-mode: difference;
+}
 
 /* ── mobile: purpose-built layout ── */
 @media (max-width: 640px) {

@@ -1,6 +1,7 @@
-import { useEffect, useRef, type ReactNode, type RefObject } from 'react'
+import { useCallback, useContext, useEffect, useRef, type ReactNode, type RefObject } from 'react'
 import { animate } from 'animejs'
 import { prefersReducedMotion } from '../lib/perfTier'
+import { DesktopContext } from './Desktop'
 
 export type TabId = 'archive' | 'about' | 'links'
 const TABS: { id: TabId; label: string }[] = [
@@ -20,6 +21,13 @@ export default function TerminalWindow({
 }) {
   const rootRef = useRef<HTMLElement | null>(null)
   const entered = useRef(false)
+  // the desktop shell makes this window draggable like any other; standing alone it
+  // gets the context default and the callback is a no-op
+  const { registerTerminal } = useContext(DesktopContext)
+  const setRoot = useCallback((el: HTMLElement | null) => {
+    rootRef.current = el
+    registerTerminal(el)
+  }, [registerTerminal])
 
   // spec: the window draws in after boot, rather than appearing as an instant swap
   useEffect(() => {
@@ -30,8 +38,8 @@ export default function TerminalWindow({
   }, [])
 
   return (
-    <section className="terminal-window glass" data-tab={tab} ref={rootRef}>
-      <header className="tw-titlebar">
+    <section className="terminal-window glass" data-tab={tab} ref={setRoot}>
+      <header className="tw-titlebar" data-drag-handle>
         <span className="tw-title">FILE SYSTEM</span>
         <span className="tw-status"><span className="tw-dim">SESSION OPEN</span></span>
       </header>
