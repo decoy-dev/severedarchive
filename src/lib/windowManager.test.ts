@@ -42,6 +42,23 @@ describe('openWindow', () => {
     const refused = openWindow(ws, 'file04', at(0, 0))
     expect(refused).toEqual({ ok: false, reason: 'cap' })
   })
+
+  it('focuses rather than refusing when re-opening an existing id at the cap', () => {
+    let ws: WinState[] = []
+    for (const id of ['file01', 'file02', 'file03']) {
+      const r = openWindow(ws, id, at(0, 0))
+      if (!r.ok) throw new Error('unreachable')
+      ws = r.windows
+    }
+    expect(ws).toHaveLength(MAX_WINDOWS)
+    // file01 is at the bottom of the z-order at this point.
+    expect(ws.find((w) => w.id === 'file01')!.z).toBe(0)
+    const again = openWindow(ws, 'file01', at(0, 0))
+    expect(again.ok).toBe(true)
+    if (!again.ok) throw new Error('unreachable')
+    expect(again.windows).toHaveLength(MAX_WINDOWS)
+    expect(again.windows.find((w) => w.id === 'file01')!.z).toBe(MAX_WINDOWS - 1)
+  })
 })
 
 describe('focusWindow', () => {
@@ -53,8 +70,10 @@ describe('focusWindow', () => {
       ws = r.windows
     }
     const focused = focusWindow(ws, 'a')
+    // 'a' moves to the top; 'b' and 'c' keep their relative order, shifted down.
     expect(focused.find((w) => w.id === 'a')!.z).toBe(2)
-    expect([...focused.map((w) => w.z)].sort()).toEqual([0, 1, 2])
+    expect(focused.find((w) => w.id === 'b')!.z).toBe(0)
+    expect(focused.find((w) => w.id === 'c')!.z).toBe(1)
   })
 
   it('is a no-op for an unknown id', () => {
@@ -73,7 +92,19 @@ describe('closeWindow', () => {
     }
     const after = closeWindow(ws, 'b')
     expect(after).toHaveLength(2)
-    expect([...after.map((w) => w.z)].sort()).toEqual([0, 1])
+    // 'a' and 'c' keep their relative order, re-densified without the gap 'b' left.
+    expect(after.find((w) => w.id === 'a')!.z).toBe(0)
+    expect(after.find((w) => w.id === 'c')!.z).toBe(1)
+  })
+
+  it('is a no-op for an id that is not open', () => {
+    let ws: WinState[] = []
+    for (const id of ['a', 'b', 'c']) {
+      const r = openWindow(ws, id, at(0, 0))
+      if (!r.ok) throw new Error('unreachable')
+      ws = r.windows
+    }
+    expect(closeWindow(ws, 'nope')).toEqual(ws)
   })
 })
 
