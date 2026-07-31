@@ -40,6 +40,24 @@ export type SlotName = 'preview' | 'primary' | `window:${string}`
 
 export type Placement = { slot: SlotName; fileId: string }
 
+/**
+ * Which encode a file should be showing. One `full` at a time, by construction:
+ * it is derived from the focus hint, not stored per file.
+ */
+export type MediaTier = 'full' | 'thumb'
+
+/**
+ * The playback policy object (`VideoDirector`). Structural rather than imported
+ * so this module keeps no dependency on it — there is exactly one instance in
+ * the app, constructed by `Desktop` and handed here.
+ */
+export type PlaybackDirector = {
+  register(id: string, el: { play(): void | Promise<void>; pause(): void; readonly paused: boolean }): void
+  unregister(id: string): void
+  setFocus(id: string | null): void
+  setBackground(ids: readonly string[] | null): void
+}
+
 export type MediaState = {
   volume: number
   muted: boolean
@@ -58,6 +76,8 @@ export type MediaSnapshot = {
   readonly placement: Readonly<Record<string, SlotName | null>>
   /** fileId → whether the declarative layer should give it a `src` at all */
   readonly wanted: Readonly<Record<string, boolean>>
+  /** fileId → which encode to render. Exactly one file is ever `full`. */
+  readonly tier: Readonly<Record<string, MediaTier>>
 }
 
 export type MediaController = {
@@ -71,7 +91,27 @@ export type MediaController = {
    * has already claimed (mount-before-unmount ordering).
    */
   registerSlot(slot: SlotName, el: HTMLElement | null): () => void
-  reconcile(desired: readonly Placement[], opts?: { animate?: boolean }): void
+  /**
+   * The declarative layer's `<video>` ref. Same idiom and same identity guard as
+   * `registerSlot`: `ref={(el) => media.attachVideo(id, el)}`. It is how the
+   * controller learns an element exists at all — `acquire` only makes the host,
+   * and the element inside it is created a render later by React.
+   */
+  attachVideo(fileId: string, el: HTMLVideoElement | null): () => void
+  /**
+   * `loadeddata` from the declarative layer. A tier swap replaces the source, so
+   * the element resets to paused at time zero underneath every ledger in the
+   * app; this is where the playhead and the play/pause policy are re-applied.
+   */
+  resync(fileId: string): void
+  reconcile(
+    desired: readonly Placement[],
+    opts?: {
+      animate?: boolean
+      /** the file that plays full-res with audio available; everything else is a muted thumb */
+      focus?: string | null
+    },
+  ): void
   release(fileId: string): void
   setVolume(fileId: string, v: number): void
   setMuted(fileId: string, muted: boolean): void
@@ -85,6 +125,8 @@ export type MediaController = {
    * second-guessed by an imperative write from here.
    */
   wantsMedia(fileId: string): boolean
+  /** Which encode the declarative layer must render for this file. */
+  tierOf(fileId: string): MediaTier
   subscribe(cb: () => void): () => void
   getSnapshot(): MediaSnapshot
   /** hosts that exist but are placed nowhere; for assertions and teardown */
@@ -135,7 +177,9 @@ const DEFAULT_STATE = (): MediaState => ({ volume: 0, muted: true, currentTime: 
 /** A seek is not free; only issue one when the playhead is actually wrong. */
 const SEEK_EPSILON = 0.05
 
-export function createMediaController(opts: { animateMove?: MoveAnimator } = {}): MediaController {
+export function createMediaController(
+  opts: { animateMove?: MoveAnimator; director?: PlaybackDirector } = {},
+): MediaController {
   const hosts = new Map<string, HTMLDivElement>()
   const order: string[] = []
   const slots = new Map<SlotName, HTMLElement>()
@@ -143,6 +187,11 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
   const states = new Map<string, MediaState>()
   const released = new Set<string>()
   const subscribers = new Set<() => void>()
+  const videos = new Map<string, HTMLVideoElement>()
+  const tiers = new Map<string, MediaTier>()
+  /** files whose source is about to be swapped, and the playhead to land back on */
+  const resumeAt = new Map<string, number>()
+  let focusId: string | null = null
 
   // Detached on purpose. A parked host keeps its identity, its <video> and its
   // src, so an ordinary re-render costs a round trip and nothing else.
@@ -150,7 +199,8 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
   atticEl.setAttribute('data-media-attic', '')
 
   let desiredCache: readonly Placement[] = []
-  let snapshot: MediaSnapshot = { fileIds: [], placement: {}, wanted: {} }
+  let focusCache: string | null = null
+  let snapshot: MediaSnapshot = { fileIds: [], placement: {}, wanted: {}, tier: {} }
   let dirty = false
 
   const isLive = (slot: SlotName) => slots.has(slot)
@@ -162,6 +212,42 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
   // Scoped to the host, never to the document: identity comes from the fileId
   // that produced this host, so there is no lookup by DOM shape anywhere.
   const videoIn = (host: HTMLElement) => host.querySelector('video')
+  const elFor = (fileId: string) => {
+    const host = hosts.get(fileId)
+    return host ? videoIn(host) : null
+  }
+  const tierOf = (fileId: string): MediaTier => tiers.get(fileId) ?? 'thumb'
+
+  /**
+   * The single writer of `muted` and `volume` on an element.
+   *
+   * **`muted` has exactly one owner and it is this module**, writing it as a
+   * property from the per-file record. The declarative layer must render neither
+   * `muted` nor `volume`: rendering `muted` as well is the same prop-desync that
+   * made an imperative `src` removal permanent, only in a quieter attribute —
+   * React's record would keep saying `true`, diff equal, and never write again.
+   */
+  function applyAudio(fileId: string) {
+    const v = elFor(fileId)
+    if (!v) return
+    const rec = stateOf(fileId)
+    if (v.muted !== rec.muted) v.muted = rec.muted
+    if (v.volume !== rec.volume) v.volume = rec.volume
+  }
+
+  /**
+   * The focus policy, applied to the record rather than to the element: only the
+   * focused file may sound. `volume` is untouched, so refocusing restores the
+   * level the user chose instead of 000 — that is what "mutes without discarding
+   * the stored level" means with `muted` and `volume` as separate fields.
+   */
+  function applyFocusMuting() {
+    for (const fileId of placement.keys()) {
+      const rec = stateOf(fileId)
+      rec.muted = fileId !== focusId || rec.volume === 0
+      applyAudio(fileId)
+    }
+  }
 
   function acquire(fileId: string): HTMLDivElement {
     const existing = hosts.get(fileId)
@@ -210,11 +296,9 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
    * to the position the element is already at would stutter playback.
    */
   function restore(fileId: string, snap: MediaState) {
-    const host = hosts.get(fileId)
-    const v = host ? videoIn(host) : null
+    const v = elFor(fileId)
     if (!v) return
-    if (v.volume !== snap.volume) v.volume = snap.volume
-    if (v.muted !== snap.muted) v.muted = snap.muted
+    applyAudio(fileId)
     if (
       Number.isFinite(snap.currentTime) && snap.currentTime > 0 &&
       Math.abs(v.currentTime - snap.currentTime) > SEEK_EPSILON
@@ -286,6 +370,8 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
     // the decode it referred to is gone.
     rec.currentTime = 0
     rec.playing = false
+    resumeAt.delete(fileId)
+    opts.director?.unregister(fileId)
     if (!released.has(fileId)) { released.add(fileId); dirty = true }
   }
 
@@ -296,6 +382,7 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
       fileIds: order.slice(),
       placement: Object.fromEntries(order.map((id) => [id, placement.get(id) ?? null])),
       wanted: Object.fromEntries(order.map((id) => [id, !released.has(id)])),
+      tier: Object.fromEntries(order.map((id) => [id, tierOf(id)])),
     }
     for (const cb of subscribers) cb()
   }
@@ -306,6 +393,8 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
    */
   function apply(animate: boolean, mayRelease: boolean) {
     const resolved = resolveDesired(desiredCache, isLive)
+    // A focus hint naming a file this pass does not place is not focus.
+    focusId = focusCache !== null && resolved.has(focusCache) ? focusCache : null
     // Evacuate first: it frees the slots the survivors are about to claim, and
     // it means a window closing never leaves a node inside a subtree React is
     // about to unmount. Collect before acting — both paths delete from the map
@@ -327,7 +416,45 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
       moveHost(fileId, slots.get(slot)!, animate)
       if (placement.get(fileId) !== slot) { placement.set(fileId, slot); dirty = true }
     }
+    applyTiers()
+    applyFocusMuting()
+    // The single director in the app, fed once per pass: one focus, everything
+    // else placed is background, in placement order. Nothing else calls it.
+    const placed = [...placement.keys()]
+    if (opts.director) {
+      // Idempotent, and the recovery path for a file that was released (and so
+      // unregistered) and has since been asked for again.
+      for (const fileId of placed) {
+        const v = elFor(fileId)
+        if (v) opts.director.register(fileId, v)
+      }
+      opts.director.setFocus(focusId)
+      opts.director.setBackground(placed.filter((id) => id !== focusId))
+    }
     notify()
+  }
+
+  /**
+   * Tier is derived, never stored as intent: the focused file gets `_full` with
+   * audio available, everything else gets the 240p thumb. Changing it swaps the
+   * element's source, which resets it to paused at time zero underneath us — so
+   * the playhead is stashed here and re-applied on `resync`, and the swap is a
+   * render (the layer reads `snapshot.tier`) rather than an attribute write.
+   */
+  function applyTiers() {
+    for (const fileId of order) {
+      const want: MediaTier = fileId === focusId && placement.has(fileId) ? 'full' : 'thumb'
+      if (tierOf(fileId) === want) continue
+      const v = elFor(fileId)
+      if (v && placement.has(fileId)) {
+        const rec = stateOf(fileId)
+        rec.currentTime = v.currentTime
+        rec.playing = !v.paused
+        resumeAt.set(fileId, v.currentTime)
+      }
+      tiers.set(fileId, want)
+      dirty = true
+    }
   }
 
   return {
@@ -355,7 +482,43 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
 
     reconcile(desired, o) {
       desiredCache = desired
+      if (o && 'focus' in o) focusCache = o.focus ?? null
       apply(o?.animate ?? false, true)
+    },
+
+    attachVideo(fileId, el) {
+      const detach = () => {
+        if (el !== null && videos.get(fileId) !== el) return
+        if (!videos.delete(fileId)) return
+        opts.director?.unregister(fileId)
+      }
+      if (el === null) { detach(); return () => {} }
+      if (videos.get(fileId) === el) return detach
+      videos.set(fileId, el)
+      // Ref callbacks run inside the commit, before any media data exists, so
+      // this lands well ahead of the user agent's autoplay decision — which is
+      // the whole reason `muted` must not be a rendered prop.
+      applyAudio(fileId)
+      opts.director?.register(fileId, el)
+      return detach
+    },
+
+    resync(fileId) {
+      const v = elFor(fileId)
+      if (!v) return
+      const at = resumeAt.get(fileId)
+      if (at !== undefined) {
+        resumeAt.delete(fileId)
+        // A tier swap changes the encode, not the clip: land back where the
+        // viewer was, unless the new source is too short to hold that playhead.
+        if (at > SEEK_EPSILON && (!Number.isFinite(v.duration) || at < v.duration)) {
+          try { v.currentTime = at } catch { /* seek before metadata */ }
+        }
+      }
+      applyAudio(fileId)
+      // Re-registering is the director's resync idiom: it re-judges against the
+      // element's real `paused`, which a source swap has just reset to true.
+      if (videos.get(fileId) === v) opts.director?.register(fileId, v)
     },
 
     release(fileId) { releaseFile(fileId); notify() },
@@ -386,6 +549,7 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
     },
     hostedFileIds: () => snapshot.fileIds,
     wantsMedia: (fileId) => hosts.has(fileId) && !released.has(fileId),
+    tierOf,
 
     subscribe(cb) {
       subscribers.add(cb)
@@ -398,7 +562,11 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
       for (const fileId of hosts.keys()) releaseFile(fileId)
       for (const host of hosts.values()) host.remove()
       slots.clear()
+      videos.clear()
+      resumeAt.clear()
       desiredCache = []
+      focusCache = null
+      focusId = null
       dirty = true
       notify()
       subscribers.clear()

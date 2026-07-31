@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { openWindow, focusWindow, closeWindow, cascadePosition, freeSlot, MAX_WINDOWS } from './windowManager'
+import { openWindow, focusWindow, closeWindow, cascadePosition, freeSlot, windowBox, windowWidthCss, FW_TITLEBAR_H, FW_BORDER, MAX_WINDOWS } from './windowManager'
 import type { WinState, Geometry } from './windowManager'
 
 const GEOM: Geometry = { area: { w: 1440, h: 900 }, size: { w: 640, h: 360 } }
@@ -166,5 +166,46 @@ describe('cascadePosition', () => {
       expect(p.x + size.w).toBeLessThanOrEqual(area.w)
       expect(p.y + size.h).toBeLessThanOrEqual(area.h)
     }
+  })
+})
+
+describe('windowBox', () => {
+  const AREA = { w: 1440, h: 900 }
+  const CASES: [string, number][] = [
+    ['16:9', 1280 / 720],
+    ['9:16-ish', 406 / 720],
+    ['1:1', 720 / 720],
+    ['3:4', 540 / 720],
+  ]
+
+  it('is exactly the media box plus the title bar and the border', () => {
+    for (const [label, ar] of CASES) {
+      const { w, h } = windowBox(ar, AREA)
+      const bodyH = h - FW_TITLEBAR_H - FW_BORDER
+      const bodyW = w - FW_BORDER
+      expect(bodyW / bodyH, `${label} body ratio`).toBeCloseTo(ar, 6)
+    }
+  })
+
+  it('keeps every aspect class inside the viewport once cascaded', () => {
+    // The invariant §4.5 states: a freshly spawned window is fully within the
+    // desktop before any interaction. The old code fed cascadePosition a
+    // fabricated 16:9 {720,405} box, so a portrait window was clamped against
+    // the wrong shape and spawned overflowing the bottom.
+    for (const area of [AREA, { w: 861, h: 700 }]) {
+      for (const [label, ar] of CASES) {
+        const size = windowBox(ar, area)
+        for (let slot = 0; slot < MAX_WINDOWS; slot++) {
+          const p = cascadePosition(slot, area, size)
+          expect(p.x, `${label} @${area.w} slot${slot}`).toBeGreaterThanOrEqual(0)
+          expect(p.y + size.h, `${label} @${area.w} slot${slot} bottom`).toBeLessThanOrEqual(area.h + 0.001)
+          expect(p.x + size.w, `${label} @${area.w} slot${slot} right`).toBeLessThanOrEqual(area.w + 0.001)
+        }
+      }
+    }
+  })
+
+  it('states the same box in CSS as it does in numbers', () => {
+    expect(windowWidthCss(1.5)).toBe('min(52vw, 720px, calc(1.5 * 62vh + 2px))')
   })
 })

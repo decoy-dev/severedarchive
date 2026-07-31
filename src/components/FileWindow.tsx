@@ -1,4 +1,5 @@
 import { aspectRatio, type ArchiveFile } from '../data/archive'
+import { windowWidthCss } from '../lib/windowManager'
 import VolumeControl from './VolumeControl'
 
 export default function FileWindow({
@@ -12,7 +13,8 @@ export default function FileWindow({
   onFocus: () => void
   onClose: () => void
   registerEl: (el: HTMLDivElement | null) => void
-  bodyRef: (el: HTMLDivElement | null) => void
+  /** registers `.fw-body` as this file's media slot; returns mediaController's cleanup */
+  bodyRef: (el: HTMLDivElement | null) => (() => void) | void
 }) {
   // Build-generated, so the box is known before the window mounts: no effect, no
   // retry, no race with the reparent, and no silent 16:9 fallback because there
@@ -29,10 +31,10 @@ export default function FileWindow({
       ref={registerEl}
       style={{
         left: x, top: y, zIndex: 10 + z,
-        width: `min(52vw, 720px, ${Math.round(ar * 62)}vh)`,
-        // TODO(Slice C): true-frame moves this onto .fw-body and the root gets
-        // body height + 42px instead, so the window stops pillarboxing.
-        aspectRatio: `${ar}`,
+        // True-frame: the ratio is on the BODY, and the root's height falls out
+        // of it. A root that carries `aspect-ratio` has to bar the media on one
+        // axis, which is the pillarboxing the rulings rule out.
+        width: windowWidthCss(ar),
       }}
       onPointerDown={onFocus}
     >
@@ -43,7 +45,10 @@ export default function FileWindow({
           <button className="fw-close" onClick={onClose} aria-label={`Close FILE_${file.index}`}>✕</button>
         </span>
       </header>
-      <div className="fw-body" ref={bodyRef} />
+      {/* An empty, stable slot — never a `<video>` of its own. mediaController
+          moves this file's host in here and takes it away again; React only ever
+          sees an empty div, which is the whole safety argument. */}
+      <div className="fw-body" data-window-slot={file.id} ref={bodyRef} style={{ aspectRatio: `${ar}` }} />
     </div>
   )
 }

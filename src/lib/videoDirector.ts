@@ -1,9 +1,11 @@
-export type Playable = { play(): void; pause(): void; readonly paused: boolean }
+/** `play()` returns a promise on a real HTMLVideoElement; the fakes return void. */
+export type Playable = { play(): void | Promise<void>; pause(): void; readonly paused: boolean }
 
 export class VideoDirector {
   private order: string[] = []
   private els = new Map<string, Playable>()
   private focus: string | null = null
+  private background: string[] | null = null
   private maxPlaying: number
 
   constructor(maxPlaying = 4) {
@@ -32,6 +34,17 @@ export class VideoDirector {
     this.focus = id
     this.apply()
   }
+  /**
+   * The ranked list of ids that should play *behind* the focus — unfocused
+   * windows and the explorer preview, in the order they should survive the cap.
+   * `null` means "no policy stated", and the director falls back to registration
+   * order; that is what the unit tests exercise and what a surface that never
+   * calls this gets. `mediaController.reconcile` states it on every pass.
+   */
+  setBackground(ids: readonly string[] | null) {
+    this.background = ids ? [...ids] : null
+    this.apply()
+  }
   playingIds(): string[] {
     return this.order.filter((id) => {
       const el = this.els.get(id)
@@ -41,8 +54,9 @@ export class VideoDirector {
   private apply() {
     const desired = new Set<string>()
     if (this.focus && this.els.has(this.focus)) desired.add(this.focus)
-    for (const id of this.order) {
+    for (const id of this.background ?? this.order) {
       if (desired.size >= this.maxPlaying) break
+      if (!this.els.has(id)) continue
       desired.add(id)
     }
     // Judge against the element's actual paused state, not a shadow "is playing"
@@ -50,8 +64,13 @@ export class VideoDirector {
     // us, and a stale ledger would never notice and never reissue play().
     for (const [id, el] of this.els) {
       const should = desired.has(id)
-      if (should && el.paused) el.play()
-      else if (!should && !el.paused) el.pause()
+      if (should && el.paused) {
+        // A real element rejects play() when it is not allowed to start yet
+        // (no data, autoplay policy). That is an ordinary outcome here, not an
+        // error: the loadeddata resync re-issues it.
+        const p = el.play()
+        if (p && typeof p.catch === 'function') p.catch(() => {})
+      } else if (!should && !el.paused) el.pause()
     }
   }
 }

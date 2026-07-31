@@ -51,12 +51,33 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
    it rules out bars. .media-host is created by mediaController, never by JSX. */
 .media-host > video, .media-host > img { width: 100%; height: 100%; display: block; object-fit: contain; }
 
-.stage { position: fixed; inset: 0; height: 100dvh; overflow: hidden; }
+/* Persistent status region. It is mounted for the life of the desktop and only
+   its text changes — a live region inserted together with its text does not
+   announce, which is why the refusal overprint never reached a screen reader. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+
+/* `clip`, not `hidden`. The overprint wordmark is deliberately wider than the
+   viewport, so `hidden` left .stage a scroll container with ~215px of hidden
+   scrollable overflow at 861px — and the browser scrolls a hidden container to
+   reveal a newly focused descendant. Clicking a file row therefore shunted the
+   entire desktop sideways and spawned every window off the left edge, with no
+   document scroll to show for it. `clip` refuses to be a scroll container at all,
+   which is what "single screen, never scrolls" actually means. */
+.stage { position: fixed; inset: 0; height: 100dvh; overflow: clip; }
 
 /* background video layer */
 .bg-video { position: absolute; inset: 0; z-index: 0; }
-.bg-video::after { /* darkening scrim so the glass chrome reads over bright footage */
-  content: ''; position: absolute; inset: 0; background: rgba(4, 6, 8, 0.45); pointer-events: none;
+/* Darkening scrim so the glass chrome reads over bright footage. One global
+   value, deliberately not sampled per clip: the archive now runs from near-black
+   to a pale mint (file01), and because every surface is glass the whole UI tints
+   with whatever is behind it. Tuned by eye against file01 (brightest) and file03
+   (dark, the default) — below ~0.6 the dim metadata and unselected row names wash
+   out on file01; above ~0.7 the dark clips stop reading as footage at all. */
+.bg-video::after {
+  content: ''; position: absolute; inset: 0; background: rgba(4, 6, 8, 0.66); pointer-events: none;
 }
 
 /* overprint wordmark — sits ABOVE the glass margin strips (so they don't tint/dim
@@ -108,7 +129,9 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   display: flex; flex-direction: column;
   overflow: hidden;
   opacity: 0; /* drawn in by TerminalWindow's mount effect once boot completes */
-  will-change: transform;   /* dragged via anime.js transforms */
+  /* No `will-change: transform` — binding ruling 7 made this a fixed background
+     layer, so there is no drag to hint for, and pinning a compositor layer on a
+     full-viewport backdrop-filter surface costs for nothing. */
 }
 .terminal-window::after {   /* static scanlines */
   content: ''; position: absolute; inset: 0; z-index: 40; pointer-events: none;
@@ -520,14 +543,54 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   position: relative; z-index: 2;   /* glass host child — see the sheen note above */
 }
 .fw-titlebar:active { cursor: grabbing; }
-.fw-title { color: var(--dim); letter-spacing: 0.04em; }
+/* min-width: 0 is load-bearing — a flex item's default min-width is its content,
+   so without it a long portrait-window title refuses to shrink and crushes the
+   expanded volume control off the end of the bar. */
+.fw-title { color: var(--dim); letter-spacing: 0.04em; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .file-window[data-focused='true'] .fw-title { color: var(--bright); }
 .file-window[data-focused='true'] { border-color: var(--hair-bright); }
-.fw-controls { display: flex; align-items: center; gap: 14px; }
+.fw-controls { display: flex; align-items: center; gap: 14px; flex: 0 0 auto; }
 .fw-close { font-size: var(--fs-sm); color: var(--dim); padding: 0 2px; }
 .fw-close:hover { color: var(--acid); }
-.fw-body { flex: 1 1 auto; position: relative; z-index: 2; background: #000; min-height: 0; }
-.fw-body video { width: 100%; height: 100%; object-fit: contain; }
+/* True-frame: `aspect-ratio` is set inline from generated metadata and the body
+   is the element that carries it, so the window root's height is body + title bar
+   + border and nothing is ever barred. flex-basis stays `auto` and the item does
+   not grow, or the ratio would lose to the flex line. */
+.fw-body { flex: 0 0 auto; position: relative; z-index: 2; background: #000; overflow: hidden; }
+
+/* ── intentional degradation (§4.7) ──
+   Scanlines, noise and a desaturation pass over the surfaces that are showing a
+   240p encode: the explorer preview always, an unfocused window until it is
+   focused. On focus it fades out over 200ms and the picture visibly resolves —
+   the fade IS the focus feedback.
+
+   Binding: this is on the SLOT, never on the media node. The node moves between
+   surfaces and would carry its treatment into one that should not have it (a
+   focused window, the mobile primary player). It is the one place where "the
+   node moves" leaks into styling, which is why it is stated rather than assumed.
+
+   -webkit- first: Tailwind v4's Lightning CSS build collapses duplicate
+   backdrop-filter declarations to whichever is LAST. */
+.preview-frame::after,
+.fw-body::after {
+  content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  /* Tuned by eye against the 0.66 scrim, on file01 (the brightest clip in the
+     archive) at 1440×900. Heavier than this and the picture stops reading as
+     footage; lighter and the treatment reads as a display fault rather than an
+     intentional low-res pass. */
+  background-image:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.24) 0 1px, rgba(0, 0, 0, 0) 1px 3px),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/></filter><rect width='120' height='120' filter='url(%23n)' opacity='0.24'/></svg>");
+  background-size: auto, 120px 120px;
+  -webkit-backdrop-filter: saturate(0.7) contrast(1.05) brightness(0.95);
+  backdrop-filter: saturate(0.7) contrast(1.05) brightness(0.95);
+  opacity: 1;
+  transition: opacity 200ms ease;
+}
+.file-window[data-focused='true'] .fw-body::after { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .preview-frame::after, .fw-body::after { transition: none; }
+}
 
 [data-tier='lite'] .file-window { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--panel-solid); }
 

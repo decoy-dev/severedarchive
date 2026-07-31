@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ARCHIVE, DEFAULT_FRONT_ID, fileById, isArchiveId, formatDuration, formatResolution, aspectRatio } from './archive'
-import { MEDIA_META } from './mediaMeta.generated'
+import { MEDIA_META, THUMB_META } from './mediaMeta.generated'
 
 describe('archive metadata', () => {
   // The guard §4.8 asks for: a clip added to raw/ without re-running the
@@ -31,6 +31,21 @@ describe('archive metadata', () => {
     expect(aspectRatio(fileById('file08')!)).toBeLessThan(1)
     expect(aspectRatio(fileById('file09')!)).toBe(1)
     expect(aspectRatio(fileById('file01')!)).toBeCloseTo(16 / 9, 2)
+  })
+
+  // The window's box comes from the FULL encode's ratio, and an unfocused window
+  // shows the THUMB in that box. If the two encodes disagree, every unfocused
+  // window is barred on one axis — the letterboxing binding ruling 2 forbids.
+  // They used to disagree: file07/file08 thumbs were 136×240 (0.5667) against a
+  // 406×720 full (0.5639), and file01 426×240 against 1280×720, because each
+  // encode rounded to its own nearest even number at its own scale.
+  it('every _thumb shares its _full aspect ratio within 0.1%', () => {
+    for (const f of ARCHIVE) {
+      const t = THUMB_META[f.id]
+      expect(t, `${f.id} has no generated thumb metadata`).toBeDefined()
+      const drift = Math.abs(t.width / t.height - f.width / f.height) / (f.width / f.height)
+      expect(drift, `${f.id}: thumb ${t.width}×${t.height} vs full ${f.width}×${f.height}`).toBeLessThan(0.001)
+    }
   })
 
   it('has a unique index and id per file', () => {

@@ -28,7 +28,23 @@ Element.prototype.getBoundingClientRect = function (this: Element) {
   return this.isConnected ? fakeRect(320, 180) : fakeRect(0, 0)
 }
 
-const srcOf = (id: string) => `/media/${id}_thumb.mp4`
+const srcOf = (id: string, tier: 'full' | 'thumb' = 'thumb') => `/media/${id}_${tier}.mp4`
+
+/** The single VideoDirector, as the controller sees it. */
+const fakeDirector = () => {
+  const calls = { focus: [] as (string | null)[], background: [] as (readonly string[] | null)[] }
+  const registered = new Map<string, unknown>()
+  return {
+    calls,
+    registered,
+    register(id: string, el: unknown) { registered.set(id, el) },
+    unregister(id: string) { registered.delete(id) },
+    setFocus(id: string | null) { calls.focus.push(id) },
+    setBackground(ids: readonly string[] | null) { calls.background.push(ids) },
+    lastFocus: () => calls.focus[calls.focus.length - 1],
+    lastBackground: () => calls.background[calls.background.length - 1],
+  }
+}
 
 /**
  * Stand-in for the MediaLayer portal that Slice C mounts.
@@ -47,12 +63,16 @@ function makeMediaLayer(c: MediaController) {
       const host = c.hostFor(id)
       if (!host) continue
       let v = host.querySelector('video')
-      if (!v) { v = document.createElement('video'); host.appendChild(v) }
-      const want = c.wantsMedia(id) ? srcOf(id) : undefined
+      if (!v) {
+        v = document.createElement('video')
+        host.appendChild(v)
+        c.attachVideo(id, v)          // the ref, exactly as MediaLayer renders it
+      }
+      const want = c.wantsMedia(id) ? srcOf(id, c.tierOf(id)) : undefined
       if (rendered.get(v) === want) continue    // React's prop diff
       rendered.set(v, want)
       if (want === undefined) v.removeAttribute('src')
-      else v.src = want
+      else { v.src = want; c.resync(id) }       // stands in for `loadeddata`
     }
   }
 }
@@ -321,6 +341,107 @@ describe('mediaController', () => {
     expect(c.stateOf('file03').volume).toBeCloseTo(0.4)
     c.setMuted('file03', false)
     expect(video.volume).toBeCloseTo(0.4)
+  })
+
+  // --- Slice C: playback tiers ---------------------------------------------
+  it('gives the focused file the full encode and everything else the thumb', () => {
+    const c = make()
+    const layer = makeMediaLayer(c)
+    const winB = slotEl()
+    c.registerSlot('window:file03', winA)
+    c.registerSlot('window:file05', winB)
+    c.reconcile(
+      [
+        { slot: 'preview', fileId: 'file09' },
+        { slot: 'window:file03', fileId: 'file03' },
+        { slot: 'window:file05', fileId: 'file05' },
+      ],
+      { focus: 'file05' },
+    )
+    layer()
+
+    expect(c.tierOf('file05')).toBe('full')
+    expect(c.tierOf('file03')).toBe('thumb')
+    expect(c.tierOf('file09')).toBe('thumb')
+    const fullSrcs = c.hostedFileIds()
+      .map((id) => videoIn(c.hostFor(id)!).getAttribute('src'))
+      .filter((s) => s?.includes('_full'))
+    expect(fullSrcs, 'exactly one _full source exists').toHaveLength(1)
+  })
+
+  it('mutes everything that is not focused, and keeps the level for when it is', () => {
+    const c = make()
+    const layer = makeMediaLayer(c)
+    c.registerSlot('window:file03', winA)
+    c.reconcile([{ slot: 'window:file03', fileId: 'file03' }], { focus: 'file03' })
+    layer()
+    const video = videoIn(c.hostFor('file03')!)
+
+    c.setVolume('file03', 0.6)
+    expect(video.muted).toBe(false)
+    expect(video.volume).toBeCloseTo(0.6)
+
+    // a second window takes focus: file03 goes silent but does not forget 060
+    const winB = slotEl()
+    c.registerSlot('window:file05', winB)
+    c.reconcile(
+      [{ slot: 'window:file03', fileId: 'file03' }, { slot: 'window:file05', fileId: 'file05' }],
+      { focus: 'file05' },
+    )
+    layer()
+    expect(video.muted).toBe(true)
+    expect(c.stateOf('file03').volume).toBeCloseTo(0.6)
+
+    // focus back
+    c.reconcile(
+      [{ slot: 'window:file03', fileId: 'file03' }, { slot: 'window:file05', fileId: 'file05' }],
+      { focus: 'file03' },
+    )
+    layer()
+    expect(video.muted).toBe(false)
+    expect(video.volume).toBeCloseTo(0.6)
+  })
+
+  it('lands the playhead back where it was after a tier swap', () => {
+    const c = make()
+    const layer = makeMediaLayer(c)
+    c.registerSlot('window:file03', winA)
+    c.reconcile([{ slot: 'window:file03', fileId: 'file03' }], { focus: 'file03' })
+    layer()
+    const video = videoIn(c.hostFor('file03')!)
+    expect(video.getAttribute('src')).toBe(srcOf('file03', 'full'))
+
+    video.currentTime = 5.5
+    video.play()
+    // losing focus swaps the source, which resets the element to time zero
+    c.reconcile([{ slot: 'window:file03', fileId: 'file03' }], { focus: null })
+    video.currentTime = 0
+    layer()
+
+    expect(video.getAttribute('src')).toBe(srcOf('file03'))
+    expect(video.currentTime, 'the swap dropped the viewer back to the start').toBeCloseTo(5.5)
+  })
+
+  it('states focus and background to the one director, and drops released files', () => {
+    const director = fakeDirector()
+    const c = createMediaController({ director })
+    c.registerSlot('preview', preview)
+    c.registerSlot('window:file03', winA)
+    const layer = makeMediaLayer(c)
+
+    c.reconcile(
+      [{ slot: 'preview', fileId: 'file09' }, { slot: 'window:file03', fileId: 'file03' }],
+      { focus: 'file03' },
+    )
+    layer()
+    expect(director.lastFocus()).toBe('file03')
+    expect([...(director.lastBackground() ?? [])]).toEqual(['file09'])
+    expect([...director.registered.keys()].sort()).toEqual(['file03', 'file09'])
+
+    // a focus hint for a file this pass does not place is not focus
+    c.reconcile([{ slot: 'preview', fileId: 'file09' }], { focus: 'file03' })
+    expect(director.lastFocus()).toBeNull()
+    expect(director.registered.has('file03'), 'released files leave the director').toBe(false)
   })
 
   it('animates a real move and only a real move', () => {

@@ -54,6 +54,31 @@ export function closeWindow(windows: WinState[], id: string): WinState[] {
   return densify(windows.filter((w) => w.id !== id))
 }
 
+/** Title bar height and the glass border, the only chrome between body and root. */
+export const FW_TITLEBAR_H = 40
+export const FW_BORDER = 2
+
+/**
+ * The true frame, in one place, because two places would disagree.
+ *
+ * Aspect ratio belongs to `.fw-body`, never to the window root — the root
+ * carrying it is what produced the pillarboxing the rulings forbid. So the root
+ * is width-driven and its height falls out of the body: the media box fits
+ * within the viewport minus chrome and a margin, and the window is exactly
+ * `FW_TITLEBAR_H + FW_BORDER` taller than the media.
+ *
+ * `bodyWidthCss` is the same expression in CSS units, so the spawn maths and the
+ * rendered box cannot drift apart. Read it as: no wider than half the viewport,
+ * no wider than 720px, and no taller than 62vh of *media*.
+ */
+export function windowBox(ar: number, area: { w: number; h: number }): { w: number; h: number } {
+  const w = Math.min(area.w * 0.52, 720, ar * area.h * 0.62 + FW_BORDER)
+  return { w, h: (w - FW_BORDER) / ar + FW_TITLEBAR_H + FW_BORDER }
+}
+
+export const windowWidthCss = (ar: number): string =>
+  `min(52vw, 720px, calc(${ar} * 62vh + ${FW_BORDER}px))`
+
 const STEP_X = 28
 const STEP_Y = 24
 

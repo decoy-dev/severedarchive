@@ -18,3 +18,19 @@ export const MEDIA_META: Record<string, MediaMeta> = {
   file11: { width: 1280, height: 720, durationSec: 9.97 },
   file12: { width: 1280, height: 720, durationSec: 12 },
 }
+
+/** The 240p encode's box. Only its aspect ratio matters, and only as a guard. */
+export const THUMB_META: Record<string, { width: number; height: number }> = {
+  file01: { width: 416, height: 234 },
+  file02: { width: 416, height: 234 },
+  file03: { width: 416, height: 234 },
+  file04: { width: 416, height: 234 },
+  file05: { width: 416, height: 234 },
+  file06: { width: 416, height: 234 },
+  file07: { width: 150, height: 266 },
+  file08: { width: 150, height: 266 },
+  file09: { width: 240, height: 240 },
+  file10: { width: 180, height: 240 },
+  file11: { width: 416, height: 234 },
+  file12: { width: 416, height: 234 },
+}
