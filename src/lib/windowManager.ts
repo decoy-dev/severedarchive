@@ -1,7 +1,22 @@
+import { isArchiveId } from '../data/archive'
+
 export const MAX_WINDOWS = 3
 
-export type WinState = { id: string; x: number; y: number; z: number }
-export type OpenResult = { ok: true; windows: WinState[] } | { ok: false; reason: 'cap' }
+/**
+ * `slot` is the cascade index, not a count. Passing `windows.length` looked
+ * equivalent and is not: open A, B, C, close B, open D and the count says 2,
+ * which is C's position. The slot space is exactly MAX_WINDOWS wide, so
+ * allocating the lowest free index makes a collision impossible rather than
+ * unlikely, and a reopened window reuses the vacated position instead of
+ * drifting toward the bottom-right corner.
+ */
+export type WinState = { id: string; x: number; y: number; z: number; slot: number }
+
+export type OpenRefusal = 'cap' | 'unknown'
+export type OpenResult = { ok: true; windows: WinState[] } | { ok: false; reason: OpenRefusal }
+
+/** Viewport and the window's true box. Size comes from the file's generated metadata. */
+export type Geometry = { area: { w: number; h: number }; size: { w: number; h: number } }
 
 /** Rewrite z so the list is a dense 0..n-1 rank preserving current order. */
 const densify = (windows: WinState[]): WinState[] => {
@@ -9,10 +24,23 @@ const densify = (windows: WinState[]): WinState[] => {
   return windows.map((w) => ({ ...w, z: order.findIndex((o) => o.id === w.id) }))
 }
 
-export function openWindow(windows: WinState[], id: string, pos: { x: number; y: number }): OpenResult {
+export function freeSlot(windows: WinState[]): number {
+  const taken = new Set(windows.map((w) => w.slot))
+  for (let i = 0; i < MAX_WINDOWS; i++) if (!taken.has(i)) return i
+  return -1
+}
+
+export function openWindow(windows: WinState[], id: string, geom: Geometry): OpenResult {
+  // Validate before mutating state: an id that is not in ARCHIVE used to reach
+  // `windows` and render nothing, leaving a phantom holding a slot and a z-rank.
+  if (!isArchiveId(id)) return { ok: false, reason: 'unknown' }
   if (windows.some((w) => w.id === id)) return { ok: true, windows: focusWindow(windows, id) }
   if (windows.length >= MAX_WINDOWS) return { ok: false, reason: 'cap' }
-  return { ok: true, windows: [...windows, { id, x: pos.x, y: pos.y, z: windows.length }] }
+  const slot = freeSlot(windows)
+  if (slot < 0) return { ok: false, reason: 'cap' }
+  // Allocation and positioning are one step so the wrong index cannot be passed.
+  const { x, y } = cascadePosition(slot, geom.area, geom.size)
+  return { ok: true, windows: [...windows, { id, x, y, z: windows.length, slot }] }
 }
 
 export function focusWindow(windows: WinState[], id: string): WinState[] {
@@ -22,6 +50,7 @@ export function focusWindow(windows: WinState[], id: string): WinState[] {
 }
 
 export function closeWindow(windows: WinState[], id: string): WinState[] {
+  // The slot frees implicitly: it is held by the record, and the record is gone.
   return densify(windows.filter((w) => w.id !== id))
 }
 
@@ -29,7 +58,7 @@ const STEP_X = 28
 const STEP_Y = 24
 
 export function cascadePosition(
-  count: number,
+  slot: number,
   area: { w: number; h: number },
   size: { w: number; h: number },
 ): { x: number; y: number } {
@@ -39,7 +68,7 @@ export function cascadePosition(
   const baseX = Math.min(maxX, Math.round(maxX / 3))
   const baseY = Math.min(maxY, Math.round(maxY / 3))
   return {
-    x: Math.max(0, Math.min(maxX, baseX + count * STEP_X)),
-    y: Math.max(0, Math.min(maxY, baseY + count * STEP_Y)),
+    x: Math.max(0, Math.min(maxX, baseX + slot * STEP_X)),
+    y: Math.max(0, Math.min(maxY, baseY + slot * STEP_Y)),
   }
 }

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { animate } from 'animejs'
 import BackgroundVideo from './components/BackgroundVideo'
 import TerminalWindow, { type TabId } from './components/TerminalWindow'
@@ -8,47 +8,54 @@ import LinksPanel from './components/LinksPanel'
 import BootSequence from './components/BootSequence'
 import Desktop from './components/Desktop'
 import { readPerfTier, prefersReducedMotion } from './lib/perfTier'
-import { DEFAULT_FRONT_ID } from './data/archive'
+import { ArchiveSelectionProvider, useArchiveSelection } from './lib/selection'
+
+const TAB_ORDER: TabId[] = ['archive', 'about', 'links']
 
 export default function App() {
+  // Selection, activation and view mode live above everything that reads them,
+  // so a tab switch or a list/grid switch cannot reset them.
+  return (
+    <ArchiveSelectionProvider>
+      <AppShell />
+    </ArchiveSelectionProvider>
+  )
+}
+
+function AppShell() {
   const [tier] = useState(readPerfTier)
   const [booted, setBooted] = useState(false)
   const [tab, setTabState] = useState<TabId>('archive')
-  const [backdropId, setBackdropId] = useState(DEFAULT_FRONT_ID)
+  const { selectedId, select } = useArchiveSelection()
   const bodyRef = useRef<HTMLDivElement | null>(null)
 
-  const setTab = (t: TabId) => {
-    setTabState(t)
-    if (bodyRef.current && !prefersReducedMotion()) animate(bodyRef.current, { opacity: [0.15, 1], duration: 180, ease: 'outQuad' })
-  }
-
-  // spec: arrow keys switch tabs
-  useLayoutEffect(() => {
-    const order: TabId[] = ['archive', 'about', 'links']
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-      setTabState((cur) => {
-        const i = order.indexOf(cur)
-        return order[(i + (e.key === 'ArrowRight' ? 1 : order.length - 1)) % order.length]
-      })
-      if (bodyRef.current && !prefersReducedMotion()) animate(bodyRef.current, { opacity: [0.15, 1], duration: 180, ease: 'outQuad' })
+  const flashBody = useCallback(() => {
+    if (bodyRef.current && !prefersReducedMotion()) {
+      animate(bodyRef.current, { opacity: [0.15, 1], duration: 180, ease: 'outQuad' })
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  const setTab = useCallback((t: TabId) => { setTabState(t); flashBody() }, [flashBody])
+
+  // The application has exactly one window-level keydown listener and Desktop
+  // registers it (§4.6). App only says what a tab shift means.
+  const shiftTab = useCallback((dir: 1 | -1) => {
+    setTabState((cur) => TAB_ORDER[(TAB_ORDER.indexOf(cur) + dir + TAB_ORDER.length) % TAB_ORDER.length])
+    flashBody()
+  }, [flashBody])
 
   return (
     <div className="stage" data-tier={tier} data-booted={booted ? 'true' : 'false'}>
-      <BackgroundVideo tier={tier} fileId={backdropId} />
+      <BackgroundVideo tier={tier} fileId={selectedId} />
       <span className="wordmark" aria-hidden="true">SEVEREDARCHIVE</span>
       <div className="glass-strip top" /><div className="glass-strip bottom" />
       <div className="glass-strip left" /><div className="glass-strip right" />
       {!booted ? (
         <BootSequence onDone={() => setBooted(true)} />
       ) : (
-        <Desktop>
+        <Desktop onTabShift={shiftTab}>
           <TerminalWindow tab={tab} onTab={setTab} bodyRef={bodyRef}>
-            {tab === 'archive' && <ArchivePanel tier={tier} onFrontChange={setBackdropId} />}
+            {tab === 'archive' && <ArchivePanel tier={tier} onFrontChange={select} />}
             {tab === 'about' && <AboutPanel />}
             {tab === 'links' && <LinksPanel />}
           </TerminalWindow>

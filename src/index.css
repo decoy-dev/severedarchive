@@ -44,6 +44,13 @@ a { color: inherit; text-decoration: none; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 video { display: block; width: 100%; height: 100%; object-fit: cover; }
 
+/* Media hosts are the one thing that moves between surfaces, so they carry their
+   own presentation — a node must look the same wherever it lands, and slots
+   contribute box size only. `contain` is not decoration: the global default
+   above is `cover`, which crops, and true-frame rules out cropping as firmly as
+   it rules out bars. .media-host is created by mediaController, never by JSX. */
+.media-host > video, .media-host > img { width: 100%; height: 100%; display: block; object-fit: contain; }
+
 .stage { position: fixed; inset: 0; height: 100dvh; overflow: hidden; }
 
 /* background video layer */

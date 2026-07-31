@@ -1,31 +1,25 @@
-import { useEffect, useState } from 'react'
-import type { ArchiveFile } from '../data/archive'
+import { aspectRatio, type ArchiveFile } from '../data/archive'
 import VolumeControl from './VolumeControl'
 
 export default function FileWindow({
-  file, x, y, z, focused, onFocus, onClose, registerEl, bodyRef,
+  file, x, y, z, focused, volume, onVolume, onFocus, onClose, registerEl, bodyRef,
 }: {
   file: ArchiveFile
   x: number; y: number; z: number
   focused: boolean
+  volume: number
+  onVolume: (v: number) => void
   onFocus: () => void
   onClose: () => void
   registerEl: (el: HTMLDivElement | null) => void
   bodyRef: (el: HTMLDivElement | null) => void
 }) {
-  const [volume, setVolume] = useState(0)
-  const [ar, setAr] = useState(16 / 9)
-
-  // the video is re-parented in by layoutSwap, so listen on the body rather than a ref
-  useEffect(() => {
-    const body = document.querySelector<HTMLElement>(`[data-file-window='${file.id}'] .fw-body`)
-    const v = body?.querySelector('video')
-    if (!v) return
-    const read = () => { if (v.videoWidth && v.videoHeight) setAr(v.videoWidth / v.videoHeight) }
-    read()
-    v.addEventListener('loadedmetadata', read)
-    return () => v.removeEventListener('loadedmetadata', read)
-  }, [file.id])
+  // Build-generated, so the box is known before the window mounts: no effect, no
+  // retry, no race with the reparent, and no silent 16:9 fallback because there
+  // is no fallback path at all. The old runtime read went through
+  // `document.querySelector`, which answers with whichever preview happens to
+  // exist rather than the file that was clicked.
+  const ar = aspectRatio(file)
 
   return (
     <div
@@ -36,6 +30,8 @@ export default function FileWindow({
       style={{
         left: x, top: y, zIndex: 10 + z,
         width: `min(52vw, 720px, ${Math.round(ar * 62)}vh)`,
+        // TODO(Slice C): true-frame moves this onto .fw-body and the root gets
+        // body height + 42px instead, so the window stops pillarboxing.
         aspectRatio: `${ar}`,
       }}
       onPointerDown={onFocus}
@@ -43,14 +39,7 @@ export default function FileWindow({
       <header className="fw-titlebar" data-drag-handle>
         <span className="fw-title">FILE_{file.index} <span className="tw-dim">·</span> {file.name}.{file.ext}</span>
         <span className="fw-controls">
-          <VolumeControl
-            value={volume}
-            onChange={(v) => {
-              setVolume(v)
-              const vid = document.querySelector<HTMLVideoElement>(`[data-file-window='${file.id}'] video`)
-              if (vid) { vid.volume = v; vid.muted = v === 0 }
-            }}
-          />
+          <VolumeControl value={volume} onChange={onVolume} />
           <button className="fw-close" onClick={onClose} aria-label={`Close FILE_${file.index}`}>✕</button>
         </span>
       </header>

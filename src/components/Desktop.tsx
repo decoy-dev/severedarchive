@@ -1,8 +1,11 @@
 import { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createScope, createDraggable, createSpring, animate } from 'animejs'
-import { ARCHIVE } from '../data/archive'
-import { openWindow, focusWindow, closeWindow, cascadePosition, type WinState } from '../lib/windowManager'
+import { fileById } from '../data/archive'
+import { openWindow, focusWindow, closeWindow, type WinState } from '../lib/windowManager'
 import { prefersReducedMotion } from '../lib/perfTier'
+import { isInteractiveTarget } from '../lib/keyboard'
+import { useArchiveSelection } from '../lib/selection'
+import { createMediaController } from '../lib/mediaController'
 import FileWindow from './FileWindow'
 
 export type DesktopApi = {
@@ -28,9 +31,15 @@ function playRefusal(el: HTMLElement) {
   animate(el.querySelector('.refusal-text')!, { opacity: [0, 1, 0], scale: [1.04, 1], duration: REFUSAL_MS, ease: 'outQuad' })
 }
 
-export default function Desktop({ children }: { children: ReactNode }) {
+export default function Desktop({ children, onTabShift }: { children: ReactNode; onTabShift?: (dir: 1 | -1) => void }) {
   const [windows, setWindows] = useState<WinState[]>([])
   const [refusing, setRefusing] = useState(false)
+  // One instance for the whole app, owned here. Slice C gives it slots, a
+  // MediaLayer and a desired map; today it only holds the per-file volume
+  // records, which is enough to keep that state out of FileWindow — a level has
+  // to outlive any single placement, so it cannot live in the window that shows it.
+  const media = useMemo(() => createMediaController(), [])
+  const [volumes, setVolumes] = useState<Record<string, number>>({})
   const rootRef = useRef<HTMLDivElement | null>(null)
   const nodes = useRef(new Map<string, HTMLElement>())
   const bodies = useRef(new Map<string, HTMLDivElement>())
@@ -57,10 +66,14 @@ export default function Desktop({ children }: { children: ReactNode }) {
       const area = { w: window.innerWidth, h: window.innerHeight }
       // cascadePosition only keeps a window in bounds while size <= area, so the
       // window box is clamped against the viewport before it is handed over.
+      // TODO(Slice C): size from the file's generated width/height rather than a
+      // fabricated 16:9 box — a portrait window still spawns against the wrong box.
       const size = { w: Math.min(720, area.w * 0.52), h: Math.min(405, area.h * 0.52) }
-      const result = openWindow(cur, id, cascadePosition(cur.length, area, size))
+      const result = openWindow(cur, id, { area, size })
+      // Only the cap is a refusal the user caused; an id that is not in the
+      // archive is a bug, and BUFFER FULL would be a lie about it.
       if (!result.ok) {
-        refuse()
+        if (result.reason === 'cap') refuse()
         return cur
       }
       return result.windows
@@ -113,23 +126,47 @@ export default function Desktop({ children }: { children: ReactNode }) {
 
   const registerTerminal = useCallback((el: HTMLElement | null) => { attachDrag(TERMINAL_ID, el) }, [attachDrag])
 
-  // spec: Esc closes the focused window. focusedId is derived from `windows`, which
-  // never holds TERMINAL_ID, so the explorer is unreachable from here.
+  // The application's single window-level keydown listener (§4.6). It handles
+  // only the two genuinely global keys and both consult the same guard, so
+  // holding the volume slider and nudging it with the keyboard no longer
+  // switches tabs and unmounts the panel underneath the control.
+  // ArrowUp/ArrowDown/Enter are local to the explorer's row list by design.
+  // Esc closes the focused window; focusedId derives from `windows`, which never
+  // holds TERMINAL_ID, so the explorer is unreachable from here.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || !focusedId) return
-      close(focusedId)
+      if (isInteractiveTarget(e)) return
+      if (e.key === 'ArrowLeft') { onTabShift?.(-1); return }
+      if (e.key === 'ArrowRight') { onTabShift?.(1); return }
+      if (e.key === 'Escape' && focusedId) close(focusedId)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [focusedId, close])
+  }, [focusedId, close, onTabShift])
 
   useEffect(() => () => window.clearTimeout(refusalTimer.current), [])
+
+  useEffect(() => () => media.dispose(), [media])
+
+  const setVolume = useCallback((id: string, v: number) => {
+    media.setVolume(id, v)
+    // Mirrored into React state only so the control re-renders; the controller
+    // record is the source of truth and survives the window closing.
+    setVolumes((cur) => ({ ...cur, [id]: media.stateOf(id).volume }))
+  }, [media])
 
   const flash = useCallback((el: HTMLDivElement | null) => {
     refusalRef.current = el
     if (el) playRefusal(el)
   }, [])
+
+  // The activation policy lives above Desktop, so Desktop hands its opener up
+  // rather than any surface reaching down for DesktopContext.
+  const { registerOpener } = useArchiveSelection()
+  useEffect(() => {
+    registerOpener(open)
+    return () => registerOpener(null)
+  }, [open, registerOpener])
 
   const api = useMemo<DesktopApi>(() => ({ open, registerTerminal }), [open, registerTerminal])
 
@@ -138,7 +175,7 @@ export default function Desktop({ children }: { children: ReactNode }) {
       <div className="desktop" ref={rootRef}>
         {children}
         {windows.map((w) => {
-          const file = ARCHIVE.find((f) => f.id === w.id)
+          const file = fileById(w.id)
           if (!file) return null
           return (
             <FileWindow
@@ -146,6 +183,8 @@ export default function Desktop({ children }: { children: ReactNode }) {
               file={file}
               x={w.x} y={w.y} z={w.z}
               focused={focusedId === w.id}
+              volume={volumes[w.id] ?? media.stateOf(w.id).volume}
+              onVolume={(v) => setVolume(w.id, v)}
               onFocus={() => setWindows((cur) => focusWindow(cur, w.id))}
               onClose={() => close(w.id)}
               registerEl={(el) => attachDrag(w.id, el)}

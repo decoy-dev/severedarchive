@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { type ArchiveFile, thumbSrc, fullSrc, posterSrc } from '../data/archive'
+import { type ArchiveFile, thumbSrc, fullSrc, posterSrc, formatDuration } from '../data/archive'
 import type { VideoDirector, Playable } from '../lib/videoDirector'
 import type { PerfTier } from '../lib/perfTier'
 
@@ -60,7 +60,7 @@ export default function FileCard({
       </div>
       <div className="file-card-label">
         <span>FILE_{file.index} <span className="tw-dim">// {file.name}.{file.ext}</span></span>
-        <span className="tw-dim">{file.duration}</span>
+        <span className="tw-dim">{formatDuration(file.durationSec)}</span>
       </div>
     </button>
   )

@@ -1,115 +1,153 @@
 import { describe, it, expect } from 'vitest'
-import { openWindow, focusWindow, closeWindow, cascadePosition, MAX_WINDOWS } from './windowManager'
-import type { WinState } from './windowManager'
+import { openWindow, focusWindow, closeWindow, cascadePosition, freeSlot, MAX_WINDOWS } from './windowManager'
+import type { WinState, Geometry } from './windowManager'
 
-const at = (x: number, y: number) => ({ x, y })
+const GEOM: Geometry = { area: { w: 1440, h: 900 }, size: { w: 640, h: 360 } }
+
+/** Every id used here must exist in ARCHIVE — openWindow validates. */
+const IDS = ['file01', 'file02', 'file03', 'file04', 'file05'] as const
+
+const openAll = (ids: readonly string[], geom: Geometry = GEOM): WinState[] => {
+  let ws: WinState[] = []
+  for (const id of ids) {
+    const r = openWindow(ws, id, geom)
+    if (!r.ok) throw new Error(`unreachable: ${id} refused (${r.reason})`)
+    ws = r.windows
+  }
+  return ws
+}
 
 describe('openWindow', () => {
-  it('opens onto an empty desktop with the top z', () => {
-    const r = openWindow([], 'file01', at(0, 0))
+  it('opens onto an empty desktop with the top z and slot 0', () => {
+    const r = openWindow([], 'file01', GEOM)
     expect(r.ok).toBe(true)
-    if (r.ok) expect(r.windows).toEqual([{ id: 'file01', x: 0, y: 0, z: 0 }])
+    if (!r.ok) throw new Error('unreachable')
+    expect(r.windows).toHaveLength(1)
+    expect(r.windows[0]).toMatchObject({ id: 'file01', z: 0, slot: 0 })
   })
 
   it('gives each new window the top z', () => {
-    const a = openWindow([], 'file01', at(0, 0))
-    if (!a.ok) throw new Error('unreachable')
-    const b = openWindow(a.windows, 'file02', at(28, 24))
-    if (!b.ok) throw new Error('unreachable')
-    expect(b.windows.find((w) => w.id === 'file02')!.z).toBe(1)
-    expect(b.windows.find((w) => w.id === 'file01')!.z).toBe(0)
+    const ws = openAll(['file01', 'file02'])
+    expect(ws.find((w) => w.id === 'file02')!.z).toBe(1)
+    expect(ws.find((w) => w.id === 'file01')!.z).toBe(0)
   })
 
   it('focuses instead of duplicating when the file is already open', () => {
-    const a = openWindow([], 'file01', at(0, 0))
-    if (!a.ok) throw new Error('unreachable')
-    const b = openWindow(a.windows, 'file02', at(0, 0))
-    if (!b.ok) throw new Error('unreachable')
-    const again = openWindow(b.windows, 'file01', at(0, 0))
+    const ws = openAll(['file01', 'file02'])
+    const again = openWindow(ws, 'file01', GEOM)
     if (!again.ok) throw new Error('unreachable')
     expect(again.windows).toHaveLength(2)
     expect(again.windows.find((w) => w.id === 'file01')!.z).toBe(1)
+    // reopening must not move the window that is already there
+    expect(again.windows.find((w) => w.id === 'file01')!.slot).toBe(0)
   })
 
   it('refuses the fourth window', () => {
-    let ws: WinState[] = []
-    for (const id of ['file01', 'file02', 'file03']) {
-      const r = openWindow(ws, id, at(0, 0))
-      if (!r.ok) throw new Error('unreachable')
-      ws = r.windows
-    }
+    const ws = openAll(IDS.slice(0, 3))
     expect(ws).toHaveLength(MAX_WINDOWS)
-    const refused = openWindow(ws, 'file04', at(0, 0))
-    expect(refused).toEqual({ ok: false, reason: 'cap' })
+    expect(openWindow(ws, 'file04', GEOM)).toEqual({ ok: false, reason: 'cap' })
   })
 
   it('focuses rather than refusing when re-opening an existing id at the cap', () => {
-    let ws: WinState[] = []
-    for (const id of ['file01', 'file02', 'file03']) {
-      const r = openWindow(ws, id, at(0, 0))
-      if (!r.ok) throw new Error('unreachable')
-      ws = r.windows
-    }
-    expect(ws).toHaveLength(MAX_WINDOWS)
-    // file01 is at the bottom of the z-order at this point.
+    const ws = openAll(IDS.slice(0, 3))
     expect(ws.find((w) => w.id === 'file01')!.z).toBe(0)
-    const again = openWindow(ws, 'file01', at(0, 0))
-    expect(again.ok).toBe(true)
+    const again = openWindow(ws, 'file01', GEOM)
     if (!again.ok) throw new Error('unreachable')
     expect(again.windows).toHaveLength(MAX_WINDOWS)
     expect(again.windows.find((w) => w.id === 'file01')!.z).toBe(MAX_WINDOWS - 1)
+  })
+
+  it('refuses an id that is not in the archive, without mutating state', () => {
+    const ws = openAll(['file01'])
+    const r = openWindow(ws, 'file99', GEOM)
+    expect(r).toEqual({ ok: false, reason: 'unknown' })
+    const empty = openWindow([], '', GEOM)
+    expect(empty).toEqual({ ok: false, reason: 'unknown' })
+  })
+})
+
+describe('slot allocation', () => {
+  it('reuses the vacated slot rather than drifting (§4.3)', () => {
+    const abc = openAll(['file01', 'file02', 'file03'])
+    expect(abc.map((w) => w.slot)).toEqual([0, 1, 2])
+
+    const afterClose = closeWindow(abc, 'file02')
+    expect(freeSlot(afterClose)).toBe(1)
+
+    const withD = openWindow(afterClose, 'file04', GEOM)
+    if (!withD.ok) throw new Error('unreachable')
+    expect(withD.windows.find((w) => w.id === 'file04')!.slot).toBe(1)
+
+    // three live windows, three distinct positions
+    const points = withD.windows.map((w) => `${w.x},${w.y}`)
+    expect(new Set(points).size).toBe(3)
+
+    // and again after a second close/open cycle
+    const afterCloseA = closeWindow(withD.windows, 'file01')
+    const withE = openWindow(afterCloseA, 'file05', GEOM)
+    if (!withE.ok) throw new Error('unreachable')
+    expect(withE.windows.find((w) => w.id === 'file05')!.slot).toBe(0)
+    expect(new Set(withE.windows.map((w) => `${w.x},${w.y}`)).size).toBe(3)
+  })
+
+  it('never hands out a slot that is already held', () => {
+    const ws = openAll(['file01', 'file02', 'file03'])
+    expect(new Set(ws.map((w) => w.slot)).size).toBe(MAX_WINDOWS)
+    expect(freeSlot(ws)).toBe(-1)
+  })
+
+  it('positions a window inside the desktop for a portrait box too', () => {
+    // 406x720 is file08's real encode; the old caller fabricated 720x405 for
+    // every file and could spawn a tall window past the viewport bottom.
+    const geom: Geometry = { area: { w: 1440, h: 900 }, size: { w: 406, h: 720 } }
+    for (let slot = 0; slot < MAX_WINDOWS; slot++) {
+      const p = cascadePosition(slot, geom.area, geom.size)
+      expect(p.x).toBeGreaterThanOrEqual(0)
+      expect(p.y).toBeGreaterThanOrEqual(0)
+      expect(p.x + geom.size.w).toBeLessThanOrEqual(geom.area.w)
+      expect(p.y + geom.size.h).toBeLessThanOrEqual(geom.area.h)
+    }
   })
 })
 
 describe('focusWindow', () => {
   it('raises the target to the top and keeps z dense', () => {
-    let ws: WinState[] = []
-    for (const id of ['a', 'b', 'c']) {
-      const r = openWindow(ws, id, at(0, 0))
-      if (!r.ok) throw new Error('unreachable')
-      ws = r.windows
-    }
-    const focused = focusWindow(ws, 'a')
-    // 'a' moves to the top; 'b' and 'c' keep their relative order, shifted down.
-    expect(focused.find((w) => w.id === 'a')!.z).toBe(2)
-    expect(focused.find((w) => w.id === 'b')!.z).toBe(0)
-    expect(focused.find((w) => w.id === 'c')!.z).toBe(1)
+    const ws = openAll(['file01', 'file02', 'file03'])
+    const focused = focusWindow(ws, 'file01')
+    expect(focused.find((w) => w.id === 'file01')!.z).toBe(2)
+    expect(focused.find((w) => w.id === 'file02')!.z).toBe(0)
+    expect(focused.find((w) => w.id === 'file03')!.z).toBe(1)
+  })
+
+  it('leaves slots alone when focus changes', () => {
+    const ws = openAll(['file01', 'file02', 'file03'])
+    const focused = focusWindow(ws, 'file01')
+    for (const w of focused) expect(w.slot).toBe(ws.find((o) => o.id === w.id)!.slot)
   })
 
   it('is a no-op for an unknown id', () => {
-    const ws = [{ id: 'a', x: 0, y: 0, z: 0 }]
-    expect(focusWindow(ws, 'nope')).toEqual(ws)
+    const ws = openAll(['file01'])
+    expect(focusWindow(ws, 'file99')).toEqual(ws)
   })
 })
 
 describe('closeWindow', () => {
   it('removes the window and re-densifies z', () => {
-    let ws: WinState[] = []
-    for (const id of ['a', 'b', 'c']) {
-      const r = openWindow(ws, id, at(0, 0))
-      if (!r.ok) throw new Error('unreachable')
-      ws = r.windows
-    }
-    const after = closeWindow(ws, 'b')
+    const ws = openAll(['file01', 'file02', 'file03'])
+    const after = closeWindow(ws, 'file02')
     expect(after).toHaveLength(2)
-    // 'a' and 'c' keep their relative order, re-densified without the gap 'b' left.
-    expect(after.find((w) => w.id === 'a')!.z).toBe(0)
-    expect(after.find((w) => w.id === 'c')!.z).toBe(1)
+    expect(after.find((w) => w.id === 'file01')!.z).toBe(0)
+    expect(after.find((w) => w.id === 'file03')!.z).toBe(1)
   })
 
   it('is a no-op for an id that is not open', () => {
-    let ws: WinState[] = []
-    for (const id of ['a', 'b', 'c']) {
-      const r = openWindow(ws, id, at(0, 0))
-      if (!r.ok) throw new Error('unreachable')
-      ws = r.windows
-    }
-    expect(closeWindow(ws, 'nope')).toEqual(ws)
+    const ws = openAll(['file01', 'file02', 'file03'])
+    expect(closeWindow(ws, 'file99')).toEqual(ws)
   })
 })
 
 describe('cascadePosition', () => {
-  it('offsets each successive window down and right', () => {
+  it('offsets each successive slot down and right', () => {
     const area = { w: 1440, h: 900 }
     const size = { w: 640, h: 360 }
     const first = cascadePosition(0, area, size)
