@@ -379,6 +379,30 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   .notification { left: 50%; right: auto; transform: translateX(-50%); top: 30%; }
 }
 
+/* ── volume control ── */
+.vol { display: inline-flex; align-items: center; gap: 8px; }
+.vol-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); }
+.vol-toggle:hover .tw-dim, .vol[data-open='true'] .tw-dim { color: var(--acid); }
+.vol-bars { display: inline-flex; gap: 2px; align-items: flex-end; }
+.vol-bars i { width: 3px; background: var(--dim); display: block; }
+.vol-bars i:nth-child(1) { height: 5px; }
+.vol-bars i:nth-child(2) { height: 8px; }
+.vol-bars i:nth-child(3) { height: 11px; }
+.vol-bars i[data-on='true'] { background: var(--acid); }
+
+.vol-expand {
+  display: inline-flex; align-items: center; gap: 8px;
+  max-width: 0; opacity: 0; overflow: hidden;
+  transition: max-width 220ms ease, opacity 160ms ease;
+}
+.vol[data-open='true'] .vol-expand { max-width: 180px; opacity: 1; }
+.vol-expand input[type='range'] { width: 120px; accent-color: var(--acid); }
+.vol-readout { color: var(--text); font-size: var(--fs-xs); min-width: 3ch; }
+
+@media (prefers-reduced-motion: reduce) {
+  .vol-expand { transition: none; }
+}
+
 /* ── mobile: purpose-built layout ── */
 @media (max-width: 640px) {
   :root { --frame: 10px; }
