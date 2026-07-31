@@ -449,6 +449,12 @@ Everything else in the review's sequencing is right and is kept, including its r
 - No inline `transform` remains on the host 500ms after a move.
 - A window that spawns is fully inside the viewport before any interaction, for all four aspect classes.
 
+**Binding rules Slice C inherits from Slice A — the controller cannot enforce these, so they are on you:**
+
+- **Render `src` from `wantsMedia()` / `snapshot.wanted`, never imperatively.** A released file renders `src={undefined}`, not a stale URL. The controller no longer touches `src` or `load()` at all, and a source-level test fails the build if that returns. Reference implementation is `MediaLayer` in `mediaController.react.test.tsx`.
+- **`muted` is the same trap in a quieter attribute.** `setVolume`/`setMuted`/`restore` still write `v.muted` imperatively while §2.2 lists `muted` as declarative — the identical prop-desync appears the moment a `MediaLayer` also renders it. The Slice A reference layer deliberately renders neither `muted` nor `volume` so this slice copies the safe shape. Pick one owner for `muted` and make §2.2 and §1 row 6 agree; do not leave both writing it.
+- The `_thumb`/`_full` aspect assertion below belongs in `src/data/archive.test.ts`, which is a Slice A artifact — extend it rather than starting a new guard.
+
 **Added 2026-07-31 — two items the Slice A review found had no owner:**
 
 - **Ruling 7 lands here: the terminal/explorer becomes non-draggable.** Remove the `__terminal__` draggable, the `registerTerminal` context member (`Desktop.tsx:14,17,127,171` and `TerminalWindow.tsx:26-30`), `data-drag-handle` from `.tw-titlebar` (`TerminalWindow.tsx:42`), and the `will-change: transform` that existed to serve it (`index.css:111`). This slice owns it because it is the slice that freezes the drag configuration; doing it earlier would have been churn on code this slice rewrites anyway. Removing it also retires §1 row 12's "grabbing does not focus" flag — with no drag there is nothing to clarify. Drop the `will-change` item from the §4.10 backlog when this lands.
