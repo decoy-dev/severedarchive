@@ -421,6 +421,33 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   .vol-expand { transition: none; }
 }
 
+/* ── file window ── */
+.file-window {
+  position: absolute;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  will-change: transform;   /* dragged via anime.js transforms */
+}
+.fw-titlebar {
+  display: flex; justify-content: space-between; align-items: center;
+  height: 40px; flex: 0 0 auto; padding: 0 12px;
+  font-size: var(--fs-sm);
+  border-bottom: 1px solid var(--hair);
+  cursor: grab;
+  position: relative; z-index: 2;   /* glass host child — see the sheen note above */
+}
+.fw-titlebar:active { cursor: grabbing; }
+.fw-title { color: var(--dim); letter-spacing: 0.04em; }
+.file-window[data-focused='true'] .fw-title { color: var(--bright); }
+.file-window[data-focused='true'] { border-color: var(--hair-bright); }
+.fw-controls { display: flex; align-items: center; gap: 14px; }
+.fw-close { font-size: var(--fs-sm); color: var(--dim); padding: 0 2px; }
+.fw-close:hover { color: var(--acid); }
+.fw-body { flex: 1 1 auto; position: relative; z-index: 2; background: #000; min-height: 0; }
+.fw-body video { width: 100%; height: 100%; object-fit: contain; }
+
+[data-tier='lite'] .file-window { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--panel-solid); }
+
 /* ── mobile: purpose-built layout ── */
 @media (max-width: 640px) {
   :root { --frame: 10px; }
