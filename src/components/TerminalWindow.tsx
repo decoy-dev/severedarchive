@@ -10,11 +10,10 @@ const TABS: { id: TabId; label: string }[] = [
 ]
 
 export default function TerminalWindow({
-  tab, onTab, onBell, bodyRef, footer, children,
+  tab, onTab, bodyRef, footer, children,
 }: {
   tab: TabId
   onTab: (t: TabId) => void
-  onBell: () => void
   bodyRef: RefObject<HTMLDivElement | null>
   footer?: ReactNode
   children: ReactNode
@@ -33,11 +32,8 @@ export default function TerminalWindow({
   return (
     <section className="terminal-window glass" data-tab={tab} ref={rootRef}>
       <header className="tw-titlebar">
-        <span className="tw-title">SEVEREDARCHIVE <span className="tw-dim">// FILE SYSTEM</span></span>
-        <span className="tw-status">
-          <span className="tw-dim">SESSION OPEN</span>
-          <button className="tw-bell" onClick={onBell} aria-label="Show notification">ALERT [1]</button>
-        </span>
+        <span className="tw-title">FILE SYSTEM</span>
+        <span className="tw-status"><span className="tw-dim">SESSION OPEN</span></span>
       </header>
       <nav className="tw-tabs" role="tablist" aria-label="Sections">
         {TABS.map((t) => (

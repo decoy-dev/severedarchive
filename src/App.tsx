@@ -41,13 +41,14 @@ export default function App() {
   return (
     <div className="stage" data-tier={tier} data-booted={booted ? 'true' : 'false'}>
       <BackgroundVideo tier={tier} fileId={backdropId} />
+      <span className="wordmark" aria-hidden="true">SEVEREDARCHIVE</span>
       <div className="glass-strip top" /><div className="glass-strip bottom" />
       <div className="glass-strip left" /><div className="glass-strip right" />
       {!booted ? (
         <BootSequence onDone={() => setBooted(true)} />
       ) : (
         <>
-          <TerminalWindow tab={tab} onTab={setTab} onBell={() => setNoticeOpen(true)} bodyRef={bodyRef}>
+          <TerminalWindow tab={tab} onTab={setTab} bodyRef={bodyRef}>
             {tab === 'archive' && <ArchivePanel tier={tier} onFrontChange={setBackdropId} />}
             {tab === 'about' && <AboutPanel />}
             {tab === 'links' && <LinksPanel />}
