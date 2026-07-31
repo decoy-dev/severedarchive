@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { animate } from 'animejs'
-import { ARCHIVE, fullSrc, posterSrc } from '../data/archive'
+import { ARCHIVE, DEFAULT_FRONT_ID, fullSrc, posterSrc } from '../data/archive'
 import { VideoDirector } from '../lib/videoDirector'
 import { stackLayout } from '../lib/stackLayout'
 import { prefersReducedMotion, supportsLiquidRefraction, type PerfTier } from '../lib/perfTier'
@@ -10,7 +10,7 @@ const SLIVER = 24
 const SLIVER_FANNED = 72
 
 export default function ArchiveStack({ tier, onFrontChange }: { tier: PerfTier; onFrontChange: (id: string) => void }) {
-  const [frontIndex, setFrontIndex] = useState(0)
+  const [frontIndex, setFrontIndex] = useState(() => Math.max(0, ARCHIVE.findIndex((f) => f.id === DEFAULT_FRONT_ID)))
   const [fanned, setFanned] = useState(false)
   const [volume, setVolume] = useState(0) // 0 = muted; placeholder encodes are silent but real content has sound
   const [stageAr, setStageAr] = useState(16 / 9) // follows the front video's intrinsic ratio (supports 9:16, 3:4, ...)

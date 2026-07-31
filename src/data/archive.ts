@@ -17,6 +17,9 @@ export const ARCHIVE: ArchiveFile[] = [
   { id: 'file06', index: '006', name: 'STEEL_HYMN', ext: 'MP4', tagline: 'metalheart sketch', duration: '00:14', year: '2024' },
 ]
 
+// Which file leads the stack (and seeds the backdrop) on load.
+export const DEFAULT_FRONT_ID = 'file03'
+
 export const media = (f: string) => import.meta.env.BASE_URL + 'media/' + f
 export const thumbSrc = (id: string) => media(`${id}_thumb.mp4`)
 export const fullSrc = (id: string) => media(`${id}_full.mp4`)

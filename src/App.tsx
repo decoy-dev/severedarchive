@@ -8,14 +8,14 @@ import LinksPanel from './components/LinksPanel'
 import BootSequence from './components/BootSequence'
 import HomeNotification from './components/HomeNotification'
 import { readPerfTier, prefersReducedMotion } from './lib/perfTier'
-import { ARCHIVE } from './data/archive'
+import { DEFAULT_FRONT_ID } from './data/archive'
 
 export default function App() {
   const [tier] = useState(readPerfTier)
   const [booted, setBooted] = useState(false)
   const [tab, setTabState] = useState<TabId>('archive')
   const [noticeOpen, setNoticeOpen] = useState(true)
-  const [backdropId, setBackdropId] = useState(ARCHIVE[0].id)
+  const [backdropId, setBackdropId] = useState(DEFAULT_FRONT_ID)
   const bodyRef = useRef<HTMLDivElement | null>(null)
 
   const setTab = (t: TabId) => {
@@ -55,6 +55,7 @@ export default function App() {
           {noticeOpen && <HomeNotification onDismiss={() => setNoticeOpen(false)} />}
         </>
       )}
+      <span className="build-tag" aria-hidden="true">{__BUILD_ID__}</span>
     </div>
   )
 }

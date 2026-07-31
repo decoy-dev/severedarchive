@@ -3,9 +3,9 @@ import { ready } from './helpers'
 
 test('stack is the default archive view; front video plays full-res', async ({ page }) => {
   await ready(page)
-  await expect(page.locator('.archive-stack')).toHaveAttribute('data-front', 'file01')
+  await expect(page.locator('.archive-stack')).toHaveAttribute('data-front', 'file03') // draft default front
   const v = page.locator('[data-stack-front] video')
-  await expect(v).toHaveAttribute('src', /file01_full\.mp4/)
+  await expect(v).toHaveAttribute('src', /file03_full\.mp4/)
   await expect
     .poll(async () => v.evaluate((el: HTMLVideoElement) => !el.paused && el.currentTime > 0), { timeout: 5000 })
     .toBe(true)
@@ -16,10 +16,10 @@ test('right-edge hover fans the slivers; clicking one brings it to front and the
   await ready(page)
   await page.locator('.stack-fan-zone').hover()
   await expect(page.locator('.archive-stack')).toHaveAttribute('data-fanned', 'true')
-  await page.locator('button[data-sliver][data-file-id="file03"]').click()
-  await expect(page.locator('.archive-stack')).toHaveAttribute('data-front', 'file03')
-  await expect(page.locator('[data-stack-front] video')).toHaveAttribute('src', /file03_full\.mp4/)
-  await expect(page.locator('.bg-video video').last()).toHaveAttribute('src', /file03_thumb\.mp4/, { timeout: 3000 })
+  await page.locator('button[data-sliver][data-file-id="file05"]').click()
+  await expect(page.locator('.archive-stack')).toHaveAttribute('data-front', 'file05')
+  await expect(page.locator('[data-stack-front] video')).toHaveAttribute('src', /file05_full\.mp4/)
+  await expect(page.locator('.bg-video video').last()).toHaveAttribute('src', /file05_thumb\.mp4/, { timeout: 3000 })
 })
 
 test('toggle switches to grid and persists across reload', async ({ page }) => {
