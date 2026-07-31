@@ -36,7 +36,8 @@ test('toggle switches to grid and persists across reload', async ({ page }) => {
 
 test('no scroll in stack view, fanned or not', async ({ page }) => {
   await ready(page)
-  await page.locator('.stack-fan-zone').hover().catch(() => {})
+  // fan-zone only exists on hover-capable viewports; short timeout so touch projects skip fast
+  await page.locator('.stack-fan-zone').hover({ timeout: 1500 }).catch(() => {})
   const scroll = await page.evaluate(() => ({
     doc: document.documentElement.scrollHeight - document.documentElement.clientHeight,
     body: document.body.scrollHeight - document.body.clientHeight,

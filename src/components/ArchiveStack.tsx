@@ -14,13 +14,19 @@ export default function ArchiveStack({ tier, onFrontChange }: { tier: PerfTier; 
   const [fanned, setFanned] = useState(false)
   const [volume, setVolume] = useState(0) // 0 = muted; placeholder encodes are silent but real content has sound
   const [stageAr, setStageAr] = useState(16 / 9) // follows the front video's intrinsic ratio (supports 9:16, 3:4, ...)
-  const [stageSize, setStageSize] = useState<{ w: number; h: number } | null>(null)
+  const [box, setBox] = useState<{ w: number; h: number; areaW: number } | null>(null)
   const areaRef = useRef<HTMLDivElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const director = useMemo(() => new VideoDirector(1), [])
   const front = ARCHIVE[frontIndex]
   const layout = stackLayout(ARCHIVE.length, frontIndex, fanned ? SLIVER_FANNED : SLIVER)
   const liquid = useMemo(() => tier === 'full' && supportsLiquidRefraction(), [tier])
+  // The fan is a hover pattern: on touch it fires via tap-emulated hover and
+  // dominates the small layout. Touch devices navigate by swiping the stage.
+  const canFan = useMemo(
+    () => window.matchMedia('(hover: hover) and (pointer: fine)').matches && window.innerWidth > 640,
+    [],
+  )
 
   const [outgoingId, setOutgoingId] = useState<string | null>(null)
   const flashTimer = useRef<number | undefined>(undefined)
@@ -30,7 +36,7 @@ export default function ArchiveStack({ tier, onFrontChange }: { tier: PerfTier; 
     if (!prefersReducedMotion()) setOutgoingId(front.id)
     setFrontIndex(nextIndex)
     setVolume(0)
-    if (flash && !prefersReducedMotion()) {
+    if (flash && canFan && !prefersReducedMotion()) {
       setFanned(true)
       window.clearTimeout(flashTimer.current)
       flashTimer.current = window.setTimeout(() => setFanned(false), 600)
@@ -42,10 +48,7 @@ export default function ArchiveStack({ tier, onFrontChange }: { tier: PerfTier; 
 
   useEffect(() => () => window.clearTimeout(flashTimer.current), [])
 
-  // The glass stage hugs the video's aspect ratio: size it to fit the available
-  // area (which shrinks while the fan is open — the fan PUSHES the stage, it
-  // does not overlay it). ResizeObserver re-fires during the area's push
-  // transition, so the stage glides along with it.
+  // The glass stage hugs the video's aspect ratio, sized to fit the fixed area.
   useEffect(() => {
     const el = areaRef.current
     if (!el) return
@@ -53,11 +56,32 @@ export default function ArchiveStack({ tier, onFrontChange }: { tier: PerfTier; 
       const { width, height } = el.getBoundingClientRect()
       if (!width || !height) return
       const w = Math.min(width, height * stageAr)
-      setStageSize({ w, h: w / stageAr })
+      setBox({ w, h: w / stageAr, areaW: width })
     })
     ro.observe(el)
     return () => ro.disconnect()
   }, [stageAr])
+
+  // Fan push: only move the stage as far as the fan actually needs. The fan
+  // intrudes FAN_INTRUSION px into the area; a centered stage narrower than the
+  // area has dead space that absorbs some or all of it. Shift left through the
+  // dead space first, and only scale down (origin left) for the remainder.
+  // Compositor transform + CSS transition = the smooth lerp.
+  const FAN_INTRUSION = 264 // fanned sliver zone (384) + gap (12) minus the resting zone (132)
+  let stageStyle: React.CSSProperties | undefined
+  if (box) {
+    stageStyle = { width: box.w, height: box.h }
+    if (fanned && canFan) {
+      const dead = Math.max(0, (box.areaW - box.w) / 2)
+      const overlap = box.areaW / 2 + box.w / 2 - (box.areaW - FAN_INTRUSION)
+      if (overlap > 0) {
+        const shift = Math.min(overlap, dead)
+        const s = overlap > dead ? Math.max(0.5, 1 - (overlap - dead) / box.w) : 1
+        stageStyle.transform = `translateX(${-shift}px) scale(${s})`
+        stageStyle.transformOrigin = 'left center'
+      }
+    }
+  }
 
   useEffect(() => { onFrontChange(front.id) }, [front.id, onFrontChange])
 
@@ -100,7 +124,7 @@ export default function ArchiveStack({ tier, onFrontChange }: { tier: PerfTier; 
     <div className="archive-stack" data-front={front.id} data-fanned={fanned ? 'true' : 'false'}>
       <div className="stack-stage-area" ref={areaRef}>
         <div className={`stack-stage glass${liquid ? ' liquid' : ''}`} ref={stageRef} data-stack-front {...swipe}
-          style={stageSize ? { width: stageSize.w, height: stageSize.h } : undefined}>
+          style={stageStyle}>
           <div className="stage-incoming" ref={incomingRef}>
             <video ref={videoRef} src={fullSrc(front.id)} poster={posterSrc(front.id)} muted={volume === 0} loop playsInline
               onLoadedMetadata={(e) => {
@@ -113,17 +137,21 @@ export default function ArchiveStack({ tier, onFrontChange }: { tier: PerfTier; 
           )}
         </div>
       </div>
-      <div className="stack-slivers" onMouseEnter={() => setFanned(true)} onMouseLeave={() => setFanned(false)}>
-        <div className="stack-fan-zone" aria-hidden="true" />
+      <div className="stack-slivers"
+        onMouseEnter={() => canFan && setFanned(true)}
+        onMouseLeave={() => canFan && setFanned(false)}>
+        {canFan && <div className="stack-fan-zone" aria-hidden="true" />}
         {ARCHIVE.map((f, i) =>
           layout[i].depth === 0 ? null : (
             <button key={f.id} data-sliver data-file-id={f.id}
               className="stack-sliver"
               style={{
-                transform: `translateX(${layout[i].sliverX}px) scale(${layout[i].scale})`,
+                // transform lives in CSS off these vars so :hover can compose a magnification
+                '--tx': `${layout[i].sliverX}px`,
+                '--sc': String(layout[i].scale),
                 zIndex: layout[i].z,
                 width: fanned ? SLIVER_FANNED : SLIVER,
-              }}
+              } as React.CSSProperties}
               onClick={() => goTo(i)} aria-label={`Bring FILE_${f.index} to front`}>
               <img src={posterSrc(f.id)} alt="" />
               <span className="sliver-label">FILE_{f.index}</span>
