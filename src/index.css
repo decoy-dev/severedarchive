@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import '@fontsource/share-tech-mono';
+@import '@fontsource/archivo-black/latin-400.css';
 
 :root {
   --void: #07090b;
@@ -18,6 +19,7 @@
   --fs-sm: 13px;
   --fs-base: 15px;
   --fs-lg: 17px;
+  --display: 'Archivo Black', var(--mono);  /* wordmark + BUFFER FULL only — never interface text */
   --frame: clamp(16px, 4.5vw, 56px);
   --glass-fill: rgba(10, 13, 16, 0.5); /* tuned up from 0.42 — dim text washed out over bright videos */
   --glass-blur: 18px;
