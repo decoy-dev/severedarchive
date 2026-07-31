@@ -1,9 +1,8 @@
-import ArchiveStack from './ArchiveStack'
+import ArchiveExplorer from './ArchiveExplorer'
 import ArchiveGrid from './ArchiveGrid'
 import { useArchiveSelection } from '../lib/selection'
-import type { PerfTier } from '../lib/perfTier'
 
-export default function ArchivePanel({ tier, onFrontChange }: { tier: PerfTier; onFrontChange: (id: string) => void }) {
+export default function ArchivePanel() {
   // View mode lives above this panel, so a trip to ABOUT and back no longer
   // resets it — and neither does the ARCHIVE panel remounting for any other
   // reason. Persistence and the legacy `stack` → `list` migration live with it.
@@ -11,13 +10,13 @@ export default function ArchivePanel({ tier, onFrontChange }: { tier: PerfTier; 
   return (
     <div className="panel archive-panel">
       <div className="view-toggle">
-        <button aria-label="Stack view" className={view === 'list' ? 'is-active' : ''} onClick={() => setView('list')}>STACK</button>
+        <button aria-label="List view" className={view === 'list' ? 'is-active' : ''} onClick={() => setView('list')}>LIST</button>
         <button aria-label="Grid view" className={view === 'grid' ? 'is-active' : ''} onClick={() => setView('grid')}>GRID</button>
       </div>
       {/* relative wrapper: ArchiveGrid's .panel positions absolute against it
           instead of blanketing the whole archive-panel (which hid the toggle) */}
       <div className="archive-panel-body">
-        {view === 'grid' ? <ArchiveGrid tier={tier} /> : <ArchiveStack tier={tier} onFrontChange={onFrontChange} />}
+        {view === 'grid' ? <ArchiveGrid /> : <ArchiveExplorer />}
       </div>
     </div>
   )

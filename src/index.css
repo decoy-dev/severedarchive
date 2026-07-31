@@ -272,6 +272,69 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .view-toggle button.is-active { color: var(--acid); background: rgba(182, 255, 46, 0.05); border-color: var(--hair-bright); }
 .view-toggle button:hover:not(.is-active) { color: var(--text); }
 
+/* ── archive explorer (list view) ── */
+/* Column order is visual, not DOM order: the list stays first in markup (so
+   Tab reaches it before the preview frame) but is placed in the right track.
+   File windows cascade from roughly the horizontal center-left (Desktop.open's
+   size/position math lives in windowManager, out of this slice's reach) and
+   are wide enough at 1440px to reach well past a left-hand column — which
+   made every row past the first one unclickable once a single window was
+   open. Right-placing the list keeps it clear of the cascade with margin to
+   spare; see desktop.spec.ts's "fourth window is refused" case. */
+.archive-explorer {
+  flex: 1 1 auto; min-height: 0;
+  display: grid; grid-template-columns: 1fr 280px; grid-template-rows: minmax(0, 1fr); gap: 16px;
+}
+.explorer-list { grid-column: 2; grid-row: 1; min-height: 0; overflow-y: auto; border: 1px solid var(--hair); }
+.explorer-row {
+  display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left;
+  padding: 10px 12px; font-size: var(--fs-base); color: var(--text);
+  border-bottom: 1px solid var(--hair);
+}
+.explorer-list .explorer-row:last-child { border-bottom: 0; }
+.explorer-row-index { color: var(--dim); min-width: 2.5ch; }
+.explorer-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Accent marks the hovered/selected row only (spec §2) — never a resting default. */
+.explorer-row:hover, .explorer-row:focus-visible, .explorer-row.is-selected {
+  color: var(--acid); background: rgba(182, 255, 46, 0.05); outline: none;
+}
+.explorer-row:hover .explorer-row-index,
+.explorer-row:focus-visible .explorer-row-index,
+.explorer-row.is-selected .explorer-row-index { color: var(--acid); }
+
+.explorer-preview { grid-column: 1; grid-row: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+/* The frame is sized by the file's real aspect ratio (inline style, from
+   generated metadata) and constrained to fit this box on whichever axis is
+   tighter — true-frame, no bars, without measuring anything in JS. */
+.preview-frame-wrap {
+  flex: 1 1 auto; min-height: 0;
+  display: flex; align-items: stretch; justify-content: center; overflow: hidden;
+}
+.preview-frame {
+  position: relative; width: auto; height: auto; max-width: 100%; max-height: 100%;
+  border: 1px solid var(--hair-bright); background: #000; overflow: hidden; cursor: pointer;
+}
+.preview-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Empty, stable slot — mediaController places a host here or it doesn't; the
+   poster underneath shows through either way. This div is never given a
+   <video> child by React; see MediaLayer.tsx. */
+.preview-slot { position: absolute; inset: 0; }
+.preview-meta { flex: 0 0 auto; border-top: 1px solid var(--hair); padding-top: 10px; }
+.preview-meta-head { font-size: var(--fs-lg); color: var(--bright); letter-spacing: 0.02em; }
+.preview-meta-sub { font-size: var(--fs-sm); margin-top: 4px; letter-spacing: 0.03em; }
+
+@media (max-width: 1024px) {
+  .archive-explorer { grid-template-columns: 1fr 220px; }
+}
+@media (max-width: 640px) {
+  /* Not the mobile primary-player redesign (Slice D) — just enough to keep
+     this from overflowing or scrolling the page until that lands. */
+  .archive-explorer { display: flex; flex-direction: column; gap: 10px; }
+  .explorer-preview { order: -1; flex: 0 0 auto; }
+  .preview-frame-wrap { max-height: 120px; }
+  .explorer-list { flex: 1 1 auto; }
+}
+
 .archive-stack { flex: 1 1 auto; min-height: 0; position: relative; display: flex; }
 /* The stage is a GLASS FRAME: 14px padding band where the backdrop shows through
    (this band is what the base glass — and Task 6's refraction — acts on);

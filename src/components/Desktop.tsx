@@ -7,6 +7,7 @@ import { isInteractiveTarget } from '../lib/keyboard'
 import { useArchiveSelection } from '../lib/selection'
 import { createMediaController } from '../lib/mediaController'
 import FileWindow from './FileWindow'
+import { MediaControllerProvider, MediaLayer } from './MediaLayer'
 
 export type DesktopApi = {
   open: (id: string) => void
@@ -162,43 +163,54 @@ export default function Desktop({ children, onTabShift }: { children: ReactNode;
 
   // The activation policy lives above Desktop, so Desktop hands its opener up
   // rather than any surface reaching down for DesktopContext.
-  const { registerOpener } = useArchiveSelection()
+  const { registerOpener, selectedId } = useArchiveSelection()
   useEffect(() => {
     registerOpener(open)
     return () => registerOpener(null)
   }, [open, registerOpener])
 
+  // The only reconcile call this slice drives: the explorer's preview wants
+  // whatever is selected. Window bodies are not registered as slots yet — that
+  // wiring, the tier policy and the move animation are Slice C's job — so this
+  // is deliberately a placement claim with nothing to contend against it.
+  useEffect(() => {
+    media.reconcile([{ slot: 'preview', fileId: selectedId }], { animate: false })
+  }, [media, selectedId])
+
   const api = useMemo<DesktopApi>(() => ({ open, registerTerminal }), [open, registerTerminal])
 
   return (
     <DesktopContext.Provider value={api}>
-      <div className="desktop" ref={rootRef}>
-        {children}
-        {windows.map((w) => {
-          const file = fileById(w.id)
-          if (!file) return null
-          return (
-            <FileWindow
-              key={w.id}
-              file={file}
-              x={w.x} y={w.y} z={w.z}
-              focused={focusedId === w.id}
-              volume={volumes[w.id] ?? media.stateOf(w.id).volume}
-              onVolume={(v) => setVolume(w.id, v)}
-              onFocus={() => setWindows((cur) => focusWindow(cur, w.id))}
-              onClose={() => close(w.id)}
-              registerEl={(el) => attachDrag(w.id, el)}
-              bodyRef={(el) => { if (el) bodies.current.set(w.id, el); else bodies.current.delete(w.id) }}
-            />
-          )
-        })}
-        {refusing && (
-          <div className="refusal" data-refusal ref={flash} aria-live="assertive">
-            <div className="refusal-flash" />
-            <div className="refusal-text">BUFFER FULL</div>
-          </div>
-        )}
-      </div>
+      <MediaControllerProvider value={media}>
+        <div className="desktop" ref={rootRef}>
+          <MediaLayer controller={media} />
+          {children}
+          {windows.map((w) => {
+            const file = fileById(w.id)
+            if (!file) return null
+            return (
+              <FileWindow
+                key={w.id}
+                file={file}
+                x={w.x} y={w.y} z={w.z}
+                focused={focusedId === w.id}
+                volume={volumes[w.id] ?? media.stateOf(w.id).volume}
+                onVolume={(v) => setVolume(w.id, v)}
+                onFocus={() => setWindows((cur) => focusWindow(cur, w.id))}
+                onClose={() => close(w.id)}
+                registerEl={(el) => attachDrag(w.id, el)}
+                bodyRef={(el) => { if (el) bodies.current.set(w.id, el); else bodies.current.delete(w.id) }}
+              />
+            )
+          })}
+          {refusing && (
+            <div className="refusal" data-refusal ref={flash} aria-live="assertive">
+              <div className="refusal-flash" />
+              <div className="refusal-text">BUFFER FULL</div>
+            </div>
+          )}
+        </div>
+      </MediaControllerProvider>
     </DesktopContext.Provider>
   )
 }

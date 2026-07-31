@@ -26,7 +26,7 @@ function AppShell() {
   const [tier] = useState(readPerfTier)
   const [booted, setBooted] = useState(false)
   const [tab, setTabState] = useState<TabId>('archive')
-  const { selectedId, select } = useArchiveSelection()
+  const { selectedId } = useArchiveSelection()
   const bodyRef = useRef<HTMLDivElement | null>(null)
 
   const flashBody = useCallback(() => {
@@ -55,7 +55,7 @@ function AppShell() {
       ) : (
         <Desktop onTabShift={shiftTab}>
           <TerminalWindow tab={tab} onTab={setTab} bodyRef={bodyRef}>
-            {tab === 'archive' && <ArchivePanel tier={tier} onFrontChange={select} />}
+            {tab === 'archive' && <ArchivePanel />}
             {tab === 'about' && <AboutPanel />}
             {tab === 'links' && <LinksPanel />}
           </TerminalWindow>
