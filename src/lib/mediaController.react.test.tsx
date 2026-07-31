@@ -13,7 +13,7 @@
  * installed. The second proves the host indirection removes it.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { act, useLayoutEffect, useState, type ReactNode } from 'react'
+import { act, useLayoutEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { createPortal, flushSync } from 'react-dom'
 import { createMediaController, type MediaController, type Placement } from './mediaController'
@@ -75,7 +75,33 @@ describe('React 19 deletion of a moved node', () => {
 // ---------------------------------------------------------------------------
 // 2. The same sequence through mediaController, which must not throw.
 // ---------------------------------------------------------------------------
-const FILES = ['file03', 'file05'] as const
+export const srcOf = (id: string) => `/media/${id}_thumb.mp4`
+
+/**
+ * The reference MediaLayer, and the shape Slice C should copy.
+ *
+ * Two things it deliberately does:
+ *  - `src` comes from `wantsMedia`, so releasing a file is a render, not an
+ *    imperative attribute write. React's prop record therefore stays truthful
+ *    and a re-acquired file gets its src back.
+ *  - it does not render `muted` or `volume`. Those are the controller's
+ *    per-file record and it writes them as properties; rendering them here as
+ *    well would recreate the same desync in a second attribute.
+ */
+function MediaLayer({ controller }: { controller: MediaController }) {
+  const snap = useSyncExternalStore(controller.subscribe, controller.getSnapshot)
+  return (
+    <>
+      {snap.fileIds.map((id) =>
+        createPortal(
+          <video data-video={id} src={snap.wanted[id] ? srcOf(id) : undefined} loop playsInline />,
+          controller.acquire(id),
+          id,
+        ),
+      )}
+    </>
+  )
+}
 
 function Harness({
   controller, selectedId, windows, generation,
@@ -97,25 +123,17 @@ function Harness({
 
   return (
     <div>
-      {/* the MediaLayer: one portal per file, into a host React does not own.
-          `generation` is in the key so a forced remount can be exercised. */}
-      {FILES.map((id) =>
-        createPortal(
-          <video key={`${id}:${generation}`} data-video={id} src={`/media/${id}_thumb.mp4`} muted />,
-          controller.acquire(id),
-          id,
-        ),
-      )}
-      <div data-preview ref={(el) => {
-        controller.registerSlot('preview', el)
-        return () => controller.registerSlot('preview', null)
-      }} />
+      {/* `generation` forces a keyed remount of every portal video while one of
+          them may be away in a window — the case §2.3 calls safe. */}
+      <MediaLayer key={generation} controller={controller} />
+      {/* The safe ref idiom, and the only one: registerSlot returns its own
+          identity-guarded cleanup, which React 19 uses as the ref cleanup. An
+          inline `return () => registerSlot(slot, null)` would unregister on
+          every render and is what the churn defect was made of. */}
+      <div data-preview ref={(el) => controller.registerSlot('preview', el)} />
       {windows.map((id) => (
         <div key={id} data-window={id}>
-          <div data-body ref={(el) => {
-            controller.registerSlot(`window:${id}`, el)
-            return () => controller.registerSlot(`window:${id}`, null)
-          }} />
+          <div data-body ref={(el) => controller.registerSlot(`window:${id}`, el)} />
         </div>
       ))}
     </div>
@@ -165,9 +183,61 @@ describe('mediaController under React', () => {
     expect(controller.hostFor('file03')!.querySelector('video')!.getAttribute('src')).toBeNull()
     expect(controller.hostFor('file05')!.parentElement).toBe(preview())
 
+    // selection returns to the released file — it must play again, not show a
+    // black pane. The MediaLayer renders the same src string it rendered the
+    // first time, so this only reaches the DOM if the release went through
+    // `wantsMedia` rather than an imperative attribute write.
+    render('file03', [])
+    alive()
+    expect(controller.hostFor('file03')!.parentElement).toBe(preview())
+    expect(controller.hostFor('file03')!.querySelector('video')!.getAttribute('src')).toBe(srcOf('file03'))
+
     // explorer unmounts entirely (view switch to grid / tab switch)
     act(() => root.render(<div data-preview-gone />))
     expect(controller.hostFor('file05')!.parentElement).toBe(controller.attic())
+  })
+
+  // --- Finding 1, under real React --------------------------------------
+  it('an ordinary re-render does not destroy the media it just placed', () => {
+    const controller = createMediaController()
+    const render = () => act(() => root.render(
+      <Harness controller={controller} selectedId="file03" windows={[]} generation={0} />,
+    ))
+
+    render()
+    const host = controller.hostFor('file03')!
+    const video = host.querySelector('video')!
+    expect(video.getAttribute('src')).toBe(srcOf('file03'))
+
+    // identical props, nothing changed — React still re-runs the ref
+    render()
+    render()
+
+    expect(controller.hostFor('file03')).toBe(host)
+    expect(host.querySelector('video')).toBe(video)
+    expect(controller.slotOf('file03')).toBe('preview')
+    expect(controller.wantsMedia('file03')).toBe(true)
+    expect(video.getAttribute('src'), 'a plain re-render stripped the src').toBe(srcOf('file03'))
+  })
+
+  // --- Finding 2, under real React --------------------------------------
+  it('a released file gets its src back on re-acquire', () => {
+    const controller = createMediaController()
+    const render = (selectedId: string) => act(() => root.render(
+      <Harness controller={controller} selectedId={selectedId} windows={[]} generation={0} />,
+    ))
+
+    render('file03')
+    const video = controller.hostFor('file03')!.querySelector('video')!
+    expect(video.getAttribute('src')).toBe(srcOf('file03'))
+
+    render('file05')   // file03 is wanted nowhere → released
+    expect(controller.wantsMedia('file03')).toBe(false)
+    expect(video.getAttribute('src')).toBeNull()
+
+    render('file03')   // back again, same element, same src string
+    expect(controller.hostFor('file03')!.querySelector('video')).toBe(video)
+    expect(video.getAttribute('src'), 'React never rewrote a src it thinks is unchanged').toBe(srcOf('file03'))
   })
 
   it('does not throw when the whole tree unmounts with a node placed in a window', () => {

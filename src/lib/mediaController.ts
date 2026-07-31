@@ -5,8 +5,9 @@
  * `document.createElement`. It never enters a React tree as a child, so React
  * has no recorded parent for it and can never be surprised by where it is. The
  * `<video>` inside the host *is* React-rendered — via a portal targeting the
- * host — so `src`, `muted`, `poster` and handlers stay declarative. React only
- * ever appends to and removes from `host`; `host`'s parent is invisible to it.
+ * host — so `src`, `poster`, `loop`, `playsInline` and handlers stay declarative.
+ * React only ever appends to and removes from `host`; `host`'s parent is
+ * invisible to it.
  *
  * That is the whole safety argument, and it is structural rather than careful:
  * React 19 calls `parentInstance.removeChild(child)` unguarded on deletion, so
@@ -17,13 +18,35 @@
  * Surfaces contribute *slots* — an ordinary div whose ref calls registerSlot.
  * Slots contribute box size only; the host carries its own presentation, so a
  * node looks the same wherever it lands.
+ *
+ * Two further rules exist because breaking either is invisible until it is a
+ * black pane:
+ *
+ * 1. **Unregistering a slot parks; only reconcile releases.** React re-fires an
+ *    inline ref's cleanup and attach on *every* render, so treating an
+ *    unregister as a teardown means an ordinary re-render silently destroys the
+ *    media it just placed — and the re-attach puts the host back, so placement
+ *    still looks correct afterwards. Parking is the only reading that survives
+ *    ref churn without asking every future surface author to remember an idiom.
+ *
+ * 2. **This module never writes `src`.** It is a React-owned attribute.
+ *    Removing it imperatively leaves React's prop record holding the old value,
+ *    so a later render with that same value diffs equal and writes nothing —
+ *    the attribute is gone for good. Release is therefore a *signal*
+ *    (`wantsMedia` goes false) that the declarative layer renders.
  */
 
 export type SlotName = 'preview' | 'primary' | `window:${string}`
 
 export type Placement = { slot: SlotName; fileId: string }
 
-export type MediaState = { volume: number; muted: boolean; currentTime: number }
+export type MediaState = {
+  volume: number
+  muted: boolean
+  currentTime: number
+  /** playback intent, kept across a park so a re-render does not stop the video */
+  playing: boolean
+}
 
 /** Single-element FLIP on the host. Injected so this module stays anime-free. */
 export type MoveAnimator = (host: HTMLElement, from: DOMRectReadOnly, to: DOMRectReadOnly) => void
@@ -33,12 +56,21 @@ export type MediaSnapshot = {
   readonly fileIds: readonly string[]
   /** fileId → the slot it occupies, or null when parked in the attic */
   readonly placement: Readonly<Record<string, SlotName | null>>
+  /** fileId → whether the declarative layer should give it a `src` at all */
+  readonly wanted: Readonly<Record<string, boolean>>
 }
 
 export type MediaController = {
   acquire(fileId: string): HTMLDivElement
   hostFor(fileId: string): HTMLDivElement | undefined
-  registerSlot(slot: SlotName, el: HTMLElement | null): void
+  /**
+   * Returns a cleanup bound to `el`. React 19 uses a ref callback's return value
+   * as its cleanup, so the safe idiom is the whole call:
+   * `ref={(el) => media.registerSlot('preview', el)}`. Because the cleanup
+   * closes over its element it can refuse to unregister a slot another element
+   * has already claimed (mount-before-unmount ordering).
+   */
+  registerSlot(slot: SlotName, el: HTMLElement | null): () => void
   reconcile(desired: readonly Placement[], opts?: { animate?: boolean }): void
   release(fileId: string): void
   setVolume(fileId: string, v: number): void
@@ -47,6 +79,12 @@ export type MediaController = {
   slotOf(fileId: string): SlotName | null
   fileInSlot(slot: SlotName): string | null
   hostedFileIds(): readonly string[]
+  /**
+   * The declarative contract. The layer that renders the `<video>` must render
+   * `src` when this is true and `undefined` when it is false, and must never be
+   * second-guessed by an imperative write from here.
+   */
+  wantsMedia(fileId: string): boolean
   subscribe(cb: () => void): () => void
   getSnapshot(): MediaSnapshot
   /** hosts that exist but are placed nowhere; for assertions and teardown */
@@ -66,7 +104,7 @@ export function slotRank(slot: SlotName): number {
  * be argued about without a DOM.
  *
  * - claims on unregistered slots are dropped, so a file whose only claim is a
- *   surface that has unmounted resolves to "nowhere" and gets released;
+ *   surface that has unmounted resolves to "nowhere";
  * - a file claiming several live slots takes the highest-ranked one;
  * - a slot claimed by several files goes to the first claimant. The caller is
  *   not supposed to do that; resolving it deterministically beats throwing
@@ -92,7 +130,10 @@ export function resolveDesired(
   return out
 }
 
-const DEFAULT_STATE = (): MediaState => ({ volume: 0, muted: true, currentTime: 0 })
+const DEFAULT_STATE = (): MediaState => ({ volume: 0, muted: true, currentTime: 0, playing: false })
+
+/** A seek is not free; only issue one when the playhead is actually wrong. */
+const SEEK_EPSILON = 0.05
 
 export function createMediaController(opts: { animateMove?: MoveAnimator } = {}): MediaController {
   const hosts = new Map<string, HTMLDivElement>()
@@ -100,15 +141,16 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
   const slots = new Map<SlotName, HTMLElement>()
   const placement = new Map<string, SlotName>()
   const states = new Map<string, MediaState>()
+  const released = new Set<string>()
   const subscribers = new Set<() => void>()
 
-  // Detached on purpose. A parked host keeps its identity and its <video>, so
-  // re-selecting a closed file gets the same object back rather than a new one.
+  // Detached on purpose. A parked host keeps its identity, its <video> and its
+  // src, so an ordinary re-render costs a round trip and nothing else.
   const atticEl = document.createElement('div')
   atticEl.setAttribute('data-media-attic', '')
 
   let desiredCache: readonly Placement[] = []
-  let snapshot: MediaSnapshot = { fileIds: [], placement: {} }
+  let snapshot: MediaSnapshot = { fileIds: [], placement: {}, wanted: {} }
   let dirty = false
 
   const isLive = (slot: SlotName) => slots.has(slot)
@@ -140,28 +182,43 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
     return host
   }
 
-  /** Read what a live node is actually doing, falling back to the stored record. */
-  function capture(fileId: string): MediaState & { playing: boolean } {
+  /**
+   * Read what a file is doing. While a file is parked its element is detached
+   * and paused — by us, or eventually by the user agent's "removed from a
+   * document" steps — so the element is not a truthful source of playback
+   * intent. The record is.
+   */
+  function capture(fileId: string): MediaState {
     const rec = stateOf(fileId)
     const host = hosts.get(fileId)
-    const v = host && videoIn(host)
-    if (!v) return { ...rec, playing: false }
-    return { volume: rec.volume, muted: rec.muted, currentTime: v.currentTime, playing: !v.paused }
+    const v = host ? videoIn(host) : null
+    const live = placement.has(fileId) && v !== null
+    return {
+      volume: rec.volume,
+      muted: rec.muted,
+      currentTime: live ? v.currentTime : rec.currentTime,
+      playing: live ? !v.paused : rec.playing,
+    }
   }
 
   /**
    * Restore unconditionally after every move. All three engines were measured
    * keeping a <video> playing across a same-document reparent, so this is not a
    * browser-quirk fallback — it is what makes a node arriving with a stale
-   * volume or playhead correct, on every engine, with no detection.
+   * volume or playhead correct, on every engine, with no detection. It is also
+   * idempotent, which matters now that a move can happen on any render: seeking
+   * to the position the element is already at would stutter playback.
    */
-  function restore(fileId: string, snap: MediaState & { playing: boolean }) {
+  function restore(fileId: string, snap: MediaState) {
     const host = hosts.get(fileId)
-    const v = host && videoIn(host)
+    const v = host ? videoIn(host) : null
     if (!v) return
-    v.volume = snap.volume
-    v.muted = snap.muted
-    if (Number.isFinite(snap.currentTime) && snap.currentTime > 0) {
+    if (v.volume !== snap.volume) v.volume = snap.volume
+    if (v.muted !== snap.muted) v.muted = snap.muted
+    if (
+      Number.isFinite(snap.currentTime) && snap.currentTime > 0 &&
+      Math.abs(v.currentTime - snap.currentTime) > SEEK_EPSILON
+    ) {
       try { v.currentTime = snap.currentTime } catch { /* seek before metadata */ }
     }
     if (snap.playing && v.paused) {
@@ -191,22 +248,45 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
     dirty = true
   }
 
-  /** pause → drop the src → load() → detach. Synchronous: the decode dies now. */
-  function releaseFile(fileId: string) {
+  /**
+   * Evacuate to the attic, keeping the media intact.
+   *
+   * This is what an unregistering slot gets, and it has to be survivable:
+   * React fires an inline ref's cleanup and attach on every single render, so a
+   * teardown here would strip a file's media on an ordinary re-render and the
+   * re-attach would hide the damage by restoring the host into the right slot.
+   * Playback intent moves into the record so the round trip resumes.
+   */
+  function park(fileId: string) {
     const host = hosts.get(fileId)
     if (!host) return
+    const rec = stateOf(fileId)
     const v = videoIn(host)
-    if (v) {
-      if (!v.paused) v.pause()
-      v.removeAttribute('src')
-      v.load()
+    if (v && placement.has(fileId)) {
+      rec.currentTime = v.currentTime
+      rec.playing = !v.paused
     }
+    if (v && !v.paused) v.pause()
+    if (host.parentElement !== atticEl) atticEl.appendChild(host)
+    if (placement.delete(fileId)) dirty = true
+  }
+
+  /**
+   * Give up the decode. Park, then drop the demand for media: the declarative
+   * layer sees `wantsMedia` go false and stops rendering a `src`, which is the
+   * only way to release a resource React owns without desyncing its prop record.
+   * Nothing here touches the `<video>`'s attributes.
+   */
+  function releaseFile(fileId: string) {
+    if (!hosts.has(fileId)) return
+    park(fileId)
+    const rec = stateOf(fileId)
     // The level is a per-file record for the session and survives teardown, so
     // reopening a file does not silently reset it to 000. The playhead does not:
     // the decode it referred to is gone.
-    stateOf(fileId).currentTime = 0
-    if (host.parentElement !== atticEl) atticEl.appendChild(host)
-    if (placement.delete(fileId)) dirty = true
+    rec.currentTime = 0
+    rec.playing = false
+    if (!released.has(fileId)) { released.add(fileId); dirty = true }
   }
 
   function notify() {
@@ -215,21 +295,35 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
     snapshot = {
       fileIds: order.slice(),
       placement: Object.fromEntries(order.map((id) => [id, placement.get(id) ?? null])),
+      wanted: Object.fromEntries(order.map((id) => [id, !released.has(id)])),
     }
     for (const cb of subscribers) cb()
   }
 
-  function apply(animate: boolean) {
+  /**
+   * `mayRelease` is the whole difference between "the desired map dropped this
+   * file" and "a slot's ref happened to churn". Only the former is a teardown.
+   */
+  function apply(animate: boolean, mayRelease: boolean) {
     const resolved = resolveDesired(desiredCache, isLive)
-    // Release first: it frees the slots the survivors are about to claim, and it
-    // means a window closing never leaves a node inside a subtree React is
-    // about to unmount. Collect before releasing — releaseFile deletes from the
-    // map being read.
+    // Evacuate first: it frees the slots the survivors are about to claim, and
+    // it means a window closing never leaves a node inside a subtree React is
+    // about to unmount. Collect before acting — both paths delete from the map
+    // being read.
+    //
+    // Scope differs by intent, and it matters. A reconcile is a complete
+    // statement of what should exist, so it is authoritative over every hosted
+    // file — including ones already parked, which would otherwise sit in the
+    // attic holding a decode that nothing will ever ask for again. A slot
+    // change only says something about what is placed right now.
     const doomed: string[] = []
-    for (const fileId of placement.keys()) if (!resolved.has(fileId)) doomed.push(fileId)
-    for (const fileId of doomed) releaseFile(fileId)
+    for (const fileId of (mayRelease ? hosts.keys() : placement.keys())) {
+      if (!resolved.has(fileId)) doomed.push(fileId)
+    }
+    for (const fileId of doomed) (mayRelease ? releaseFile : park)(fileId)
     for (const [fileId, slot] of resolved) {
       acquire(fileId)
+      if (released.delete(fileId)) dirty = true
       moveHost(fileId, slots.get(slot)!, animate)
       if (placement.get(fileId) !== slot) { placement.set(fileId, slot); dirty = true }
     }
@@ -241,21 +335,27 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
     hostFor: (fileId) => hosts.get(fileId),
 
     registerSlot(slot, el) {
-      if (el === null) {
+      const detach = () => {
+        // Identity guard: if a different element already owns this slot, this is
+        // a late cleanup from a mount-before-unmount ordering, and dropping the
+        // registration would strand the surface that is actually live.
+        if (el !== null && slots.get(slot) !== el) return
         if (!slots.delete(slot)) return
-      } else {
-        if (slots.get(slot) === el) return
-        slots.set(slot, el)
+        apply(false, false)   // park, never release — see the header
       }
-      // A slot appearing or vanishing is a placement change like any other, so
-      // it goes through the same path rather than a special case: the retained
-      // desire is simply re-resolved against the slots that now exist.
-      apply(false)
+      if (el === null) { detach(); return () => {} }
+      if (slots.get(slot) === el) return detach
+      slots.set(slot, el)
+      // A slot appearing is a placement change like any other, so it goes
+      // through the same path rather than a special case: the retained desire is
+      // re-resolved against the slots that now exist.
+      apply(false, false)
+      return detach
     },
 
     reconcile(desired, o) {
       desiredCache = desired
-      apply(o?.animate ?? false)
+      apply(o?.animate ?? false, true)
     },
 
     release(fileId) { releaseFile(fileId); notify() },
@@ -266,7 +366,7 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
       rec.volume = clamped
       rec.muted = clamped === 0
       const host = hosts.get(fileId)
-      const el = host && videoIn(host)
+      const el = host ? videoIn(host) : null
       if (el) { el.volume = clamped; el.muted = rec.muted }
     },
 
@@ -274,7 +374,7 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
       const rec = stateOf(fileId)
       rec.muted = muted
       const host = hosts.get(fileId)
-      const el = host && videoIn(host)
+      const el = host ? videoIn(host) : null
       if (el) { el.muted = muted; el.volume = rec.volume }
     },
 
@@ -285,6 +385,7 @@ export function createMediaController(opts: { animateMove?: MoveAnimator } = {})
       return null
     },
     hostedFileIds: () => snapshot.fileIds,
+    wantsMedia: (fileId) => hosts.has(fileId) && !released.has(fileId),
 
     subscribe(cb) {
       subscribers.add(cb)

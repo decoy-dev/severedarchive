@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { createMediaController, resolveDesired, slotRank, type SlotName, type MoveAnimator } from './mediaController'
+import { createMediaController, resolveDesired, slotRank, type MediaController, type SlotName, type MoveAnimator } from './mediaController'
 
 // jsdom stubs play/pause/load as "not implemented" and hard-codes `paused` to
 // true, so a real <video> cannot express playback state. Swap in a tiny ledger:
@@ -28,24 +28,64 @@ Element.prototype.getBoundingClientRect = function (this: Element) {
   return this.isConnected ? fakeRect(320, 180) : fakeRect(0, 0)
 }
 
+const srcOf = (id: string) => `/media/${id}_thumb.mp4`
+
 /**
- * Stand-in for the MediaLayer portal that Slice C mounts: it renders exactly one
- * <video> into each host and never touches placement. Deliberately does not
- * re-add a src it did not put there, so a released file stays released — the
- * same thing React does when the src prop goes undefined.
+ * Stand-in for the MediaLayer portal that Slice C mounts.
+ *
+ * It keeps its own record of the last `src` it rendered per element and writes
+ * only on a change, because that is exactly what React does — and it is what
+ * makes an imperative `removeAttribute('src')` from the controller detectable
+ * here rather than only under React. If the controller ever strips a src behind
+ * this layer's back, the layer's record still holds the old value, the next
+ * render diffs equal, and the element stays black.
  */
-function mountMissingVideos(ids: readonly string[], hostOf: (id: string) => HTMLElement | undefined) {
-  for (const id of ids) {
-    const host = hostOf(id)
-    if (!host) continue
-    if (host.querySelector('video')) continue
-    const v = document.createElement('video')
-    v.src = `/media/${id}_thumb.mp4`
-    host.appendChild(v)
+function makeMediaLayer(c: MediaController) {
+  const rendered = new WeakMap<HTMLVideoElement, string | undefined>()
+  return function render() {
+    for (const id of c.hostedFileIds()) {
+      const host = c.hostFor(id)
+      if (!host) continue
+      let v = host.querySelector('video')
+      if (!v) { v = document.createElement('video'); host.appendChild(v) }
+      const want = c.wantsMedia(id) ? srcOf(id) : undefined
+      if (rendered.get(v) === want) continue    // React's prop diff
+      rendered.set(v, want)
+      if (want === undefined) v.removeAttribute('src')
+      else v.src = want
+    }
   }
 }
 
 const videoIn = (host: HTMLElement) => host.querySelector('video') as HTMLVideoElement
+
+describe('mediaController source rules', () => {
+  // `src` is React-owned. Removing it imperatively leaves React's prop record
+  // holding the old value, so a later render with that same value diffs equal
+  // and never reaches the DOM — the attribute is gone for good.
+  //
+  // This is a source check rather than a behavioural one on purpose. Today an
+  // imperative strip would be *redundant* rather than harmful, because release
+  // also flips `wantsMedia` and the declarative layer clears the attribute in
+  // the same beat. The damage starts the moment those two come apart — Slice C's
+  // tier swap re-rendering the same `_thumb` string is exactly that case — and
+  // by then the failure is a black pane with no stack trace. So the rule is
+  // enforced where it is stated instead of where it happens to bite.
+  const source = String(
+    Object.values(import.meta.glob('./mediaController.ts', { query: '?raw', import: 'default', eager: true }))[0],
+  ).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+
+  it('never writes a React-owned media attribute', () => {
+    expect(source, 'removes src imperatively').not.toMatch(/removeAttribute\s*\(\s*['"`]src/)
+    expect(source, 'sets src imperatively').not.toMatch(/setAttribute\s*\(\s*['"`]src/)
+    expect(source, 'assigns .src').not.toMatch(/\.\s*src\s*=[^=]/)
+    expect(source, 'calls load(), which only means anything after a src change').not.toMatch(/\.\s*load\s*\(/)
+  })
+
+  it('still has a source to check', () => {
+    expect(source).toContain('createMediaController')
+  })
+})
 
 describe('slotRank / resolveDesired', () => {
   it('ranks window above primary above preview', () => {
@@ -132,30 +172,104 @@ describe('mediaController', () => {
     expect(c.slotOf('file03')).toBe('window:file03')
   })
 
-  it('evacuates and releases when a slot unregisters', () => {
+  // --- Finding 1 -----------------------------------------------------------
+  // React re-fires an inline ref's cleanup and attach on every render. If an
+  // unregister were a teardown, an ordinary re-render would strip the media and
+  // the re-attach would put the host back, so placement would still look right
+  // and nothing downstream would notice.
+  it('a slot round trip keeps the media alive, not just the placement', () => {
     const c = make()
+    const layer = makeMediaLayer(c)
     c.reconcile([{ slot: 'preview', fileId: 'file03' }])
-    mountMissingVideos(c.hostedFileIds(), c.hostFor)
+    layer()
+    const host = c.hostFor('file03')!
+    const video = videoIn(host)
+    video.currentTime = 3
+    video.play()
+
+    // exactly what React does to an inline ref on a plain re-render
+    const detach = c.registerSlot('preview', preview)
+    detach()
+    c.registerSlot('preview', preview)
+    layer()
+
+    expect(host.parentElement).toBe(preview)
+    expect(c.hostFor('file03')).toBe(host)
+    expect(videoIn(host)).toBe(video)
+    expect(video.getAttribute('src')).toBe(srcOf('file03'))
+    expect(c.wantsMedia('file03')).toBe(true)
+    expect(video.paused).toBe(false)
+    expect(video.currentTime).toBeCloseTo(3)
+    expect(c.slotOf('file03')).toBe('preview')
+  })
+
+  it('parks without releasing when a slot unregisters', () => {
+    const c = make()
+    const layer = makeMediaLayer(c)
+    c.reconcile([{ slot: 'preview', fileId: 'file03' }])
+    layer()
     const host = c.hostFor('file03')!
     const video = videoIn(host)
     video.play()
 
     c.registerSlot('preview', null)
+    layer()
 
     expect(host.parentElement).toBe(c.attic())
+    expect(c.slotOf('file03')).toBeNull()
+    expect(video.paused).toBe(true)                            // parked media does not decode
+    expect(video.getAttribute('src')).toBe(srcOf('file03'))    // but it is not torn down
+    expect(c.wantsMedia('file03')).toBe(true)
+  })
+
+  it('releases only when reconcile drops the file, and the media comes back', () => {
+    const c = make()
+    const layer = makeMediaLayer(c)
+    c.reconcile([{ slot: 'preview', fileId: 'file03' }])
+    layer()
+    const host = c.hostFor('file03')!
+    const video = videoIn(host)
+    video.play()
+
+    c.reconcile([])
+    layer()
+    expect(c.wantsMedia('file03')).toBe(false)
     expect(video.getAttribute('src')).toBeNull()
     expect(video.paused).toBe(true)
-    expect(c.slotOf('file03')).toBeNull()
-    // identity survives teardown: the host is the same object on re-acquire
-    c.registerSlot('preview', preview)
-    expect(c.hostFor('file03')).toBe(host)
+    expect(host.parentElement).toBe(c.attic())
+
+    // ...and back. This is the round trip the imperative src removal broke: the
+    // layer renders the same string it rendered before, so it only reaches the
+    // DOM at all if the intervening release went through `wantsMedia` instead of
+    // behind the layer's back.
+    c.reconcile([{ slot: 'preview', fileId: 'file03' }])
+    layer()
+    expect(c.wantsMedia('file03')).toBe(true)
+    expect(videoIn(host)).toBe(video)
+    expect(video.getAttribute('src')).toBe(srcOf('file03'))
+    expect(host.parentElement).toBe(preview)
+  })
+
+  it('ignores a late cleanup from a slot another element already claimed', () => {
+    const c = make()
+    c.reconcile([{ slot: 'preview', fileId: 'file03' }])
+    const stale = c.registerSlot('preview', preview)
+
+    const replacement = slotEl()
+    c.registerSlot('preview', replacement)
+    expect(c.hostFor('file03')!.parentElement).toBe(replacement)
+
+    stale()   // mount-before-unmount: the old element's cleanup lands late
+    expect(c.hostFor('file03')!.parentElement).toBe(replacement)
+    expect(c.slotOf('file03')).toBe('preview')
   })
 
   it('carries volume and playhead across a move, and keeps volume across a release', () => {
     const c = make()
+    const layer = makeMediaLayer(c)
     c.registerSlot('window:file03', winA)
     c.reconcile([{ slot: 'preview', fileId: 'file03' }])
-    mountMissingVideos(c.hostedFileIds(), c.hostFor)
+    layer()
     const video = videoIn(c.hostFor('file03')!)
 
     c.setVolume('file03', 0.6)
@@ -173,15 +287,33 @@ describe('mediaController', () => {
 
     // row 6: the level outlives the placement, so a window adopting this node
     // renders VOL 060 rather than 000.
-    c.registerSlot('window:file03', null)
+    c.reconcile([])
     expect(c.stateOf('file03').volume).toBeCloseTo(0.6)
     expect(c.stateOf('file03').currentTime).toBe(0)
   })
 
+  it('does not re-seek a node whose playhead is already right', () => {
+    const c = make()
+    const layer = makeMediaLayer(c)
+    c.registerSlot('window:file03', winA)
+    c.reconcile([{ slot: 'preview', fileId: 'file03' }])
+    layer()
+    const video = videoIn(c.hostFor('file03')!)
+    let seeks = 0
+    Object.defineProperty(video, 'currentTime', {
+      configurable: true,
+      get: () => 2,
+      set: () => { seeks++ },
+    })
+    c.reconcile([{ slot: 'window:file03', fileId: 'file03' }])
+    expect(seeks).toBe(0)
+  })
+
   it('mutes without discarding the stored level', () => {
     const c = make()
+    const layer = makeMediaLayer(c)
     c.reconcile([{ slot: 'preview', fileId: 'file03' }])
-    mountMissingVideos(c.hostedFileIds(), c.hostFor)
+    layer()
     const video = videoIn(c.hostFor('file03')!)
     c.setVolume('file03', 0.4)
     c.setMuted('file03', true)
@@ -217,13 +349,25 @@ describe('mediaController', () => {
     expect(seen).toEqual([1, 2])
   })
 
+  it('publishes the declarative demand in the snapshot', () => {
+    const c = make()
+    c.reconcile([{ slot: 'preview', fileId: 'file03' }])
+    expect(c.getSnapshot().wanted).toEqual({ file03: true })
+    c.reconcile([])
+    expect(c.getSnapshot().wanted).toEqual({ file03: false })
+  })
+
   it('releases everything on dispose', () => {
     const c = make()
+    const layer = makeMediaLayer(c)
     c.registerSlot('window:file03', winA)
     c.reconcile([{ slot: 'preview', fileId: 'file05' }, { slot: 'window:file03', fileId: 'file03' }])
-    mountMissingVideos(c.hostedFileIds(), c.hostFor)
-    const hosts = c.hostedFileIds().map((id) => c.hostFor(id)!)
+    layer()
+    const ids = c.hostedFileIds().slice()
+    const hosts = ids.map((id) => c.hostFor(id)!)
     c.dispose()
+    layer()
+    for (const id of ids) expect(c.wantsMedia(id)).toBe(false)
     for (const h of hosts) {
       expect(h.parentElement).toBe(null)
       expect(videoIn(h).getAttribute('src')).toBeNull()
@@ -234,8 +378,8 @@ describe('mediaController', () => {
 // ---------------------------------------------------------------------------
 // The gate for the whole slice. Drives the controller through the exact
 // sequence §5 names and asserts, after every step, that each file has exactly
-// one node, that the node's parent is what the priority rule predicts, and that
-// released files carry no src.
+// one node, that the node's parent is what the priority rule predicts, that
+// released files carry no src — and that live ones still do.
 // ---------------------------------------------------------------------------
 describe('mediaController — full lifecycle', () => {
   it('acquire → preview → window → focus swap → 2nd window → close → grid → unmount', () => {
@@ -246,26 +390,34 @@ describe('mediaController — full lifecycle', () => {
     const winB = slotEl()
 
     const c = createMediaController()
+    const layer = makeMediaLayer(c)
     const identity = new Map<string, HTMLElement>()
+
     const check = (expected: Record<string, HTMLElement | null>) => {
-      for (const [id, host] of Object.entries(
-        Object.fromEntries(c.hostedFileIds().map((id) => [id, c.hostFor(id)!])),
-      )) {
+      for (const id of c.hostedFileIds()) {
+        const host = c.hostFor(id)!
         // one node per file, forever
         if (identity.has(id)) expect(host, `${id} host identity`).toBe(identity.get(id))
         else identity.set(id, host)
       }
-      mountMissingVideos(c.hostedFileIds(), c.hostFor)
+      layer()
       for (const [id, parent] of Object.entries(expected)) {
         const host = c.hostFor(id)!
         expect(host.parentElement, `${id} placement`).toBe(parent ?? c.attic())
-        if (parent === null) {
-          expect(videoIn(host).getAttribute('src'), `${id} released src`).toBeNull()
-        }
+        const src = videoIn(host).getAttribute('src')
+        if (parent === null) expect(src, `${id} released src`).toBeNull()
+        else expect(src, `${id} live src`).toBe(srcOf(id))
       }
     }
 
     // 1. explorer mounts, file03 selected → preview
+    c.registerSlot('preview', preview)
+    c.reconcile([{ slot: 'preview', fileId: 'file03' }])
+    check({ file03: preview })
+
+    // 1a. an ordinary re-render: the slot's inline ref churns and reconcile runs
+    //     again with identical desire. Nothing may be torn down.
+    c.registerSlot('preview', preview)()
     c.registerSlot('preview', preview)
     c.reconcile([{ slot: 'preview', fileId: 'file03' }])
     check({ file03: preview })
@@ -297,7 +449,8 @@ describe('mediaController — full lifecycle', () => {
     c.registerSlot('window:file03', null)
     check({ file03: null, file05: winB })
 
-    // 6. selection moves back to the closed file — the same host comes back
+    // 6. selection moves back to the closed file — the same host, and media that
+    //    works again rather than a black pane
     c.reconcile([{ slot: 'preview', fileId: 'file03' }, { slot: 'window:file05', fileId: 'file05' }])
     check({ file03: preview, file05: winB })
 
@@ -312,12 +465,18 @@ describe('mediaController — full lifecycle', () => {
     c.reconcile([{ slot: 'preview', fileId: 'file03' }, { slot: 'window:file05', fileId: 'file05' }])
     check({ file03: preview, file05: winB })
 
-    // 8. view switches to GRID — the explorer unmounts, windows are untouched
+    // 8. view switches to GRID — the explorer unmounts, windows are untouched.
+    //    The slot going away parks; the reconcile that follows in the same
+    //    commit is what releases.
     c.registerSlot('preview', null)
+    check({ file03: c.attic(), file05: winB })   // parked, media intact
+    expect(c.wantsMedia('file03')).toBe(true)
+    c.reconcile([{ slot: 'window:file05', fileId: 'file05' }])
     check({ file03: null, file05: winB })
 
     // 9. desktop unmounts
     c.dispose()
+    layer()
     expect(c.hostFor('file03')!.parentElement).toBe(null)
     expect(c.hostFor('file05')!.parentElement).toBe(null)
     expect(videoIn(c.hostFor('file05')!).getAttribute('src')).toBeNull()
