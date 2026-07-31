@@ -22,6 +22,12 @@ raw/
 /playwright/.cache/
 /shots/
 
+# Agent tooling (local only — installed skills, harness config, MCP scratch)
+.agents/
+.claude/
+.playwright-mcp/
+skills-lock.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
