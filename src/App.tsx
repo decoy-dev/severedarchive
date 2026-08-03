@@ -56,7 +56,7 @@ function AppShell() {
         <Desktop onTabShift={shiftTab} tier={tier}>
           <TerminalWindow tab={tab} onTab={setTab} bodyRef={bodyRef}>
             {tab === 'archive' && <ArchivePanel />}
-            {tab === 'about' && <AboutPanel />}
+            {tab === 'about' && <AboutPanel tier={tier} />}
             {tab === 'links' && <LinksPanel />}
           </TerminalWindow>
         </Desktop>

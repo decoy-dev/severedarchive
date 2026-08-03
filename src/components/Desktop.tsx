@@ -24,15 +24,16 @@ const REFUSAL_MS = 450
 const MAX_PLAYING = 5
 
 function playRefusal(el: HTMLElement) {
-  // reduced motion: opacity only, no white flash. the two children carry their own
-  // `opacity: 0` in css, so the type has to be driven directly — animating the
-  // container alone would fade a box whose contents stay invisible.
+  // The blowout itself is CSS on .stage, keyed off `data-refusing` — only the
+  // type is driven here. It carries its own `opacity: 0` in css, so it has to be
+  // animated directly; animating the container would fade a box whose contents
+  // stay invisible.
+  const text = el.querySelector('.refusal-text')!
   if (prefersReducedMotion()) {
-    animate(el.querySelector('.refusal-text')!, { opacity: [0, 1, 0], duration: REFUSAL_MS, ease: 'linear' })
+    animate(text, { opacity: [0, 1, 0], duration: REFUSAL_MS, ease: 'linear' })
     return
   }
-  animate(el.querySelector('.refusal-flash')!, { opacity: [0, 0.85, 0], duration: 420, ease: 'outQuad' })
-  animate(el.querySelector('.refusal-text')!, { opacity: [0, 1, 0], scale: [1.04, 1], duration: REFUSAL_MS, ease: 'outQuad' })
+  animate(text, { opacity: [0, 1, 1, 0], scale: [1.04, 1], duration: REFUSAL_MS, ease: 'outQuad' })
 }
 
 /** The window on top, i.e. the one that plays full-res with audio available. */
@@ -243,7 +244,7 @@ export default function Desktop({
   return (
     <DesktopContext.Provider value={api}>
       <MediaControllerProvider value={media}>
-        <div className="desktop" ref={rootRef}>
+        <div className="desktop" ref={rootRef} data-refusing={refusing ? 'true' : undefined}>
           <MediaLayer controller={media} />
           {children}
           {windows.map((w) => {
@@ -268,7 +269,6 @@ export default function Desktop({
           })}
           {refusing && (
             <div className="refusal" data-refusal ref={flash} aria-hidden="true">
-              <div className="refusal-flash" />
               <div className="refusal-text">BUFFER FULL</div>
             </div>
           )}

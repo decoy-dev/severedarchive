@@ -7,11 +7,12 @@ import type { PerfTier } from './perfTier'
  * tested without a DOM: `Desktop` does nothing with the result but hand it to
  * `mediaController.reconcile`.
  *
- * Two surfaces are named for the selected file, `primary` and `preview`, and
- * exactly one of them is ever mounted (mobile renders the row, desktop renders
- * the explorer). `resolveDesired` drops placements naming a slot that is not
- * registered, so emitting both is how this stays free of a second copy of the
- * breakpoint — the mounted surface wins by existing, not by being asked for.
+ * The selected file is named for the mobile `primary` slot only. The desktop
+ * explorer holds no media at all — its pane is a standby prompt, and nothing
+ * decodes there — so on desktop the selection drives the backdrop and the
+ * metadata readout and nothing else. `resolveDesired` drops placements naming
+ * an unregistered slot, so the mobile placement is simply inert on desktop and
+ * this stays free of a second copy of the breakpoint.
  *
  * The focus target is the mobile primary player or the top window, per §4.7:
  * the primary player *is* the mobile equivalent of a focused window.
@@ -43,7 +44,6 @@ export function desiredPlacement(input: {
 
   return {
     desired: [
-      { slot: 'preview', fileId: selectedId },
       { slot: 'primary', fileId: selectedId },
       ...windowIds.map((id) => ({ slot: `window:${id}` as const, fileId: id })),
     ],

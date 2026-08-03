@@ -93,18 +93,13 @@ test.describe('window focus and playback tiers', () => {
     expect(closed.gone || closed.inPreview || closed.src === null).toBe(true)
   })
 
-  test('the focused window plays the full encode and keeps playing across the move', async ({ page }) => {
+  // This used to hover first, so that opening had to carry an already-playing
+  // element across the reparent. The explorer pane holds no media any more —
+  // nothing decodes until a window opens — so the premise is gone and what is
+  // left is the part that still has to hold: the window plays the full encode,
+  // and it keeps playing.
+  test('the focused window plays the full encode and keeps playing', async ({ page }) => {
     await boot(page)
-    // hover first so the node is already live in the preview pane; opening then
-    // has to carry a *playing* element across the reparent rather than start one.
-    await page.locator('[data-file-row]').nth(0).hover()
-    await expect
-      .poll(async () => page.evaluate(() => {
-        const v = document.querySelector('[data-preview-slot] video') as HTMLVideoElement | null
-        return !!v && !v.paused && v.currentTime > 0.3
-      }), { timeout: 6000 })
-      .toBe(true)
-
     await openRow(page, 0)
     const video = page.locator('[data-file-window="file01"] video')
     await expect(video).toHaveAttribute('src', /file01_full\.mp4/)
@@ -157,10 +152,11 @@ test.describe('window focus and playback tiers', () => {
     expect(front.src).toMatch(/_full\.mp4/)
     expect(front.overlay, 'the focused window resolves — no overlay').toBe(0)
 
-    // the explorer preview is a 240p surface and is overlaid at all times
-    const preview = await page.evaluate(() =>
-      Number(getComputedStyle(document.querySelector('.preview-frame')!, '::after').opacity))
-    expect(preview).toBe(1)
+    // The explorer pane used to be checked here too, as a permanently-overlaid
+    // 240p surface. It no longer shows media at all, so the window is the only
+    // place the overlay has left to apply.
+    await expect(page.locator('.preview-standby')).toBeVisible()
+    await expect(page.locator('.explorer-preview video')).toHaveCount(0)
   })
 
   test('the focused window has audio available; losing focus silences it without forgetting the level', async ({ page }) => {

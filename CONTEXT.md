@@ -1,12 +1,12 @@
 # CONTEXT.md — severedarchive portfolio (resume point)
 
-Last updated: 2026-08-03, paused after Slice E (branch `desktop-windows`; `main` is at the same commit). **Read this first when picking the project back up.**
+Last updated: 2026-08-03, after the owner's revision pass. All six slices are done and deployed (branch `desktop-windows`; `main` is at the same commit). **Read this first when picking the project back up.**
 
 ## What this is
 
 Single-screen portfolio site for severedarchive (motion/visual artist: Blender renders set to music, metalheart/chromeheart, neo-2000s). A **desktop**: video files open in draggable, closable windows over a fullscreen video backdrop, with a huge overprint wordmark behind everything. Zero scrolling on any device.
 
-- **Live:** https://decoy-dev.github.io/severedarchive/ — serves `main`, but only when the deploy workflow is run by hand. **Confirm the live build stamp before assuming this work is deployed.**
+- **Live:** https://decoy-dev.github.io/severedarchive/ — serves `main`, but only when the deploy workflow is run by hand (`gh workflow run deploy.yml --ref main`). **Confirm the live build stamp before assuming any work is deployed.** CONTEXT has been wrong about this before.
 - **Repo:** decoy-dev/severedarchive. `main` and `desktop-windows` now point at the same commit — the branch was merged after Slice C, so "28 commits ahead" is no longer true.
 - **Local:** the tree this was last worked in. `raw/` (107MB of source video) is gitignored, was never pushed, and exists only on the machine that encoded it.
 
@@ -21,24 +21,40 @@ The v2 archive-stack build was replaced by a desktop window manager. Work was re
 | C — window media lifecycle, playback tiers | ✅ done |
 | D — mobile | ✅ done |
 | E — cleanup + docs | ✅ done |
-| **F — deploy** | ⬜ **next** |
+| F — deploy | ✅ done |
 
-**Tests: everything is green.** `npm test` 114/114, `npm run lint` clean, `npm run e2e` **55 passed / 32 skipped / 0 failed** across all three Playwright projects. This is the first point in the branch where that is true — there are no expected-red tests any more, so **any** failure now is a regression. (114, not the 120 of Slice D: `stackLayout.test.ts` went with the module it tested. The 32 skips are viewport-gated by design.)
+All six slices are complete and deployed. The owner's 2026-08-03 revision pass (wordmark fit, thumbnail LIST, standby pane, refusal blowout, About ASCII object, close-button target) is also in and live.
+
+## Next task — the standby pane becomes a live dashboard
+
+**Owner request, 2026-08-03.** Right now `.preview-standby` says `AWAITING SELECTION` and never says anything else. Once a file is selected and viewer windows are open, that pane should stop being a prompt and become a **status dashboard for the active windows**: which files are open, where each one sits, and their details — position, size, focus state, encode tier, volume, playhead.
+
+Notes for whoever picks this up:
+
+- **The data already exists and is already correct.** `WinState` (`src/lib/windowManager.ts`) holds `id`, `x`, `y`, `z`, `slot`; `mediaController.stateOf(id)` holds volume/muted/currentTime; `tierOf(id)` holds `full`/`thumb`; `topWindowId(windows)` is focus. Nothing new needs to be computed — it needs to be *read* and rendered.
+- **The wiring is the actual work.** `Desktop` owns window state and the explorer is deliberately below it and forbidden from importing `DesktopContext` (selection contract rule 1). So the window list has to reach the pane the same way the opener reaches the activation policy: handed *up* through a context, not pulled down. Adding a `DesktopContext` import to `ArchiveExplorer` would break a binding rule — don't.
+- Window position changes on every drag frame. Read it for display at a rate the pane can afford rather than re-rendering the explorer on each `pointermove`.
+- Keep the `AWAITING SELECTION` copy as the zero-window state; the dashboard is what replaces it once something is open.
+- The pane must still hold no media and register no slot. It is a readout, not a viewer.
+
+**Tests: everything is green.** `npm test` 114/114, `npm run lint` clean, `npm run e2e` **70 passed / 44 skipped / 0 failed** across all three Playwright projects. This is the first point in the branch where that is true — there are no expected-red tests any more, so **any** failure now is a regression. (114, not the 120 of Slice D: `stackLayout.test.ts` went with the module it tested. The skips are viewport-gated by design.)
 
 **Node compatibility:** `src/test/setup.ts` restores `localStorage` under vitest's jsdom environment. Node 26 defines an inert `localStorage` global, vitest skips copying any jsdom window key that already exists as a Node global, and `selection.test.tsx` then dies in `beforeEach`. It is a shim for the test environment only — no production code depends on it.
 
-## Current UX (on the branch, not live)
+## Current UX
 
 1. Boot log, then the terminal window draws in. No notification — it was deleted.
-2. `SEVEREDARCHIVE` renders as huge Archivo Black display type pinned top-left, bleeding off both edges, **behind** the window layer so the glass blurs and refracts it.
+2. `SEVEREDARCHIVE` renders as huge Archivo Black display type across the top, **sized to fit the viewport in full** (10.1vw against a measured 9.657em string), **behind** the window layer so the glass blurs and refracts it. It used to bleed off both edges; the owner asked for the whole word to read. `smoke.spec.ts` asserts the fit.
 3. Tabs: ARCHIVE / ABOUT / LINKS. Arrow keys switch tabs.
-4. ARCHIVE defaults to **LIST** — a two-column explorer. File rows on the **right**, live preview pane on the left with metadata (tagline · duration · year · resolution). Rows are on the right because cascading windows were landing on them and making them unclickable.
-5. **Clicking a row opens a draggable window.** The preview video is physically re-parented into the window with a FLIP animation and keeps playing across the move. Max 3 windows; a 4th is refused with a white flash and a `BUFFER FULL` overprint.
-6. Focused window plays `_full` with audio available; unfocused windows drop to the 240p `_thumb`, muted, under a scanline/grain overlay so the low resolution reads as intentional.
-7. Windows are **true-frame** — the aspect ratio applies to `.fw-body`, so the window is 40px taller than the media. No pillarboxing at any ratio.
-8. GRID is the same file list as large poster tiles. Clicking a tile returns to LIST and opens that window. There is no focused video inside grid view.
-9. **Below 861px the explorer does not render at all.** `ArchiveMobile` takes its place: one true-frame primary player, the file's metadata, and a single horizontally-scrolling row of poster tiles. Tapping a tile selects it; swiping the player advances selection; the row keeps the selected tile in view. No window is ever created, and GRID still works at every width.
-9. Build stamp bottom-right (`BLD <sha> · <utc>`) — compare against `git log --oneline -1` to detect a cached page.
+4. ARCHIVE defaults to **LIST** — a two-column explorer. On the **right**, a two-column thumbnail grid (the Windows medium-icons shape). On the **left**, a standby pane reading `> AWAITING SELECTION. > PLEASE CHOOSE A SUBJECT FROM THE LIST ON THE RIGHT.` with a blinking caret, and the hovered file's metadata below it. Tiles are on the right because cascading windows were landing on them and making them unclickable.
+5. **Nothing plays on hover.** Hover and keyboard focus only select — they move the backdrop and the metadata readout. The explorer registers no media slot at all, so no decode happens anywhere in the pane.
+6. **Clicking a tile opens a draggable window**, and that is the only thing that starts playback. Max 3 windows; a 4th is refused by blowing the whole stage out to near-white for 450ms with `BUFFER FULL` punched through it in black.
+7. Focused window plays `_full` with audio available; unfocused windows drop to the 240p `_thumb`, muted, under a scanline/grain overlay so the low resolution reads as intentional.
+8. Windows are **true-frame** — the aspect ratio applies to `.fw-body`, so the window is 40px taller than the media. No pillarboxing at any ratio.
+9. GRID is the same file list as large poster tiles. Clicking a tile returns to LIST and opens that window. There is no focused video inside grid view.
+10. **ABOUT** carries the extruded upload mark rendered through an ASCII pass, to the right of the copy — real 3D, so turning it changes the character density on its side faces. Not mounted below 641px (no room, and it keeps the three.js chunk off phones).
+11. **Below 861px the explorer does not render at all.** `ArchiveMobile` takes its place: one true-frame primary player, the file's metadata, and a single horizontally-scrolling row of poster tiles. Tapping a tile selects it; swiping the player advances selection; the row keeps the selected tile in view. No window is ever created, and GRID still works at every width. Mobile is the one surface where a video still plays in place.
+12. Build stamp bottom-right (`BLD <sha> · <utc>`) — compare against `git log --oneline -1` to detect a cached page.
 
 ## Architecture map
 
@@ -46,10 +62,12 @@ The v2 archive-stack build was replaced by a desktop window manager. Work was re
 
 - `src/lib/mediaController.ts` — owns every media node. One `<video>` per file, held in a host div React does not own. Surfaces register **empty slots**; the controller reconciles a desired placement map into DOM moves, keyed by `fileId`, priority `window > primary > preview`. This is what makes the reparent safe from React's unguarded `removeChild`.
 - `src/components/MediaLayer.tsx` — renders `src` declaratively from `wantsMedia()`. **Never write `src` imperatively** — a source-level test fails the build if you do.
-- `src/lib/selection.tsx` + `activation.ts` — one file-selection contract shared by explorer, grid and (soon) mobile. `activate` always selects first.
+- `src/lib/selection.tsx` + `activation.ts` — one file-selection contract shared by explorer, grid and mobile. `activate` always selects first.
 - `src/lib/placement.ts` — pure: current state in, desired placement map + focus out. This is where the perf-tier policy lives (lite places exactly one node, the focused window or the mobile primary; full places everything). `Desktop` does nothing with the result but hand it to `reconcile`.
 - `src/hooks/useIsDesktop.ts` — the single desktop/mobile split, read from `DESKTOP_MIN_WIDTH` so "windows open here" and "the mobile row renders here" cannot drift into two breakpoints.
 - `src/components/ArchiveMobile.tsx` — the mobile surface. Same slot discipline as the explorer: an empty `primary` slot over a poster, never a `<video>` in JSX.
+- `src/components/AboutAsciiObject.tsx` — three.js + `AsciiEffect`, ported from `docs/prototypes/about-ascii-3d/` with its tuned constants intact. **`strResolution: 'low'` and `invert: false` are not arbitrary** — see the comments in the file; changing either misaligns the character grid or fills the field. Lazy-loaded: three.js is ~585kB and is its own chunk, fetched only when ABOUT opens.
+- `src/hooks/useMediaQuery.ts` — one reactive media query; `useIsDesktop` is the named 861px case built on it.
 - `src/lib/windowManager.ts` — pure z-order, focus, 3-window cap, slot allocation, cascade positions. No React, no DOM.
 - `src/lib/mediaMove.ts` — the single-element FLIP for the open beat.
 - `src/lib/keyboard.ts` — the keydown guard (arrow keys must not fire from inside a range input).
@@ -63,10 +81,10 @@ The v2 archive-stack build was replaced by a desktop window manager. Work was re
 
 - Font: **Share Tech Mono** for all interface text, single weight. Emphasis NEVER from `font-weight`. **One exception:** Archivo Black (`--display`), used only for the wordmark and `BUFFER FULL`.
 - Type floor **12px**. Tokens `--fs-xs` 12 / `--fs-sm` 13 / `--fs-base` 15 / `--fs-lg` 17.
-- Accent `#b6ff2e` on active/hover only. `#ff3524` only in the `BUFFER FULL` refusal.
+- Accent `#b6ff2e` on active/hover only. `--alert` `#ff3524` is now unused: the refusal type is black against the blowout.
 - Backdrop scrim is `rgba(4,6,8,0.66)` — raised from 0.45 because the archive doubled and brought in bright clips that washed out every glass surface. Global, deliberately not per-clip adaptive.
 - **Zero page scrolling, ever.** `.stage` uses `overflow: clip`, NOT `hidden` — `hidden` makes it a scroll container, and the oversized wordmark gave it ~215px of hidden overflow that browsers would scroll to reveal a focused row, shunting the whole desktop sideways. Do not change this back.
-- Animations transform/opacity only. **Sanctioned exceptions:** volume control `max-width`, degradation `filter`, mobile row `overflow-x`.
+- Animations transform/opacity only. **Sanctioned exceptions:** volume control `max-width`, degradation `filter`, mobile row `overflow-x`, and the refusal blowout's `filter` on `.stage` (owner-requested). In that keyframe `contrast()` must come **before** `brightness()` — filters apply left to right, and lifting the blacks first is what makes a near-black clip blow out with everything else. Brightness alone left the dark clips dark and the black type vanished against exactly the surface it was meant to punch through.
 - anime.js v4 modular API only (`import { animate, createDraggable, createScope } from 'animejs'`). **`createLayout` is banned** — the reparent is a single-element FLIP.
 - No engine-conditional media paths. Chromium, WebKit and Firefox were all measured keeping `<video>` playing across a same-document reparent (`readyState` 4→4, buffered intact).
 - Desktop/mobile split is a **width query at 861px**, deliberately not pointer capability — touch tablets get the full desktop.
@@ -97,6 +115,10 @@ The remaining work was re-cut along **ownership boundaries** instead of file bou
 **Left over from Slice D — needs a decision**
 - **The terminal chrome still switches at 640px while everything else switches at 861px.** Between 641 and 860 (the 768px tablet project) you get the mobile archive inside desktop chrome — tabs on top rather than at the bottom. Not broken, just inconsistent. Moving the `@media (max-width: 640px)` chrome block to 860 is a one-line change but a visible one at tablet, so it was left alone.
 - The contract contradicts itself on 768px: §3 says "768 (window opens)" while §3 rule 3 and §4 both say no window below 861. The implementation follows 861, `desktop.spec.ts` enforces it, and the prose is what is wrong.
+
+**Consequences of the owner's 2026-08-03 revisions**
+- **The preview→window FLIP no longer has a source.** The signature open beat was the preview video physically re-parenting into the window and continuing to play. With the pane holding no media, a window now builds its node directly and `flipMove` has nothing to fly. The machinery is untouched and still load-bearing for windows and mobile — only the desktop origin is gone. If the motion is wanted back, the natural origin is the clicked thumbnail's rect.
+- `--alert` and the `.refusal-flash` element are gone from the refusal; the element was deleted with the white fill.
 
 **Left over from Slice E — needs a decision**
 - **Liquid refraction is now an orphaned subsystem.** `.stack-stage.liquid` was its only consumer and went with the stack, so `supportsLiquidRefraction()` (`perfTier.ts`), the `#liquid-refraction` SVG filter in `index.html`, the `main.tsx` wiring and `scripts/gen-displacement-map.mjs` are all unreferenced. Nothing currently applies refraction to any surface. It was left intact rather than half-deleted: reapplying it to `.glass` (windows, terminal) is a product decision, and deleting it is one too. Pick one.

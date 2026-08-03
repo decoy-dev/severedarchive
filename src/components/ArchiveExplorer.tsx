@@ -1,31 +1,24 @@
-import { useCallback, useRef, type KeyboardEvent } from 'react'
+import { useRef, type KeyboardEvent } from 'react'
 import { ARCHIVE, fileById, formatDuration, formatResolution, posterSrc } from '../data/archive'
 import { useArchiveSelection } from '../lib/selection'
-import { useMediaController } from './MediaLayer'
 
 /**
- * Two-column file explorer (spec §2). Rows on the left, a slot-based preview
- * pane on the right. Both are activation targets — a row click or a preview
- * click open the file's window; hover/keyboard-focus only select, tracking the
- * activation contract in `src/lib/selection.tsx`.
+ * Two-column file explorer (spec §2). A thumbnail grid on the right, a standby
+ * pane on the left. Hover and keyboard focus only select — they change the
+ * metadata readout and the backdrop. Opening is a click, and it is the only
+ * thing that ever starts playback.
  *
- * Critical constraint (ownership contract §2, "the whole reason this exists"):
- * the preview pane renders an EMPTY, stable slot and registers it with
- * `mediaController`. It must never render a `<video>` itself — that shape is
- * exactly what crashed the previous plan (a keyed video reparented out from
- * under React, then deleted on the next render). The registration ref is a
- * stable `useCallback`, not an inline arrow, so it does not re-fire on every
- * render.
+ * The pane deliberately registers NO media slot. Nothing previews here and
+ * nothing decodes here; a file plays when it is opened into a window and not
+ * before. (It used to hold the `preview` slot, which is why the media
+ * lifecycle still supports one — windows and the mobile primary use the same
+ * machinery. Nothing in this surface may ever render a `<video>` itself: that
+ * shape is what crashed the pre-rewrite plan, a keyed video reparented out
+ * from under React and then deleted on the next render.)
  */
 export default function ArchiveExplorer() {
   const { selectedId, select, activate } = useArchiveSelection()
-  const controller = useMediaController()
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
-
-  const registerPreviewSlot = useCallback(
-    (el: HTMLDivElement | null) => controller?.registerSlot('preview', el),
-    [controller],
-  )
 
   const selectedFile = fileById(selectedId) ?? ARCHIVE[0]
 
@@ -44,10 +37,11 @@ export default function ArchiveExplorer() {
     else if (e.key === 'Enter') { e.preventDefault(); activate(selectedId, 'keyboard') }
   }
 
-  const openPreview = () => activate(selectedFile.id, 'preview')
-
   return (
     <div className="archive-explorer">
+      {/* Thumbnail view, two columns — the Windows-explorer medium-icons shape
+          rather than a text list. Each tile is still a row in the a11y sense:
+          one listbox, roving tabindex, arrow keys move the selection. */}
       <div className="explorer-list" role="listbox" aria-label="Archive files" onKeyDown={onListKeyDown}>
         {ARCHIVE.map((f) => (
           <button
@@ -62,31 +56,29 @@ export default function ArchiveExplorer() {
             onFocus={() => select(f.id)}
             onClick={() => activate(f.id, 'row')}
           >
-            <span className="explorer-row-index">{f.index}</span>
-            <span className="explorer-row-name">{f.name}<span className="tw-dim">.{f.ext}</span></span>
+            <span className="explorer-thumb">
+              <img src={posterSrc(f.id)} alt="" loading="lazy" />
+            </span>
+            <span className="explorer-row-name">
+              <span className="explorer-row-index">{f.index}</span>
+              {f.name}<span className="tw-dim">.{f.ext}</span>
+            </span>
           </button>
         ))}
       </div>
 
       <div className="explorer-preview">
+        {/* The pane holds no media. Nothing previews on hover and nothing
+            decodes here: a file plays when it is opened into a window and not
+            before, so this is a prompt rather than a viewer. Hovering a tile
+            still updates the metadata line below. */}
         <div className="preview-frame-wrap">
-          <div
-            className="preview-frame"
-            style={{ aspectRatio: `${selectedFile.width} / ${selectedFile.height}` }}
-            role="button"
-            tabIndex={0}
-            aria-label={`Open FILE_${selectedFile.index}`}
-            onClick={openPreview}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPreview() }
-            }}
-          >
-            {/* Poster underneath, slot on top: the slot is empty whenever this
-                file's node is elsewhere (per window > preview slot priority),
-                and the poster shows through — no min-height hack, no state
-                needed here to know whether the video is "away". */}
-            <img className="preview-poster" src={posterSrc(selectedFile.id)} alt="" />
-            <div className="preview-slot" data-preview-slot ref={registerPreviewSlot} />
+          <div className="preview-standby" data-preview-standby>
+            <p className="standby-line">&gt; AWAITING SELECTION.</p>
+            <p className="standby-line tw-dim">
+              &gt; PLEASE CHOOSE A SUBJECT FROM THE LIST ON THE RIGHT.
+              <span className="standby-caret" aria-hidden="true" />
+            </p>
           </div>
         </div>
         <div className="preview-meta">

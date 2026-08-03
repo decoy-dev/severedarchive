@@ -82,12 +82,23 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 /* overprint wordmark — sits ABOVE the glass margin strips (so they don't tint/dim
    it) but BELOW the terminal window, so the window's own backdrop-filter still
-   blurs and refracts it. That refraction is the whole point. */
+   blurs and refracts it. That refraction is the whole point.
+
+   It used to bleed off both edges at 13vw. The owner asked for the full word to
+   read, so the size is derived instead: at this letter-spacing the string is
+   9.657em wide (measured, and stable across sizes since it is pure metrics), so
+   100vw / 9.657 = 10.355vw is the exact fit and 10.1vw leaves a hair of margin.
+   smoke.spec.ts asserts it stays inside the viewport — that test is the guard if
+   the font or the string ever changes. */
 .wordmark {
   position: absolute; z-index: 2;
-  top: -0.14em; left: -0.04em;
+  /* `top: 0`, not the old -0.14em. line-height 0.82 already pulls the glyph box
+     tighter than the ascent, so a negative offset on top of that clipped the
+     cap heights against the viewport edge — the word was cut off at the top
+     even once it fit horizontally. */
+  top: 0; left: 0;
   font-family: var(--display);
-  font-size: clamp(96px, 13vw, 260px);
+  font-size: 10.1vw;
   line-height: 0.82;
   letter-spacing: -0.04em;
   color: rgba(201, 210, 216, 0.13);
@@ -211,6 +222,44 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 /* ── panels ── */
 .panel { position: absolute; inset: 0; padding: clamp(16px, 3vw, 32px); overflow: hidden; }
 .panel-block { border: 1px solid var(--hair); padding: 12px 16px; margin-bottom: 12px; max-width: 560px; }
+
+/* ── about: copy left, ASCII object right ──
+   The object is decorative and sized by its column; the copy keeps its own
+   max-width so the two never fight over the same space. */
+.about-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr); gap: clamp(12px, 2.5vw, 32px); align-items: center; }
+/* Below 641px the object is not mounted at all (see AboutPanel), so the copy
+   takes the whole panel rather than leaving an empty second track. */
+.about-panel[data-with-object='false'] { grid-template-columns: minmax(0, 1fr); }
+.about-copy { min-width: 0; align-self: start; }
+
+/* Ported from the prototype. The `!important`s are aimed at AsciiEffect's own
+   inline styles, which it writes on its container every resize — a plain rule
+   loses to them. Its `courier new` font declaration is deliberately NOT
+   overridden: the glyph advance is what the character grid is calibrated to,
+   and a branded font changes the sampling width per browser. */
+.ascii-object {
+  position: relative; min-width: 0; height: 100%; min-height: 0;
+  color: var(--acid); background: transparent;
+  contain: strict; pointer-events: none;
+}
+.ascii-object > div {
+  position: absolute !important; inset: 0;
+  width: 100% !important; height: 100% !important;
+  overflow: hidden;
+  color: inherit !important; background: transparent !important;
+  text-shadow: 0 0 7px rgba(182, 255, 46, 0.22);
+}
+.ascii-object table { display: block; width: 100%; height: 100%; color: inherit !important; background: transparent !important; }
+.ascii-object td, .ascii-object span { color: inherit !important; background: transparent !important; }
+.ascii-fallback {
+  position: absolute; inset: 50% auto auto 50%; transform: translate(-50%, -50%);
+  width: min(70%, 260px);
+  filter: invert(87%) sepia(94%) saturate(874%) hue-rotate(31deg) brightness(111%);
+  opacity: 0.5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ascii-object > div { text-shadow: none; }
+}
 .panel-label { display: block; font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--dim); margin-bottom: 6px; }
 .panel-big { font-size: clamp(18px, 2.4vw, 26px); letter-spacing: 0.02em; color: var(--bright); } /* Share Tech Mono is single-weight — no bold anywhere */
 
@@ -310,48 +359,74 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
    spare; see desktop.spec.ts's "fourth window is refused" case. */
 .archive-explorer {
   flex: 1 1 auto; min-height: 0;
-  display: grid; grid-template-columns: 1fr 280px; grid-template-rows: minmax(0, 1fr); gap: 16px;
+  display: grid; grid-template-columns: 1fr 300px; grid-template-rows: minmax(0, 1fr); gap: 16px;
 }
-.explorer-list { grid-column: 2; grid-row: 1; min-height: 0; overflow-y: auto; border: 1px solid var(--hair); }
+/* Two-column thumbnail view. `auto-fill` with a floor rather than a hard
+   `repeat(2, 1fr)`: the track is a fixed width, so two columns is what this
+   resolves to, and a narrower panel degrades to one column instead of crushing
+   two unreadable ones. */
+.explorer-list {
+  grid-column: 2; grid-row: 1; min-height: 0; overflow-y: auto;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 8px; align-content: start; padding: 8px;
+  border: 1px solid var(--hair);
+}
 .explorer-row {
-  display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left;
-  padding: 10px 12px; font-size: var(--fs-base); color: var(--text);
-  border-bottom: 1px solid var(--hair);
+  display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left;
+  padding: 6px; font-size: var(--fs-xs); color: var(--text);
+  border: 1px solid transparent;
 }
-.explorer-list .explorer-row:last-child { border-bottom: 0; }
-.explorer-row-index { color: var(--dim); min-width: 2.5ch; }
-.explorer-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Accent marks the hovered/selected row only (spec §2) — never a resting default. */
+.explorer-thumb {
+  display: block; position: relative; aspect-ratio: 16 / 10;
+  background: #000; border: 1px solid var(--hair); overflow: hidden;
+}
+.explorer-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.62; }
+.explorer-row-index { color: var(--dim); margin-right: 6px; }
+.explorer-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+/* Accent marks the hovered/selected tile only (spec §2) — never a resting default. */
 .explorer-row:hover, .explorer-row:focus-visible, .explorer-row.is-selected {
   color: var(--acid); background: rgba(182, 255, 46, 0.05); outline: none;
 }
+.explorer-row:hover .explorer-thumb,
+.explorer-row:focus-visible .explorer-thumb,
+.explorer-row.is-selected .explorer-thumb { border-color: var(--acid); }
+.explorer-row:hover .explorer-thumb img,
+.explorer-row:focus-visible .explorer-thumb img,
+.explorer-row.is-selected .explorer-thumb img { opacity: 1; }
 .explorer-row:hover .explorer-row-index,
 .explorer-row:focus-visible .explorer-row-index,
 .explorer-row.is-selected .explorer-row-index { color: var(--acid); }
 
 .explorer-preview { grid-column: 1; grid-row: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
-/* The frame is sized by the file's real aspect ratio (inline style, from
-   generated metadata) and constrained to fit this box on whichever axis is
-   tighter — true-frame, no bars, without measuring anything in JS. */
+/* The pane holds no media, so this is simply the box the standby prompt fills. */
 .preview-frame-wrap {
   flex: 1 1 auto; min-height: 0;
   display: flex; align-items: stretch; justify-content: center; overflow: hidden;
 }
-.preview-frame {
-  position: relative; width: auto; height: auto; max-width: 100%; max-height: 100%;
-  border: 1px solid var(--hair-bright); background: #000; overflow: hidden; cursor: pointer;
+/* Standby prompt, not a viewer: nothing previews on hover and nothing decodes
+   here. The pane fills its column rather than hugging a media aspect ratio,
+   because there is no media to hug. */
+.preview-standby {
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column; justify-content: center; gap: 6px;
+  padding: 20px; border: 1px solid var(--hair-bright); background: rgba(0, 0, 0, 0.35);
 }
-.preview-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
-/* Empty, stable slot — mediaController places a host here or it doesn't; the
-   poster underneath shows through either way. This div is never given a
-   <video> child by React; see MediaLayer.tsx. */
-.preview-slot { position: absolute; inset: 0; }
+.standby-line { font-size: var(--fs-sm); letter-spacing: 0.06em; line-height: 1.7; }
+.standby-caret {
+  display: inline-block; width: 0.55em; height: 1em; margin-left: 0.4em;
+  background: var(--acid); vertical-align: text-bottom;
+  animation: standby-blink 1.1s steps(1, end) infinite;
+}
+@keyframes standby-blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .standby-caret { animation: none; }
+}
 .preview-meta { flex: 0 0 auto; border-top: 1px solid var(--hair); padding-top: 10px; }
 .preview-meta-head { font-size: var(--fs-lg); color: var(--bright); letter-spacing: 0.02em; }
 .preview-meta-sub { font-size: var(--fs-sm); margin-top: 4px; letter-spacing: 0.03em; }
 
 @media (max-width: 1024px) {
-  .archive-explorer { grid-template-columns: 1fr 220px; }
+  .archive-explorer { grid-template-columns: 1fr 240px; }
 }
 /* ── mobile archive: primary player + one swipeable row (Slice D) ──
    Below the 861px split the explorer does not render at all, so nothing here
@@ -506,8 +581,18 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .file-window[data-focused='true'] .fw-title { color: var(--bright); }
 .file-window[data-focused='true'] { border-color: var(--hair-bright); }
 .fw-controls { display: flex; align-items: center; gap: 14px; flex: 0 0 auto; }
-.fw-close { font-size: var(--fs-sm); color: var(--dim); padding: 0 2px; }
-.fw-close:hover { color: var(--acid); }
+/* The glyph stays small; the target does not. It was a ~10px hit area sitting
+   on a drag handle, so a slightly-off click grabbed the window instead of
+   closing it. 40px square is a real pointer target and still clears the 44px
+   title bar. The negative margin keeps the bar's visual rhythm unchanged while
+   the box grows — and the height is exactly the bar's 40px, so the target fills
+   it without spilling into the media below. */
+.fw-close {
+  font-size: var(--fs-sm); color: var(--dim);
+  width: 40px; height: 40px; margin-right: -10px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.fw-close:hover, .fw-close:focus-visible { color: var(--acid); background: rgba(182, 255, 46, 0.08); outline: none; }
 /* True-frame: `aspect-ratio` is set inline from generated metadata and the body
    is the element that carries it, so the window root's height is body + title bar
    + border and nothing is ever barred. flex-basis stays `auto` and the item does
@@ -515,9 +600,8 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .fw-body { flex: 0 0 auto; position: relative; z-index: 2; background: #000; overflow: hidden; }
 
 /* ── intentional degradation (§4.7) ──
-   Scanlines, noise and a desaturation pass over the surfaces that are showing a
-   240p encode: the explorer preview always, an unfocused window until it is
-   focused. On focus it fades out over 200ms and the picture visibly resolves —
+   Scanlines, noise and a desaturation pass over an unfocused window, which is
+   showing the 240p encode, until it is focused. On focus it fades out over 200ms and the picture visibly resolves —
    the fade IS the focus feedback.
 
    Binding: this is on the SLOT, never on the media node. The node moves between
@@ -527,7 +611,6 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 
    -webkit- first: Tailwind v4's Lightning CSS build collapses duplicate
    backdrop-filter declarations to whichever is LAST. */
-.preview-frame::after,
 .fw-body::after {
   content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none;
   /* Tuned by eye against the 0.66 scrim, on file01 (the brightest clip in the
@@ -545,20 +628,47 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 }
 .file-window[data-focused='true'] .fw-body::after { opacity: 0; }
 @media (prefers-reduced-motion: reduce) {
-  .preview-frame::after, .fw-body::after { transition: none; }
+  .fw-body::after { transition: none; }
 }
 
 
-/* ── cap refusal: white flash + overprint type, both opacity-driven ── */
+/* ── cap refusal: the page blows out, the type stays black ──
+   Not a white fill over the top: the whole stage has its brightness driven up
+   hard for a beat, as if the signal were overdriven, and BUFFER FULL reads as a
+   hole punched in it. Black survives any brightness multiplier (0 × n is still
+   0), which is why the type stays legible at the peak instead of washing out
+   the way a light colour would.
+
+   `:has()` rather than a class on .stage: the refusal is Desktop's state, and
+   this is how the stage reacts to it without App having to hold a flag it does
+   not otherwise care about. */
+.stage:has(.desktop[data-refusing='true']) {
+  animation: buffer-blowout 450ms steps(60, end);
+}
+/* `contrast()` BEFORE `brightness()`, and both are load-bearing in that order.
+   Filters apply left to right: dropping contrast first lifts the blacks off the
+   floor so the multiply has something to work with, and a near-black clip then
+   blows out along with everything else. Brightness alone left the darkest video
+   dark, and the black type vanished against exactly the surface it was supposed
+   to punch through. */
+@keyframes buffer-blowout {
+  0%   { filter: none; }
+  8%   { filter: contrast(0.32) brightness(3.8) saturate(0.5); }
+  55%  { filter: contrast(0.6) brightness(2) saturate(0.8); }
+  100% { filter: none; }
+}
 .refusal { position: absolute; inset: 0; z-index: 50; pointer-events: none; display: grid; place-items: center; }
-.refusal-flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
 .refusal-text {
   position: relative; opacity: 0;
   font-family: var(--display);   /* sanctioned display exception — wordmark + this */
   font-size: clamp(48px, 9vw, 160px);
   letter-spacing: -0.03em;
-  color: var(--alert);
-  mix-blend-mode: difference;
+  color: #000;
+}
+/* Reduced motion keeps the announcement and drops the assault: the type still
+   appears, the page does not blow out. */
+@media (prefers-reduced-motion: reduce) {
+  .stage:has(.desktop[data-refusing='true']) { animation: none; }
 }
 
 /* ── mobile: purpose-built layout ── */

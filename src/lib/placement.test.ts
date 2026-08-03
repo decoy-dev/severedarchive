@@ -4,15 +4,14 @@ import { desiredPlacement } from './placement'
 const base = { selectedId: 'file03', windowIds: [], focusedWindowId: null, isDesktop: true, tier: 'full' } as const
 
 describe('desiredPlacement', () => {
-  it('names both selected-file surfaces, leaving the mounted one to win', () => {
-    // Only one of preview/primary is ever registered, and resolveDesired drops
-    // placements naming a dead slot — so this is how the policy stays free of a
-    // second copy of the breakpoint.
+  it('names the mobile primary for the selected file, and no desktop surface', () => {
+    // The desktop explorer pane holds no media — it is a standby prompt — so
+    // the only slot the selection can land in is the mobile one. On desktop
+    // that placement is inert: resolveDesired drops placements naming a slot
+    // that is not registered, which is how this stays free of a second copy of
+    // the breakpoint.
     const { desired } = desiredPlacement(base)
-    expect(desired).toEqual([
-      { slot: 'preview', fileId: 'file03' },
-      { slot: 'primary', fileId: 'file03' },
-    ])
+    expect(desired).toEqual([{ slot: 'primary', fileId: 'file03' }])
   })
 
   it('focuses the top window on desktop and the primary player on mobile', () => {

@@ -1,5 +1,5 @@
-import { useSyncExternalStore } from 'react'
 import { DESKTOP_MIN_WIDTH } from '../lib/activation'
+import { useMediaQuery } from './useMediaQuery'
 
 /**
  * The one desktop/mobile split, read from the same constant the activation
@@ -9,18 +9,6 @@ import { DESKTOP_MIN_WIDTH } from '../lib/activation'
  * A width query, deliberately not a pointer-capability query (binding ruling 3):
  * a tablet in landscape is a desktop, the same tablet in portrait is not.
  */
-const QUERY = `(min-width: ${DESKTOP_MIN_WIDTH}px)`
-
-const subscribe = (cb: () => void) => {
-  const mq = window.matchMedia(QUERY)
-  mq.addEventListener('change', cb)
-  return () => mq.removeEventListener('change', cb)
-}
-
 export function useIsDesktop(): boolean {
-  return useSyncExternalStore(
-    subscribe,
-    () => window.matchMedia(QUERY).matches,
-    () => true,
-  )
+  return useMediaQuery(`(min-width: ${DESKTOP_MIN_WIDTH}px)`)
 }
