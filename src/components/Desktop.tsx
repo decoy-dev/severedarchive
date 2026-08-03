@@ -2,10 +2,12 @@ import { createContext, useCallback, useEffect, useLayoutEffect, useMemo, useRef
 import { createScope, createDraggable, createSpring, animate } from 'animejs'
 import { aspectRatio, fileById } from '../data/archive'
 import { openWindow, focusWindow, closeWindow, windowBox, type WinState } from '../lib/windowManager'
-import { prefersReducedMotion } from '../lib/perfTier'
+import { prefersReducedMotion, type PerfTier } from '../lib/perfTier'
 import { isInteractiveTarget } from '../lib/keyboard'
 import { useArchiveSelection } from '../lib/selection'
-import { createMediaController, type Placement } from '../lib/mediaController'
+import { desiredPlacement } from '../lib/placement'
+import { useIsDesktop } from '../hooks/useIsDesktop'
+import { createMediaController } from '../lib/mediaController'
 import { flipMove } from '../lib/mediaMove'
 import { VideoDirector } from '../lib/videoDirector'
 import FileWindow from './FileWindow'
@@ -38,18 +40,36 @@ const topWindowId = (windows: readonly WinState[]): string | null =>
   windows.reduce<WinState | null>((top, w) => (!top || w.z > top.z ? w : top), null)?.id ?? null
 
 /**
- * The desired placement map — the single statement of where every media node
- * should be. Slot priority (`window:*` > `primary` > `preview`) resolves the
- * overlap when the selected file is also open, so the preview pane shows that
- * file's poster rather than competing for its node.
+ * Slot priority (`window:*` > `primary` > `preview`) resolves the overlap when
+ * the selected file is also open, so the preview pane shows that file's poster
+ * rather than competing for its node. The policy itself is pure and lives in
+ * `lib/placement.ts`; this only supplies the current state.
  */
-const desiredFor = (selectedId: string, windows: readonly WinState[]): Placement[] => [
-  { slot: 'preview', fileId: selectedId },
-  ...windows.map((w) => ({ slot: `window:${w.id}` as const, fileId: w.id })),
-]
+const desiredFor = (
+  selectedId: string,
+  windows: readonly WinState[],
+  isDesktop: boolean,
+  tier: PerfTier,
+) =>
+  desiredPlacement({
+    selectedId,
+    windowIds: windows.map((w) => w.id),
+    focusedWindowId: topWindowId(windows),
+    isDesktop,
+    tier,
+  })
 
-export default function Desktop({ children, onTabShift }: { children: ReactNode; onTabShift?: (dir: 1 | -1) => void }) {
+export default function Desktop({
+  children,
+  onTabShift,
+  tier,
+}: {
+  children: ReactNode
+  onTabShift?: (dir: 1 | -1) => void
+  tier: PerfTier
+}) {
   const [windows, setWindows] = useState<WinState[]>([])
+  const isDesktop = useIsDesktop()
   const [refusing, setRefusing] = useState(false)
   const [live, setLive] = useState('')
   // One controller and one director for the whole app, owned here. The director
@@ -114,8 +134,10 @@ export default function Desktop({ children, onTabShift }: { children: ReactNode;
   // about it. Kept in refs so `close` does not change identity per render.
   const windowsRef = useRef(windows)
   const selectedRef = useRef(selectedId)
+  const envRef = useRef({ isDesktop, tier })
   windowsRef.current = windows
   selectedRef.current = selectedId
+  envRef.current = { isDesktop, tier }
 
   const close = useCallback((id: string) => {
     scopes.current.get(id)?.revert()
@@ -126,10 +148,9 @@ export default function Desktop({ children, onTabShift }: { children: ReactNode;
     // node: either a live slot still wants the file (it moves there, instantly,
     // re-tiered) or it is released.
     const remaining = windowsRef.current.filter((w) => w.id !== id)
-    media.reconcile(desiredFor(selectedRef.current, remaining), {
-      animate: false,
-      focus: topWindowId(remaining),
-    })
+    const { isDesktop: onDesktop, tier: curTier } = envRef.current
+    const next = desiredFor(selectedRef.current, remaining, onDesktop, curTier)
+    media.reconcile(next.desired, { animate: false, focus: next.focus })
     setWindows((cur) => closeWindow(cur, id))
   }, [media])
 
@@ -213,7 +234,8 @@ export default function Desktop({ children, onTabShift }: { children: ReactNode;
   // of a window that mounted in this very commit. A pass where nothing actually
   // moved is a no-op inside the controller.
   useLayoutEffect(() => {
-    media.reconcile(desiredFor(selectedId, windows), { animate: true, focus: focusedId })
+    const next = desiredFor(selectedId, windows, isDesktop, tier)
+    media.reconcile(next.desired, { animate: true, focus: next.focus })
   })
 
   const api = useMemo<DesktopApi>(() => ({ open }), [open])

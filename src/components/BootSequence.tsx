@@ -1,11 +1,14 @@
 import { useEffect, useRef } from 'react'
 import { createTimeline, stagger } from 'animejs'
 import { prefersReducedMotion } from '../lib/perfTier'
+import { ARCHIVE } from '../data/archive'
 
+// Derived, not typed in: this line read "6 FILES INDEXED" for as long as the
+// archive has had 12 files in it.
 const LINES = [
   '> SEVEREDARCHIVE OS v2.6',
   '> MOUNTING /ARCHIVE ................ OK',
-  '> 6 FILES INDEXED',
+  `> ${ARCHIVE.length} FILES INDEXED`,
   '> RENDER NODES: CONNECTED',
   '> SESSION OPEN',
 ]

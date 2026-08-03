@@ -19,5 +19,7 @@ export default defineConfig({
     exclude: ['tests/e2e/**', 'node_modules/**', 'dist/**'],
     // No unit tests exist yet (added starting Task 3's logic core) — don't fail the harness.
     passWithNoTests: true,
+    // Node-version compatibility only; see the file for what it patches.
+    setupFiles: ['./src/test/setup.ts'],
   },
 })

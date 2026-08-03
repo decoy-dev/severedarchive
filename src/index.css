@@ -104,19 +104,25 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 /* lite tier: no live blur */
 [data-tier='lite'] .glass-strip { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(7, 9, 11, 0.82); }
 
-/* build stamp: always visible bottom-right, above the glass strips */
+/* Build stamp: bottom-right, above the glass strips but BELOW the desktop.
+   It used to sit at z-index 6 against .desktop's 2, which put it above every
+   descendant of the desktop no matter what they asked for — the BUFFER FULL
+   flash is z-index 50 inside that stacking context and the stamp still painted
+   over it. Being occluded by a window that overlaps the corner is correct: the
+   stamp is a cache-staleness check, not chrome. */
 .build-tag {
-  position: absolute; right: 6px; bottom: 4px; z-index: 6;
+  position: absolute; right: 6px; bottom: 4px; z-index: 2;
   font-size: var(--fs-xs); letter-spacing: 0.05em; color: var(--dim);
   pointer-events: none; user-select: none;
 }
 
 /* the desktop shell: owns the terminal window, the file windows and the cap
    refusal. absolute + inset:0 makes its box exactly the stage, which is what every
-   draggable uses as its bounds container. z-index 2 keeps it above the glass strips
-   and level with the wordmark (later in DOM order, so it paints over it) while
-   still leaving the wordmark inside the windows' backdrop-filter sample. */
-.desktop { position: absolute; inset: 0; z-index: 2; }
+   draggable uses as its bounds container. z-index 3 keeps it above the glass
+   strips, above the wordmark and above the build stamp, while still leaving the
+   wordmark below it and therefore inside the windows' backdrop-filter sample —
+   backdrop-filter samples what is painted beneath, whatever the index says. */
+.desktop { position: absolute; inset: 0; z-index: 3; }
 
 /* the terminal window — explicitly sized rather than `inset`, which a
    transform-based drag fights (inset re-anchors the box the transform moves) */
@@ -185,8 +191,6 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 }
 .tw-dim { color: var(--dim); }
 .tw-status { display: flex; gap: 16px; align-items: center; font-size: var(--fs-sm); }
-.tw-bell { border: 1px solid var(--hair); padding: 3px 8px; color: var(--text); }
-.tw-bell:hover { border-color: var(--acid); color: var(--acid); }
 
 .tw-tabs { display: flex; gap: 0; padding: 10px 14px 0; flex: 0 0 auto; position: relative; z-index: 2; }
 .tw-tab {
@@ -285,7 +289,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   .archive-grid.has-focus .file-card.is-focus { grid-column: 1 / -1; grid-row: 1 / -1; }
 }
 
-/* ── archive stack ── */
+/* ── archive panel ── */
 .archive-panel { display: flex; flex-direction: column; }
 /* nested grid/stack position against this, not the whole panel (keeps the toggle visible) */
 .archive-panel-body { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
@@ -349,78 +353,66 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 @media (max-width: 1024px) {
   .archive-explorer { grid-template-columns: 1fr 220px; }
 }
-@media (max-width: 640px) {
-  /* Not the mobile primary-player redesign (Slice D) — just enough to keep
-     this from overflowing or scrolling the page until that lands. */
-  .archive-explorer { display: flex; flex-direction: column; gap: 10px; }
-  .explorer-preview { order: -1; flex: 0 0 auto; }
-  .preview-frame-wrap { max-height: 120px; }
-  .explorer-list { flex: 1 1 auto; }
+/* ── mobile archive: primary player + one swipeable row (Slice D) ──
+   Below the 861px split the explorer does not render at all, so nothing here
+   is a responsive override of it — this is a separate surface with its own
+   markup. The split is the same constant the activation policy uses; see
+   hooks/useIsDesktop.ts. */
+/* `min-width: 0` is load-bearing, not defensive: .archive-panel-body is a flex
+   row, so this is a flex item, and a flex item's automatic minimum size is its
+   max-content width — the 12-tile row would size the whole surface to ~950px
+   and overflow the panel invisibly, since .stage clips. The tiles past the
+   viewport edge would simply be unreachable. */
+.archive-mobile { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+/* Unlike the desktop preview, the frame here is sized from its WIDTH: a phone
+   is a tall box and the archive is landscape, so width is the binding
+   constraint and a height-derived frame would clamp against max-width and bar
+   the media — the exact thing true-frame rules out. `align-items: center`
+   rather than `stretch` is what keeps the height derived rather than imposed.
+   A clip taller than the panel (past ~3:4 at this viewport) would clamp on
+   max-height instead; nothing in the archive is, and a portrait-first archive
+   would want the explorer's construction rather than a patch to this one. */
+.primary-wrap {
+  flex: 1 1 auto; min-height: 0;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
 }
+.primary-view {
+  position: relative; width: 100%; height: auto; max-height: 100%;
+  border: 1px solid var(--hair-bright); background: #000; overflow: hidden;
+  /* The swipe is horizontal and the page never scrolls, so the browser has no
+     competing gesture to arbitrate — but leave the vertical axis to it rather
+     than claiming gestures this surface does not handle. */
+  touch-action: pan-y;
+}
+.primary-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+/* Empty, stable slot; mediaController places a host here or it doesn't, and the
+   poster underneath shows through either way. Never given a <video> by React. */
+.primary-slot { position: absolute; inset: 0; }
+.primary-meta { flex: 0 0 auto; border-top: 1px solid var(--hair); padding-top: 8px; }
+.primary-meta-head { font-size: var(--fs-base); color: var(--bright); letter-spacing: 0.02em; }
+.primary-meta-sub { font-size: var(--fs-xs); margin-top: 3px; letter-spacing: 0.03em; }
 
-.archive-stack { flex: 1 1 auto; min-height: 0; position: relative; display: flex; }
-/* The stage is a GLASS FRAME: 14px padding band where the backdrop shows through
-   (this band is what the base glass — and Task 6's refraction — acts on);
-   the video sits inset inside it. Without the band, backdrop-filter would be
-   fully covered by the opaque video and invisible. */
-/* The area centers a stage that hugs the video's aspect ratio (JS-sized).
-   The fan pushes the stage via an inline compositor transform (translate/scale
-   computed from actual overlap) — this transition is the smooth lerp. */
-.stack-stage-area {
-  position: absolute; inset: 0 132px 52px 0;
-  display: flex; align-items: center; justify-content: center;
+/* The one sanctioned horizontal overflow in the app, and it is confined to this
+   element: the stage clips, so a row that scrolled the page instead would take
+   the whole desktop sideways. */
+.mobile-row {
+  flex: 0 0 auto; min-width: 0; display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden;
+  padding-bottom: 2px; scrollbar-width: none; scroll-snap-type: x proximity;
 }
-.stack-stage {
-  position: relative; padding: 14px; overflow: hidden; max-width: 100%; max-height: 100%;
-  transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+.mobile-row::-webkit-scrollbar { display: none; }
+.mobile-tile {
+  position: relative; flex: 0 0 auto; width: 72px; height: 54px; padding: 0;
+  border: 1px solid var(--hair); overflow: hidden; scroll-snap-align: center;
 }
-@media (prefers-reduced-motion: reduce) { .stack-stage { transition: none; } }
-/* contain, not cover: 16:9 sources show their true frame, vertical sources
-   (9:16, 3:4) pillarbox inside the glass band instead of being cropped */
-.stage-incoming { position: relative; width: 100%; height: 100%; z-index: 2; }
-.stack-stage video { width: 100%; height: 100%; object-fit: contain; display: block; }
-.stage-outgoing { position: absolute; inset: 14px; z-index: 3; object-fit: contain; width: calc(100% - 28px); height: calc(100% - 28px); pointer-events: none; }
-.stack-slivers { position: absolute; top: 0; right: 0; bottom: 52px; width: 128px; }
-/* Slivers pack left-to-right and nearly fill the zone (5 × 24px of 128px), so a
-   zone the full size of .stack-slivers would sit BELOW every sliver button in
-   z-order and never receive the pointer at its own center. Pin it to the bare
-   right-edge strip instead, above the slivers, so it's reliably hoverable
-   (mouseenter/leave are bound to the whole .stack-slivers container anyway —
-   this element only needs to be a hit-testable target for hover). */
-.stack-fan-zone { position: absolute; top: 0; right: 0; bottom: 0; width: 12px; z-index: 10; }
-.stack-sliver {
-  position: absolute; top: 0; height: 100%; overflow: hidden;
-  border: 1px solid var(--hair); background: var(--panel-solid);
-  transform-origin: top left;
-  transform: translateX(var(--tx)) scale(var(--sc));
-  /* transform lerps re-packs; width lerps the fan reveal (hover-capable
-     desktop only reaches the fanned width — accepted layout-anim exception) */
-  transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1), width 380ms cubic-bezier(0.22, 1, 0.36, 1);
+.mobile-tile img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.5; }
+.mobile-tile-index {
+  position: absolute; left: 4px; bottom: 3px; font-size: var(--fs-xs); color: var(--text);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
 }
-.archive-stack[data-fanned='true'] .stack-sliver:hover {
-  /* slight magnification on the hovered strip; composes with its layout scale */
-  transform: translateX(var(--tx)) scale(calc(var(--sc) * 1.07));
-  z-index: 30 !important; /* above siblings; beats the inline depth z-index */
-  border-color: var(--acid);
-}
-@media (prefers-reduced-motion: reduce) {
-  .stack-sliver { transition: none; }
-}
-.stack-sliver img { width: 72px; height: 100%; object-fit: cover; opacity: 0.55; }
-.archive-stack[data-fanned='true'] .stack-sliver img { opacity: 0.85; }
-.stack-sliver .sliver-label {
-  position: absolute; top: 8px; left: 4px; font-size: var(--fs-xs); letter-spacing: 0.08em;
-  writing-mode: vertical-rl; color: var(--text); opacity: 0; transition: opacity 150ms;
-}
-.archive-stack[data-fanned='true'] .sliver-label { opacity: 1; }
-.stack-sliver:hover { border-color: var(--acid); }
-.stack-hud {
-  position: absolute; left: 0; right: 132px; bottom: 0; height: 40px;
-  display: flex; justify-content: space-between; align-items: center; padding: 0 12px; font-size: var(--fs-sm);
-}
-.stack-hud > * { position: relative; z-index: 2; }
-.stack-hud button { border: 1px solid var(--hair); padding: 4px 10px; }
-.stack-hud button:hover { color: var(--acid); border-color: var(--acid); }
+/* Accent marks the selected tile only — never a resting default. */
+.mobile-tile.is-selected { border-color: var(--acid); }
+.mobile-tile.is-selected img { opacity: 1; }
+.mobile-tile.is-selected .mobile-tile-index { color: var(--acid); }
 
 /* terminal volume slider */
 .vol-control { display: flex; align-items: center; gap: 8px; }
@@ -444,46 +436,10 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 }
 .vol-control input[type='range']:hover::-moz-range-thumb { background: var(--acid); }
 
-.archive-stack[data-fanned='true'] .stack-slivers { width: 384px; z-index: 5; }
-
-.stack-stage.liquid {
-  /* refraction chained with a lighter blur so the bend reads through the frame band */
-  backdrop-filter: url(#liquid-refraction) blur(6px) saturate(1.4);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.6) brightness(1.08); /* non-Chromium ignores url(); .glass fallback look */
-}
-
-@media (max-width: 640px) {
-  .stack-stage-area { inset: 0 44px 48px 0; }
-  .stack-slivers { width: 40px; bottom: 48px; }
-  .stack-hud { right: 44px; height: 36px; }
-}
-
 /* ── boot ── */
 .boot { position: absolute; inset: var(--frame); z-index: 4; padding: 24px; background: var(--panel-solid); border: 1px solid var(--hair-bright); font-size: var(--fs-base); }
 .boot-line { opacity: 0; margin-bottom: 4px; color: var(--text); }
 
-/* ── notification ── */
-.notification {
-  position: absolute; z-index: 5; width: min(360px, calc(100vw - 2 * var(--frame) - 24px));
-  top: calc(var(--frame) + 54px); right: calc(var(--frame) + 14px);
-}
-/* entrance/dismiss animation targets this inner wrapper, not .notification itself —
-   .notification owns the mobile centering transform and must stay untouched by JS */
-.notification-inner { opacity: 0; position: relative; z-index: 2; }
-.notification-head {
-  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
-  border-bottom: 1px solid var(--hair-bright); font-size: var(--fs-sm); color: var(--bright);
-}
-.notification-dot { width: 8px; height: 8px; background: var(--alert); flex: 0 0 auto; }
-.notification-body { padding: 14px 12px; font-size: var(--fs-sm); }
-.notification-ack {
-  display: block; width: 100%; padding: 10px 12px; text-align: center;
-  border-top: 1px solid var(--hair-bright); color: var(--text); font-size: var(--fs-sm); letter-spacing: 0.08em;
-}
-.notification-ack:hover, .notification-ack:focus-visible { color: var(--acid); background: rgba(182, 255, 46, 0.07); }
-@media (max-width: 640px) {
-  .notification { left: 50%; right: auto; transform: translateX(-50%); top: 30%; }
-}
 
 /* ── volume control ── */
 .vol { display: inline-flex; align-items: center; gap: 8px; }
@@ -592,7 +548,6 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   .preview-frame::after, .fw-body::after { transition: none; }
 }
 
-[data-tier='lite'] .file-window { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--panel-solid); }
 
 /* ── cap refusal: white flash + overprint type, both opacity-driven ── */
 .refusal { position: absolute; inset: 0; z-index: 50; pointer-events: none; display: grid; place-items: center; }

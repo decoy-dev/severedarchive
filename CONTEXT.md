@@ -1,14 +1,14 @@
 # CONTEXT.md — severedarchive portfolio (resume point)
 
-Last updated: 2026-07-31, paused after Slice C (build `faff864`, branch `desktop-windows`). **Read this first when picking the project back up.**
+Last updated: 2026-08-03, paused after Slice E (branch `desktop-windows`; `main` is at the same commit). **Read this first when picking the project back up.**
 
 ## What this is
 
 Single-screen portfolio site for severedarchive (motion/visual artist: Blender renders set to music, metalheart/chromeheart, neo-2000s). A **desktop**: video files open in draggable, closable windows over a fullscreen video backdrop, with a huge overprint wordmark behind everything. Zero scrolling on any device.
 
-- **Live:** https://decoy-dev.github.io/severedarchive/ — still serving `main`. **This work is NOT deployed.**
-- **Repo:** decoy-dev/severedarchive. Work is on branch **`desktop-windows`** (28 commits ahead of `main`), pushed.
-- **Local:** ~/severedarchive-build
+- **Live:** https://decoy-dev.github.io/severedarchive/ — serves `main`, but only when the deploy workflow is run by hand. **Confirm the live build stamp before assuming this work is deployed.**
+- **Repo:** decoy-dev/severedarchive. `main` and `desktop-windows` now point at the same commit — the branch was merged after Slice C, so "28 commits ahead" is no longer true.
+- **Local:** the tree this was last worked in. `raw/` (107MB of source video) is gitignored, was never pushed, and exists only on the machine that encoded it.
 
 ## Where we are
 
@@ -19,11 +19,13 @@ The v2 archive-stack build was replaced by a desktop window manager. Work was re
 | A — headless contracts | ✅ done |
 | B — navigation surfaces (explorer + grid) | ✅ done |
 | C — window media lifecycle, playback tiers | ✅ done |
-| **D — mobile** | ⬜ **next** |
-| E — cleanup + docs | ⬜ |
-| F — deploy | ⬜ |
+| D — mobile | ✅ done |
+| E — cleanup + docs | ✅ done |
+| **F — deploy** | ⬜ **next** |
 
-**Tests:** `npm test` 114/114 pass. `npm run e2e` has **7 known failures, all owned by Slice E**: 4 × `boot.spec.ts` (asserts the deleted `HomeNotification`), 3 × `smoke.spec.ts` (asserts title-bar text `SEVEREDARCHIVE // FILE SYSTEM`, which the wordmark replaced). Nothing else is red. If you see a different count, something regressed.
+**Tests: everything is green.** `npm test` 114/114, `npm run lint` clean, `npm run e2e` **55 passed / 32 skipped / 0 failed** across all three Playwright projects. This is the first point in the branch where that is true — there are no expected-red tests any more, so **any** failure now is a regression. (114, not the 120 of Slice D: `stackLayout.test.ts` went with the module it tested. The 32 skips are viewport-gated by design.)
+
+**Node compatibility:** `src/test/setup.ts` restores `localStorage` under vitest's jsdom environment. Node 26 defines an inert `localStorage` global, vitest skips copying any jsdom window key that already exists as a Node global, and `selection.test.tsx` then dies in `beforeEach`. It is a shim for the test environment only — no production code depends on it.
 
 ## Current UX (on the branch, not live)
 
@@ -35,6 +37,7 @@ The v2 archive-stack build was replaced by a desktop window manager. Work was re
 6. Focused window plays `_full` with audio available; unfocused windows drop to the 240p `_thumb`, muted, under a scanline/grain overlay so the low resolution reads as intentional.
 7. Windows are **true-frame** — the aspect ratio applies to `.fw-body`, so the window is 40px taller than the media. No pillarboxing at any ratio.
 8. GRID is the same file list as large poster tiles. Clicking a tile returns to LIST and opens that window. There is no focused video inside grid view.
+9. **Below 861px the explorer does not render at all.** `ArchiveMobile` takes its place: one true-frame primary player, the file's metadata, and a single horizontally-scrolling row of poster tiles. Tapping a tile selects it; swiping the player advances selection; the row keeps the selected tile in view. No window is ever created, and GRID still works at every width.
 9. Build stamp bottom-right (`BLD <sha> · <utc>`) — compare against `git log --oneline -1` to detect a cached page.
 
 ## Architecture map
@@ -44,6 +47,9 @@ The v2 archive-stack build was replaced by a desktop window manager. Work was re
 - `src/lib/mediaController.ts` — owns every media node. One `<video>` per file, held in a host div React does not own. Surfaces register **empty slots**; the controller reconciles a desired placement map into DOM moves, keyed by `fileId`, priority `window > primary > preview`. This is what makes the reparent safe from React's unguarded `removeChild`.
 - `src/components/MediaLayer.tsx` — renders `src` declaratively from `wantsMedia()`. **Never write `src` imperatively** — a source-level test fails the build if you do.
 - `src/lib/selection.tsx` + `activation.ts` — one file-selection contract shared by explorer, grid and (soon) mobile. `activate` always selects first.
+- `src/lib/placement.ts` — pure: current state in, desired placement map + focus out. This is where the perf-tier policy lives (lite places exactly one node, the focused window or the mobile primary; full places everything). `Desktop` does nothing with the result but hand it to `reconcile`.
+- `src/hooks/useIsDesktop.ts` — the single desktop/mobile split, read from `DESKTOP_MIN_WIDTH` so "windows open here" and "the mobile row renders here" cannot drift into two breakpoints.
+- `src/components/ArchiveMobile.tsx` — the mobile surface. Same slot discipline as the explorer: an empty `primary` slot over a poster, never a `<video>` in JSX.
 - `src/lib/windowManager.ts` — pure z-order, focus, 3-window cap, slot allocation, cascade positions. No React, no DOM.
 - `src/lib/mediaMove.ts` — the single-element FLIP for the open beat.
 - `src/lib/keyboard.ts` — the keydown guard (arrow keys must not fire from inside a range input).
@@ -51,7 +57,7 @@ The v2 archive-stack build was replaced by a desktop window manager. Work was re
 - `src/data/mediaMeta.generated.ts` — build-generated `width`/`height`/`durationSec` per file, probed from `public/media/*_full.mp4`. Regenerate when media changes; a guard test fails if it drifts.
 - Media: `public/media/` — `_thumb.mp4` (240p), `_full.mp4` (720p), `_poster.jpg` per file01..file12.
 
-**Still present but scheduled for deletion in Slice E:** `ArchiveStack.tsx`, `HomeNotification.tsx`, `stackLayout.ts` (+ test). Nothing imports `HomeNotification` any more.
+**Deleted in Slice E:** `ArchiveStack.tsx`, `HomeNotification.tsx`, `stackLayout.ts` (+ test), and ~110 lines of dead stack/notification CSS. `grep -rn "ArchiveStack\|HomeNotification\|stackLayout\|lib/flip" src tests` returns nothing.
 
 ## Design rules (binding)
 
@@ -88,15 +94,19 @@ The remaining work was re-cut along **ownership boundaries** instead of file bou
 - **The 28/24px window cascade is too tight.** Three 16:9 windows are all 720×446 at 1440px, so the back two are ~97% covered — "max 3 windows" currently reads as a stack of one. Either widen the cascade, vary spawn size, or offset more aggressively.
 - **Decode ceiling has never been measured.** 1 full + 2 thumb + 1 preview + 1 backdrop = 5 concurrent decodes. If it fails on real hardware, the contract names the first cut: pause the explorer preview whenever a window is open.
 
-**Slice D owns**
-- Lite-tier policy for unfocused windows (poster-only) is not implemented — Slice C ships `full`/`thumb` only.
-- All of mobile: single swipeable row, in-place primary playback, no windows below 861px.
+**Left over from Slice D — needs a decision**
+- **The terminal chrome still switches at 640px while everything else switches at 861px.** Between 641 and 860 (the 768px tablet project) you get the mobile archive inside desktop chrome — tabs on top rather than at the bottom. Not broken, just inconsistent. Moving the `@media (max-width: 640px)` chrome block to 860 is a one-line change but a visible one at tablet, so it was left alone.
+- The contract contradicts itself on 768px: §3 says "768 (window opens)" while §3 rule 3 and §4 both say no window below 861. The implementation follows 861, `desktop.spec.ts` enforces it, and the prose is what is wrong.
 
-**Slice E owns**
-- Delete `ArchiveStack.tsx`, `HomeNotification.tsx`, `stackLayout.ts` + test, and their dead CSS.
-- Fix `boot.spec.ts` (4 failures) and `smoke.spec.ts` (3 failures).
-- `.tw-bell` CSS orphaned; `[data-tier='lite'] .file-window` duplicates the generic lite `.glass` rule.
-- `process-media.sh` still hardcodes `file01..fileNN` instead of scanning `raw/` — it already failed silently once when the archive doubled.
+**Left over from Slice E — needs a decision**
+- **Liquid refraction is now an orphaned subsystem.** `.stack-stage.liquid` was its only consumer and went with the stack, so `supportsLiquidRefraction()` (`perfTier.ts`), the `#liquid-refraction` SVG filter in `index.html`, the `main.tsx` wiring and `scripts/gen-displacement-map.mjs` are all unreferenced. Nothing currently applies refraction to any surface. It was left intact rather than half-deleted: reapplying it to `.glass` (windows, terminal) is a product decision, and deleting it is one too. Pick one.
+
+**Fixed in Slice E**
+- `boot.spec.ts` and `smoke.spec.ts` rewritten against what the app now is. Both gained a test rather than just losing assertions: boot asserts nothing is waiting to be dismissed, smoke asserts `.stage` clips rather than scrolls — a guard for the `overflow: clip` ruling, which had none.
+- The boot log said `6 FILES INDEXED` long after the archive doubled to 12. Now derived from `ARCHIVE.length`.
+- `.tw-bell` and the duplicate `[data-tier='lite'] .file-window` rule deleted.
+- `.refusal` was unreachable behind `.build-tag`: the flash is z-index 50 inside `.desktop`, but `.desktop` is 2 and the stamp was 6, so the stamp painted over every descendant regardless. `.desktop` → 3, `.build-tag` → 2.
+- Two backlog entries were already fixed and are struck: `process-media.sh` discovers `raw/file*.mp4` (it does not enumerate), and `--fs-lg` is in use at `.preview-meta-head`.
 
 **Smaller, unassigned**
 - `BUFFER FULL` does not announce to screen readers reliably (live region inserted with its text).
