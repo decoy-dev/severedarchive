@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from 'react'
 import { animate } from 'animejs'
-import { prefersReducedMotion } from '../lib/perfTier'
+import { prefersReducedMotion, type PerfTier } from '../lib/perfTier'
+import SessionPulse from './SessionPulse'
 
 export type TabId = 'archive' | 'about' | 'links'
 const TABS: { id: TabId; label: string }[] = [
@@ -10,12 +11,13 @@ const TABS: { id: TabId; label: string }[] = [
 ]
 
 export default function TerminalWindow({
-  tab, onTab, bodyRef, footer, children,
+  tab, onTab, bodyRef, footer, tier, children,
 }: {
   tab: TabId
   onTab: (t: TabId) => void
   bodyRef: RefObject<HTMLDivElement | null>
   footer?: ReactNode
+  tier: PerfTier
   children: ReactNode
 }) {
   // Binding ruling 7: this is a fixed background layer, not a window. It is not
@@ -34,9 +36,16 @@ export default function TerminalWindow({
 
   return (
     <section className="terminal-window glass" data-tab={tab} ref={rootRef}>
+      {/* The pulse canvas is a child of the bar and covers it, so the wave
+          fills this element and nothing else. The dot is its origin: the wave
+          leaves from wherever the dot actually renders, measured rather than
+          assumed. */}
       <header className="tw-titlebar">
         <span className="tw-title">FILE SYSTEM</span>
-        <span className="tw-status"><span className="tw-dim">SESSION OPEN</span></span>
+        <span className="tw-status">
+          <SessionPulse tier={tier} />
+          <span className="tw-dim">SESSION OPEN</span>
+        </span>
       </header>
       <nav className="tw-tabs" role="tablist" aria-label="Sections">
         {TABS.map((t) => (

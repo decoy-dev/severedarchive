@@ -208,7 +208,37 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   position: relative; z-index: 2;
 }
 .tw-dim { color: var(--dim); }
-.tw-status { display: flex; gap: 16px; align-items: center; font-size: var(--fs-sm); }
+.tw-status { display: flex; gap: 10px; align-items: center; font-size: var(--fs-sm); }
+
+/* Session dot — the wave's origin, left of SESSION OPEN. It blinks on the same
+   5s period as the pulse; the keyframes are the whole animation on lite tier
+   and under reduced motion, where the canvas never runs. */
+.tw-dot {
+  flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--acid); box-shadow: 0 0 6px rgba(182, 255, 46, 0.5);
+  animation: session-blink 5s steps(1, end) infinite;
+}
+@keyframes session-blink {
+  0%, 4% { opacity: 1; }
+  5%, 9% { opacity: 0.25; }
+  10%, 100% { opacity: 1; }
+}
+/* The dot flares for the length of its own pulse. Driven by a data attribute
+   from the canvas loop rather than a second animation, so the flare and the
+   wave cannot drift apart. */
+.tw-dot[data-pulsing] { box-shadow: 0 0 14px rgba(182, 255, 46, 0.85); }
+/* Grain, not glow: the buffer is a quarter-scale image stretched back up, and
+   `pixelated` is what keeps the cells hard-edged instead of interpolating them
+   into a soft gradient. */
+.tw-pulse {
+  position: absolute; inset: 0; z-index: -1;
+  pointer-events: none;
+  image-rendering: pixelated;
+  mix-blend-mode: screen;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tw-dot { animation: none; }
+}
 
 .tw-tabs { display: flex; gap: 0; padding: 10px 14px 0; flex: 0 0 auto; position: relative; z-index: 2; }
 .tw-tab {
@@ -302,14 +332,27 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   display: flex; flex-direction: column; min-height: 0; text-align: left;
   border: 1px solid var(--hair); background: var(--panel-solid);
 }
-.file-card:hover { border-color: var(--hair-bright); }
 .file-card-media { flex: 1 1 auto; min-height: 0; overflow: hidden; }
-.file-card-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Same resting dim as the explorer's tiles — a poster is a held frame until it
+   is the one you are pointing at. */
+.file-card-media img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.62; }
 .file-card-label {
   display: flex; justify-content: space-between; gap: 8px;
   padding: 8px 10px; font-size: var(--fs-xs); letter-spacing: 0.04em;
   border-top: 1px solid var(--hair); color: var(--text); flex: 0 0 auto;
 }
+/* The explorer's tile treatment, applied to the grid so the two views behave
+   the same way: the poster resolves, the frame takes the accent, the name goes
+   with it. Accent on hover/focus only, never at rest. */
+.file-card:hover, .file-card:focus-visible {
+  border-color: var(--acid); background: rgba(182, 255, 46, 0.05); outline: none;
+}
+.file-card:hover .file-card-media img,
+.file-card:focus-visible .file-card-media img { opacity: 1; }
+.file-card:hover .file-card-label,
+.file-card:focus-visible .file-card-label { color: var(--acid); border-top-color: var(--acid); }
+.file-card:hover .file-card-label .tw-dim,
+.file-card:focus-visible .file-card-label .tw-dim { color: var(--acid); }
 
 .grid-pager {
   display: flex; align-items: center; gap: 14px; justify-content: center;
@@ -704,6 +747,33 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   display: inline-flex; align-items: center; justify-content: center;
 }
 .fw-close:hover, .fw-close:focus-visible { color: var(--acid); background: rgba(182, 255, 46, 0.08); outline: none; }
+/* The VIEW ON INSTAGRAM popout: a small floating plate on the bottom edge of
+   the media, centred. It sits above the body (z 3 against the body's 2) and is
+   a sibling of it, because the body is the media controller's slot and nothing
+   of ours may be inside it. */
+.fw-insta {
+  position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+  z-index: 3;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px; white-space: nowrap;
+  font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--text);
+  background: rgba(6, 9, 11, 0.72); border: 1px solid var(--hair-bright);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  /* Fades up with the window rather than sitting on the media at full strength
+     the whole time — it is an offer, not a caption. */
+  opacity: 0.72; transition: opacity 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.file-window:hover .fw-insta { opacity: 1; }
+.fw-insta:hover, .fw-insta:focus-visible {
+  opacity: 1; color: var(--acid); border-color: var(--acid); outline: none;
+}
+/* A portrait window is ~250px wide and the label is 17 characters; let it shrink
+   rather than push the plate past the frame. */
+.fw-insta { max-width: calc(100% - 28px); overflow: hidden; text-overflow: ellipsis; }
+@media (prefers-reduced-motion: reduce) {
+  .fw-insta { transition: none; }
+}
+
 /* True-frame: `aspect-ratio` is set inline from generated metadata and the body
    is the element that carries it, so the window root's height is body + title bar
    + border and nothing is ever barred. flex-basis stays `auto` and the item does

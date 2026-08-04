@@ -67,6 +67,22 @@ export default function FileWindow({
           </button>
         </span>
       </header>
+      {/* Floats over the media, centred on its bottom edge. Outside `.fw-body`
+          on purpose: the body is the controller's slot and its contents are
+          moved in and out from under React, so nothing of ours may live in
+          there. Positioned against the window root instead, which is why the
+          offset is the body's own height rather than simply `bottom: 16px`. */}
+      <a
+        className="fw-insta"
+        href={file.postUrl}
+        target="_blank"
+        rel="noreferrer noopener"
+        // The window raises on pointerdown; without this the link would also
+        // ride that handler and the press would read as a drag on the chrome.
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        VIEW ON INSTAGRAM
+      </a>
       {/* An empty, stable slot — never a `<video>` of its own. mediaController
           moves this file's host in here and takes it away again; React only ever
           sees an empty div, which is the whole safety argument. */}

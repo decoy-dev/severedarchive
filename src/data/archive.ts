@@ -16,23 +16,36 @@ type ArchiveEntry = {
   kind: MediaKind
   tagline: string
   year: string
+  /**
+   * The post this clip came from. Every entry currently points at the profile —
+   * the per-post permalinks are not known here and must be filled in by the
+   * owner; `postUrl` is what the viewer's VIEW ON INSTAGRAM button links to.
+   */
+  postUrl: string
 }
 
 export type ArchiveFile = ArchiveEntry & MediaMeta
 
+/**
+ * Where a clip links when no per-post permalink has been set. Declared above
+ * ENTRIES because they reference it at module load — below it, this is a
+ * temporal-dead-zone throw on the first import rather than a lint warning.
+ */
+export const INSTAGRAM_PROFILE = 'https://instagram.com/severedarchive'
+
 const ENTRIES: ArchiveEntry[] = [
-  { id: 'file01', name: 'CHROME_SEQ', ext: 'MP4', kind: 'video', tagline: 'liquid metal study', year: '2026' },
-  { id: 'file02', name: 'HALO_DRIFT', ext: 'MP4', kind: 'video', tagline: 'render set to sound', year: '2026' },
-  { id: 'file03', name: 'GLASS_RITE', ext: 'MP4', kind: 'video', tagline: 'refraction pass', year: '2025' },
-  { id: 'file04', name: 'WIRE_SAINT', ext: 'MP4', kind: 'video', tagline: 'neo-2000s loop', year: '2025' },
-  { id: 'file05', name: 'COLD_BLOOM', ext: 'MP4', kind: 'video', tagline: 'particle bloom', year: '2025' },
-  { id: 'file06', name: 'STEEL_HYMN', ext: 'MP4', kind: 'video', tagline: 'metalheart sketch', year: '2024' },
-  { id: 'file07', name: 'VELVET_ROT', ext: 'MP4', kind: 'video', tagline: 'decay pass', year: '2025' },
-  { id: 'file08', name: 'NULL_CHOIR', ext: 'MP4', kind: 'video', tagline: 'vertical study', year: '2025' },
-  { id: 'file09', name: 'SALT_INDEX', ext: 'MP4', kind: 'video', tagline: 'crystalline loop', year: '2024' },
-  { id: 'file10', name: 'MERCY_LOOP', ext: 'MP4', kind: 'video', tagline: 'square format test', year: '2024' },
-  { id: 'file11', name: 'ASH_MERIDIAN', ext: 'MP4', kind: 'video', tagline: 'particle drift', year: '2024' },
-  { id: 'file12', name: 'GHOST_PROTOCOL', ext: 'MP4', kind: 'video', tagline: 'final transmission', year: '2026' },
+  { id: 'file01', name: 'CHROME_SEQ', ext: 'MP4', kind: 'video', tagline: 'liquid metal study', year: '2026' , postUrl: INSTAGRAM_PROFILE },
+  { id: 'file02', name: 'HALO_DRIFT', ext: 'MP4', kind: 'video', tagline: 'render set to sound', year: '2026' , postUrl: INSTAGRAM_PROFILE },
+  { id: 'file03', name: 'GLASS_RITE', ext: 'MP4', kind: 'video', tagline: 'refraction pass', year: '2025' , postUrl: INSTAGRAM_PROFILE },
+  { id: 'file04', name: 'WIRE_SAINT', ext: 'MP4', kind: 'video', tagline: 'neo-2000s loop', year: '2025' , postUrl: INSTAGRAM_PROFILE },
+  { id: 'file05', name: 'COLD_BLOOM', ext: 'MP4', kind: 'video', tagline: 'particle bloom', year: '2025' , postUrl: INSTAGRAM_PROFILE },
+  { id: 'file06', name: 'STEEL_HYMN', ext: 'MP4', kind: 'video', tagline: 'metalheart sketch', year: '2024' , postUrl: INSTAGRAM_PROFILE },
+  { id: 'file07', name: 'VELVET_ROT', ext: 'MP4', kind: 'video', tagline: 'decay pass', year: '2025' , postUrl: INSTAGRAM_PROFILE },
+  { id: 'file08', name: 'NULL_CHOIR', ext: 'MP4', kind: 'video', tagline: 'vertical study', year: '2025' , postUrl: INSTAGRAM_PROFILE },
+  { id: 'file09', name: 'SALT_INDEX', ext: 'MP4', kind: 'photo', tagline: 'crystalline loop', year: '2024' , postUrl: INSTAGRAM_PROFILE },
+  { id: 'file10', name: 'MERCY_LOOP', ext: 'MP4', kind: 'video', tagline: 'square format test', year: '2024' , postUrl: INSTAGRAM_PROFILE },
+  { id: 'file11', name: 'ASH_MERIDIAN', ext: 'MP4', kind: 'video', tagline: 'particle drift', year: '2024' , postUrl: INSTAGRAM_PROFILE },
+  { id: 'file12', name: 'GHOST_PROTOCOL', ext: 'MP4', kind: 'video', tagline: 'final transmission', year: '2026' , postUrl: INSTAGRAM_PROFILE },
 ]
 
 /**

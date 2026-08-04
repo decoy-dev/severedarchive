@@ -2,74 +2,84 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { animate } from 'animejs'
 import { thumbSrc, posterSrc } from '../data/archive'
 import { prefersReducedMotion, type PerfTier } from '../lib/perfTier'
-import { loopFadeAction, type LoopFadePhase } from '../lib/loopFade'
+import { loopHandoffDue } from '../lib/loopFade'
 
-/** Seconds. Long enough to read as a transition, short enough not to eat the clip. */
-const LOOP_FADE = 0.55
-/** How far down the tail goes. Not 0 — a hole to the void reads as a dropout. */
-const LOOP_FLOOR = 0.12
+/** Seconds. The dissolve at a file change and at a loop are the same beat. */
+const DISSOLVE_S = 0.9
+const DISSOLVE_MS = DISSOLVE_S * 1000
+
+/**
+ * A layer is a mounted `<video>`. Two can exist at once, and only ever for the
+ * length of a dissolve. The key is not the file id: a loop hands a clip over to
+ * a second copy of ITSELF, so both layers can name the same file and React
+ * still has to treat them as two elements.
+ */
+type Layer = { key: number; fileId: string }
+
+let nextKey = 1
 
 export default function BackgroundVideo({ tier, fileId }: { tier: PerfTier; fileId: string }) {
-  const [layers, setLayers] = useState<string[]>([fileId]) // newest last
-  const fading = useRef(false)
-
-  useEffect(() => {
-    if (layers[layers.length - 1] === fileId) return
-    if (tier === 'lite' || prefersReducedMotion()) { setLayers([fileId]); return }
-    setLayers((l) => [...l.slice(-1), fileId])
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileId, tier])
-
+  const [layers, setLayers] = useState<Layer[]>(() => [{ key: nextKey++, fileId }])
+  /** the layer key currently being dissolved in, so a fade is never restarted */
+  const fadingKey = useRef<number | null>(null)
   const incomingRef = useRef<HTMLVideoElement | null>(null)
-  useEffect(() => {
-    if (layers.length < 2 || !incomingRef.current || fading.current) return
-    fading.current = true
-    animate(incomingRef.current, {
-      opacity: [0, 1],
-      duration: 600,
-      ease: 'outQuad',
-      onComplete: () => { fading.current = false; setLayers((l) => l.slice(-1)) },
-    })
-  }, [layers])
 
-  // Loop softening for the settled layer. The backdrop is one clip on repeat,
-  // so its hard wrap is the most-seen cut in the app; `loopFadeAction` decides
-  // when to dip and when to come back, and this only carries out the verdict.
-  //
-  // Deliberately NOT attached while a file change is crossfading: that beat
-  // animates opacity on the incoming layer, and two owners of one property
-  // fight. `layers.length === 1` is the steady state, which is also the only
-  // time a wrap is what the eye is on.
-  const loopPhase = useRef<LoopFadePhase>('in')
-  const lastTime = useRef(0)
+  const top = layers[layers.length - 1]
+
+  // A file change: hand over to the new file. Same mechanism as the loop below,
+  // which is the point — there is one transition in this component, not two.
+  useEffect(() => {
+    if (top.fileId === fileId) return
+    if (tier === 'lite' || prefersReducedMotion()) {
+      setLayers([{ key: nextKey++, fileId }])
+      return
+    }
+    setLayers((l) => [...l.slice(-1), { key: nextKey++, fileId }])
+  }, [fileId, tier, top.fileId])
+
+  // A loop: hand the clip over to a fresh copy of itself before the tail runs
+  // out, so the head and the tail are on screen together and the wrap is a
+  // dissolve instead of a cut. Attached only while a single layer is on screen —
+  // during a dissolve there is already an incoming layer, and `loopHandoffDue`
+  // refuses to start a second one anyway.
   const settled = layers.length === 1
-  const attachLoopFade = useCallback((el: HTMLVideoElement | null) => {
+  const attachLoopHandoff = useCallback((el: HTMLVideoElement | null) => {
     if (!el || prefersReducedMotion()) return
-    loopPhase.current = 'in'
-    lastTime.current = el.currentTime
     const onTime = () => {
-      const action = loopFadeAction({
+      const due = loopHandoffDue({
         time: el.currentTime,
-        last: lastTime.current,
         duration: el.duration,
-        fade: LOOP_FADE,
-        phase: loopPhase.current,
+        fade: DISSOLVE_S,
+        handingOver: fadingKey.current !== null,
       })
-      lastTime.current = el.currentTime
-      if (action.kind === 'none') return
-      loopPhase.current = action.to
-      animate(el, {
-        opacity: action.to === 'out' ? LOOP_FLOOR : 1,
-        duration: action.ms,
-        ease: 'linear',
-      })
+      if (!due) return
+      setLayers((l) => (l.length > 1 ? l : [...l, { key: nextKey++, fileId: l[0].fileId }]))
     }
     el.addEventListener('timeupdate', onTime)
-    return () => {
-      el.removeEventListener('timeupdate', onTime)
-      el.style.opacity = ''
-    }
+    return () => el.removeEventListener('timeupdate', onTime)
   }, [])
+
+  // One dissolve, whatever caused it. Keyed on the incoming layer rather than a
+  // boolean: a file change landing mid-dissolve replaces the incoming layer, and
+  // a plain "already fading" guard would leave that replacement stuck at zero
+  // opacity for the rest of its life.
+  useEffect(() => {
+    const incoming = layers.length > 1 ? layers[layers.length - 1] : null
+    if (!incoming || !incomingRef.current || fadingKey.current === incoming.key) return
+    fadingKey.current = incoming.key
+    animate(incomingRef.current, {
+      opacity: [0, 1],
+      duration: DISSOLVE_MS,
+      ease: 'linear',
+      onComplete: () => {
+        fadingKey.current = null
+        // Collapse to the layer that just arrived — but only if it is still the
+        // top one, or a file change that landed during the dissolve would be
+        // thrown away.
+        setLayers((l) => (l[l.length - 1].key === incoming.key ? l.slice(-1) : l))
+      },
+    })
+  }, [layers])
 
   if (tier === 'lite') {
     return (
@@ -80,16 +90,20 @@ export default function BackgroundVideo({ tier, fileId }: { tier: PerfTier; file
   }
   return (
     <div className="bg-video" aria-hidden="true">
-      {layers.map((id, i) => {
+      {layers.map((layer, i) => {
         const incoming = i === layers.length - 1 && layers.length > 1
         return (
           <video
-            key={id}
-            ref={incoming ? incomingRef : settled ? attachLoopFade : undefined}
-            src={thumbSrc(id)}
-            poster={posterSrc(id)}
+            key={layer.key}
+            ref={incoming ? incomingRef : settled ? attachLoopHandoff : undefined}
+            src={thumbSrc(layer.fileId)}
+            poster={posterSrc(layer.fileId)}
             autoPlay
             muted
+            // `loop` stays as the safety net. The dissolve is what should carry
+            // the wrap, but if `timeupdate` never arrives — a hidden tab, a
+            // stalled decode — this keeps the backdrop moving instead of
+            // freezing on a last frame.
             loop
             playsInline
             style={{ position: 'absolute', inset: 0, opacity: incoming ? 0 : 1 }}

@@ -50,9 +50,9 @@ function AppShell() {
     if (!booted) return
     const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 300))
     const cancel = window.cancelIdleCallback ?? window.clearTimeout
-    const handle = idle(() => preloadAboutObject())
+    const handle = idle(() => preloadAboutObject(tier))
     return () => cancel(handle as number)
-  }, [booted])
+  }, [booted, tier])
 
   // The application has exactly one window-level keydown listener and Desktop
   // registers it (§4.6). App only says what a tab shift means.
@@ -71,7 +71,7 @@ function AppShell() {
         <BootSequence onDone={() => setBooted(true)} />
       ) : (
         <Desktop onTabShift={shiftTab} tier={tier}>
-          <TerminalWindow tab={tab} onTab={setTab} bodyRef={bodyRef}>
+          <TerminalWindow tab={tab} onTab={setTab} bodyRef={bodyRef} tier={tier}>
             {tab === 'archive' && <ArchivePanel />}
             {tab === 'about' && <AboutPanel tier={tier} />}
             {tab === 'links' && <LinksPanel />}

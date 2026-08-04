@@ -23,6 +23,19 @@ const INIT_STEP_MS = 420
 const INIT_SETTLE_MS = 320
 
 /**
+ * And the way back down, when the last window closes. Shorter than the
+ * bring-up on purpose: this one runs after the user has already got what they
+ * asked for, so it is a thing to watch rather than a thing to wait through.
+ */
+const DOWN_LINES = [
+  '> RELEASING MEDIA NODES ..... OK',
+  '> FLUSHING BUFFER ........... OK',
+  '> DASHBOARD OFFLINE',
+]
+const DOWN_STEP_MS = 300
+const DOWN_SETTLE_MS = 320
+
+/**
  * Module scope on purpose: "the first time" means the first time this page load,
  * and this component unmounts every time the last window closes and again on
  * every trip to ABOUT. A `useState` here would replay the sequence on each of
@@ -60,17 +73,25 @@ export default function WindowDashboard({
   onFocus,
   onClose,
   windowNode,
+  onShutdownComplete,
 }: {
   windows: readonly OpenWindowInfo[]
   onFocus: (id: string) => void
   onClose: (id: string) => void
   /** Read-only accessor for a window's node — see `WindowView.node`. */
   windowNode: (id: string) => HTMLElement | null
+  /**
+   * Fired when the shut-down sequence has finished and the box should go back
+   * to the standby prompt. The explorer keeps this component mounted with an
+   * empty window list until then — otherwise the panel would vanish on the same
+   * frame as the last window and there would be nothing left to power down.
+   */
+  onShutdownComplete: () => void
 }) {
   const media = useMediaController()
   // Reduced motion skips the sequence rather than shortening it: the whole
   // content of the beat is motion, and the readout underneath is the point.
-  const [phase, setPhase] = useState<'init' | 'ready'>(
+  const [phase, setPhase] = useState<'init' | 'ready' | 'down'>(
     () => (hasInitialized || prefersReducedMotion() ? 'ready' : 'init'),
   )
   const [revealed, setRevealed] = useState(0)
@@ -135,7 +156,33 @@ export default function WindowDashboard({
     return () => { cancelAnimationFrame(raf); lastWritten.current.clear() }
   }, [phase, ids, windows.length, media, windowNode])
 
+  // Down when the last window goes, and back up if one is opened again while
+  // the sequence is still running — a reopen is a cancel, not a queue.
+  const empty = windows.length === 0
   useEffect(() => {
+    if (empty && phase === 'ready') setPhase('down')
+    else if (!empty && phase === 'down') setPhase('ready')
+  }, [empty, phase])
+
+  useEffect(() => {
+    if (phase !== 'down') return
+    if (prefersReducedMotion()) { onShutdownComplete(); return }
+    let settle: number | undefined
+    let step = 0
+    setRevealed(0)
+    const tick = window.setInterval(() => {
+      step += 1
+      setRevealed(step)
+      if (step >= DOWN_LINES.length) {
+        window.clearInterval(tick)
+        settle = window.setTimeout(onShutdownComplete, DOWN_SETTLE_MS)
+      }
+    }, DOWN_STEP_MS)
+    return () => { window.clearInterval(tick); window.clearTimeout(settle) }
+  }, [phase, onShutdownComplete])
+
+  useEffect(() => {
+    if (phase === 'down') return
     if (phase === 'ready') { hasInitialized = true; return }
     let settle: number | undefined
     let step = 0
@@ -171,12 +218,16 @@ export default function WindowDashboard({
     })
   }, [phase])
 
-  if (phase === 'init') {
+  if (phase === 'init' || phase === 'down') {
+    const down = phase === 'down'
+    const lines = down ? DOWN_LINES : INIT_LINES
     return (
-      <div className="window-dash is-init" data-window-dash data-dash-phase="init">
-        <p className="dash-head">&gt; INITIALIZING WINDOW DASHBOARD</p>
+      <div className="window-dash is-init" data-window-dash data-dash-phase={phase}>
+        <p className="dash-head">
+          &gt; {down ? 'CLOSING WINDOW DASHBOARD' : 'INITIALIZING WINDOW DASHBOARD'}
+        </p>
         <div className="dash-boot" role="status" aria-live="polite">
-          {INIT_LINES.slice(0, revealed).map((line, i) => (
+          {lines.slice(0, revealed).map((line, i) => (
             <div key={line} className="dash-boot-line">
               {line}
               {i === revealed - 1 && <span className="standby-caret" aria-hidden="true" />}

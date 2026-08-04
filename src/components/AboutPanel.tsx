@@ -1,15 +1,26 @@
-import { Suspense, lazy } from 'react'
+import { useEffect, useState, type ComponentType } from 'react'
 import type { PerfTier } from '../lib/perfTier'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 
 /**
  * Split out, not statically imported: three.js is ~590kB of the bundle and this
  * is one decorative object on one tab. Loading it with the app would triple the
- * cost of the first paint for everyone who never opens ABOUT. The panel only
- * mounts when the tab is selected, so the chunk is fetched exactly then.
+ * cost of the first paint for everyone who never opens ABOUT.
+ *
+ * Held in state rather than behind `lazy` + `Suspense`, and that is the whole
+ * fix for the pop-in. React throttles hiding a Suspense fallback — it keeps the
+ * fallback up for ~300ms so a fast resolution cannot flicker — so even with the
+ * chunk, the SVG, the extruded solid and the WebGL context all warmed at
+ * start-up, the first visit to ABOUT still showed an empty column for 300ms and
+ * then snapped in. Measured: 312ms from click to the component's effect
+ * running, of which 0.1ms was actually looking up the warm renderer. Resolving
+ * the module into state has no fallback to throttle, so a warm module mounts on
+ * the next render.
  */
 const loadAsciiObject = () => import('./AboutAsciiObject')
-const AboutAsciiObject = lazy(loadAsciiObject)
+type ObjectComponent = ComponentType<{ tier: PerfTier }>
+/** Resolved once per page load and reused, so a later visit re-mounts instantly. */
+let resolved: ObjectComponent | null = null
 
 /** The width at which the object is mounted at all. Shared with `hasRoom`. */
 const OBJECT_QUERY = '(min-width: 641px)'
@@ -23,13 +34,13 @@ const OBJECT_QUERY = '(min-width: 641px)'
  * The width gate is the one from `hasRoom`: a phone never mounts the object, so
  * it must never fetch 590kB to be ready for something that will not happen.
  */
-export function preloadAboutObject(): void {
+export function preloadAboutObject(tier: PerfTier): void {
   if (!window.matchMedia(OBJECT_QUERY).matches) return
-  void loadAsciiObject()
-  // The scene cannot be built until the SVG lands, so warming the module alone
-  // would just move the wait. A plain fetch is enough — the loader's own request
-  // then answers from cache.
-  void fetch(`${import.meta.env.BASE_URL}assets/about-upload-mark.svg`).catch(() => {})
+  // Warming the module and the file was not enough — the tab still took ~390ms
+  // to go live, because parsing the SVG and extruding the bevelled solid ran
+  // after the panel mounted. `warmAboutObject` does that work here instead, so
+  // the first visit renders on its first frame.
+  void loadAsciiObject().then((m) => m.warmAboutObject(tier)).catch(() => {})
 }
 
 export default function AboutPanel({ tier }: { tier: PerfTier }) {
@@ -38,6 +49,25 @@ export default function AboutPanel({ tier }: { tier: PerfTier }) {
   // some. Gating the mount rather than the display also means a phone never
   // fetches the three.js chunk at all.
   const hasRoom = useMediaQuery(OBJECT_QUERY)
+
+  // Starts non-null on every visit after the first, so this is a no-op then.
+  // The initializer form, not `useState(resolved)`. React treats a function
+  // passed to useState as a lazy initializer and CALLS it — with a component
+  // that means invoking it outside a render, which broke every visit after the
+  // first once `resolved` was set.
+  const [ObjectComponent, setObjectComponent] = useState<ObjectComponent | null>(() => resolved)
+  useEffect(() => {
+    if (!hasRoom || resolved) return
+    let live = true
+    void loadAsciiObject()
+      .then((m) => {
+        resolved = m.default
+        // The updater form, or React would call the component as an initializer.
+        if (live) setObjectComponent(() => m.default)
+      })
+      .catch(() => {})
+    return () => { live = false }
+  }, [hasRoom])
 
   return (
     <div className="panel about-panel" data-with-object={hasRoom ? 'true' : 'false'}>
@@ -64,11 +94,9 @@ export default function AboutPanel({ tier }: { tier: PerfTier }) {
       </div>
       {/* No spinner: the object is decorative, so its absence is an empty
           column for a moment rather than something to announce. */}
-      {hasRoom && (
-        <Suspense fallback={<div className="ascii-object" aria-hidden="true" />}>
-          <AboutAsciiObject tier={tier} />
-        </Suspense>
-      )}
+      {hasRoom && (ObjectComponent
+        ? <ObjectComponent tier={tier} />
+        : <div className="ascii-object" aria-hidden="true" />)}
     </div>
   )
 }

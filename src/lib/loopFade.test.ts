@@ -1,52 +1,38 @@
 import { describe, it, expect } from 'vitest'
-import { loopFadeAction } from './loopFade'
+import { loopHandoffDue } from './loopFade'
 
-const base = { time: 5, last: 4.75, duration: 12, fade: 0.5, phase: 'in' } as const
+const base = { time: 5, duration: 12, fade: 0.9, handingOver: false }
 
-describe('loopFadeAction', () => {
-  it('does nothing in the body of a clip', () => {
-    expect(loopFadeAction(base)).toEqual({ kind: 'none' })
+describe('loopHandoffDue', () => {
+  it('is quiet in the body of a clip', () => {
+    expect(loopHandoffDue(base)).toBe(false)
   })
 
-  it('dips across the tail, over exactly the time that is left', () => {
-    expect(loopFadeAction({ ...base, time: 11.7, last: 11.45 })).toEqual({
-      kind: 'fade', to: 'out', ms: expect.closeTo(300, 5),
-    })
+  it('calls the handover once the tail is inside the dissolve, and not before', () => {
+    // The boundary is one dissolve from the end: 12 - 0.9 = 11.1.
+    expect(loopHandoffDue({ ...base, time: 11.05 })).toBe(false)
+    expect(loopHandoffDue({ ...base, time: 11.15 })).toBe(true)
+    expect(loopHandoffDue({ ...base, time: 11.9 })).toBe(true)
   })
 
-  it('does not restart the dip on every tick', () => {
-    // `timeupdate` fires ~4x a second; a fade re-issued each time would reset to
-    // full opacity and never actually darken.
-    expect(loopFadeAction({ ...base, time: 11.8, last: 11.7, phase: 'out' })).toEqual({ kind: 'none' })
+  it('does not call it twice — the incoming layer already exists', () => {
+    // `timeupdate` keeps firing through the whole dissolve. Without this the
+    // outgoing layer would stack a new copy of itself on every tick.
+    expect(loopHandoffDue({ ...base, time: 11.5, handingOver: true })).toBe(false)
   })
 
-  it('comes back up when time goes backwards', () => {
-    // The wrap fires no event of its own — this is the only signal there is.
-    expect(loopFadeAction({ ...base, time: 0.05, last: 11.95, phase: 'out' })).toEqual({
-      kind: 'fade', to: 'in', ms: 500,
-    })
+  it('still reports the tail when time overshoots duration by a frame', () => {
+    expect(loopHandoffDue({ ...base, time: 12.02 })).toBe(true)
   })
 
-  it('reads the wrap as a wrap even though the new time is also near a boundary', () => {
-    // The first tick after wrapping is within `fade` of the start; if the tail
-    // test ran first on a very short clip it would re-dip immediately.
-    const a = loopFadeAction({ ...base, duration: 1.6, time: 0.02, last: 1.55, phase: 'out' })
-    expect(a).toEqual({ kind: 'fade', to: 'in', ms: 500 })
-  })
-
-  it('leaves clips too short to fade alone', () => {
-    // 1.4s with a 0.5s fade would be dipping or recovering most of its life.
-    expect(loopFadeAction({ ...base, duration: 1.4, time: 1.1, last: 0.85 })).toEqual({ kind: 'none' })
+  it('leaves clips too short to dissolve alone', () => {
+    // 2.4s with a 0.9s dissolve would spend most of its life doubled.
+    expect(loopHandoffDue({ ...base, duration: 2.4, time: 1.6 })).toBe(false)
   })
 
   it('says nothing until metadata gives it a duration', () => {
-    expect(loopFadeAction({ ...base, duration: NaN })).toEqual({ kind: 'none' })
-    expect(loopFadeAction({ ...base, duration: Infinity })).toEqual({ kind: 'none' })
-    expect(loopFadeAction({ ...base, duration: 0 })).toEqual({ kind: 'none' })
-  })
-
-  it('floors the dip so a late tick is not a blackout', () => {
-    const a = loopFadeAction({ ...base, time: 11.99, last: 11.8 })
-    expect(a).toEqual({ kind: 'fade', to: 'out', ms: 80 })
+    expect(loopHandoffDue({ ...base, duration: NaN })).toBe(false)
+    expect(loopHandoffDue({ ...base, duration: Infinity })).toBe(false)
+    expect(loopHandoffDue({ ...base, duration: 0 })).toBe(false)
   })
 })

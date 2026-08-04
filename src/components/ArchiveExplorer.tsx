@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { ARCHIVE, fileById, formatDuration, formatResolution, posterSrc } from '../data/archive'
 import { useArchiveSelection } from '../lib/selection'
 import { useWindowView } from '../lib/windowRegistry'
@@ -25,6 +25,13 @@ export default function ArchiveExplorer() {
   // (selection contract rule 1). Desktop publishes into it from above.
   const { windows: openWindows, focus, close, node: windowNode } = useWindowView()
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
+
+  // The dashboard outlives the last window by the length of its own shut-down
+  // sequence. Without this the panel would be unmounted on the same frame the
+  // last window closed, and there would be nothing left to power down.
+  const [dashMounted, setDashMounted] = useState(false)
+  useEffect(() => { if (openWindows.length > 0) setDashMounted(true) }, [openWindows.length])
+  const onShutdownComplete = useCallback(() => setDashMounted(false), [])
 
   const selectedFile = fileById(selectedId) ?? ARCHIVE[0]
 
@@ -89,8 +96,14 @@ export default function ArchiveExplorer() {
           was otherwise dead space at exactly the moment there was most to
           report. */}
       <div className="explorer-preview">
-        {openWindows.length > 0 ? (
-          <WindowDashboard windows={openWindows} onFocus={focus} onClose={close} windowNode={windowNode} />
+        {dashMounted ? (
+          <WindowDashboard
+            windows={openWindows}
+            onFocus={focus}
+            onClose={close}
+            windowNode={windowNode}
+            onShutdownComplete={onShutdownComplete}
+          />
         ) : (
           <div className="preview-standby" data-preview-standby>
             <p className="standby-line">&gt; AWAITING SELECTION.</p>

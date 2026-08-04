@@ -113,6 +113,29 @@ test.describe('desktop explorer', () => {
     await expect(page.locator('[data-dash-row]')).toHaveCount(1)
   })
 
+  test('closing the last window powers the dashboard down before standby', async ({ page }) => {
+    await ready(page)
+    await page.locator('[data-file-row]').nth(0).click()
+    await expect(page.locator('[data-dash-phase="ready"]')).toBeVisible({ timeout: 6000 })
+
+    await page.locator('[data-dash-row="file01"] .dash-close').click()
+    // The window goes at once; the panel takes its leave.
+    await expect(page.locator('[data-file-window]')).toHaveCount(0)
+    await expect(page.locator('[data-dash-phase="down"]')).toBeVisible()
+    await expect(page.locator('[data-window-dash]')).toContainText('RELEASING MEDIA NODES')
+    await expect(page.locator('[data-preview-standby]')).toBeVisible({ timeout: 5000 })
+
+    // Reopening during the sequence is a cancel, not a queue: the panel comes
+    // straight back to the readout rather than finishing its shutdown first.
+    await page.locator('[data-file-row]').nth(1).click()
+    await expect(page.locator('[data-dash-phase="ready"]')).toBeVisible()
+    await page.locator('[data-dash-row="file02"] .dash-close').click()
+    await expect(page.locator('[data-dash-phase="down"]')).toBeVisible()
+    await page.locator('[data-file-row]').nth(2).click()
+    await expect(page.locator('[data-dash-phase="ready"]')).toBeVisible()
+    await expect(page.locator('[data-dash-row]')).toHaveCount(1)
+  })
+
   test('the readout is live: position tracks a drag, the clock ticks', async ({ page }) => {
     await ready(page)
     await page.locator('[data-file-row]').nth(0).click()

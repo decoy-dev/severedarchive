@@ -24,6 +24,122 @@ import { prefersReducedMotion, type PerfTier } from '../lib/perfTier'
  *
  * Decorative: the effect DOM is aria-hidden and never enters the tab order.
  */
+
+/**
+ * The built solid, cached per tier and shared by every mount.
+ *
+ * Warming the chunk and the SVG file was not enough to stop the object popping
+ * in: with both already cached the tab still took ~390ms to go live, because
+ * parsing the SVG and extruding it — with bevels, at `curveSegments: 8` — is
+ * real work that was happening after the panel mounted. This moves that work
+ * into the site's start-up, where nothing is waiting on it.
+ *
+ * Cached by tier because `bevelSegments` differs between them, and never
+ * disposed: it outlives every mount by design, so the trip to ABOUT and back
+ * costs nothing at all the second time.
+ */
+const geometryCache = new Map<string, Promise<THREE.ExtrudeGeometry>>()
+
+function markGeometry(lite: boolean): Promise<THREE.ExtrudeGeometry> {
+  const key = lite ? 'lite' : 'full'
+  const cached = geometryCache.get(key)
+  if (cached) return cached
+  const built = new SVGLoader()
+    .loadAsync(`${import.meta.env.BASE_URL}assets/about-upload-mark.svg`)
+    .then((data) => {
+      const shapes = data.paths.flatMap((path) => path.toShapes())
+      const geometry = new THREE.ExtrudeGeometry(shapes, {
+        depth: 20,
+        steps: 1,
+        curveSegments: 8,
+        bevelEnabled: true,
+        bevelThickness: 3,
+        bevelSize: 2.1,
+        bevelSegments: lite ? 1 : 3,
+      })
+      // SVG y points down; flip once, then centre from the ACTUAL bounds.
+      // Hand-authored offsets are what let a rotation drift off-axis.
+      geometry.scale(1, -1, 1)
+      geometry.computeBoundingBox()
+      const center = new THREE.Vector3()
+      geometry.boundingBox!.getCenter(center)
+      geometry.translate(-center.x, -center.y, -center.z)
+      geometry.computeBoundingBox()
+      geometry.computeVertexNormals()
+      return geometry
+    })
+  geometryCache.set(key, built)
+  // A failed build must not be cached as a permanent failure — the component
+  // falls back to the flat SVG, and a later mount may well succeed.
+  built.catch(() => geometryCache.delete(key))
+  return built
+}
+
+/**
+ * Renderer and ASCII pass, built once and kept.
+ *
+ * This is where the pop-in actually lived. With the chunk, the file and the
+ * geometry all warm, the tab still took ~330ms to show anything, and the gap
+ * was between the host mounting (3.7ms) and the effect's DOM appearing
+ * (329ms) — i.e. `new THREE.WebGLRenderer`. Creating a WebGL context is that
+ * expensive, and it was happening on the click.
+ *
+ * So the rig is created during start-up and reused for the life of the page.
+ * The object is a singleton — one decorative mark on one tab, never two at
+ * once — so a single retained context is the same cost the old code paid per
+ * visit, minus the wait. It is deliberately never disposed; the component
+ * detaches the effect's DOM on unmount and leaves the rig alone.
+ */
+type Rig = { renderer: THREE.WebGLRenderer; effect: AsciiEffect }
+const rigCache = new Map<string, Rig | null>()
+
+function markRig(lite: boolean): Rig | null {
+  const key = lite ? 'lite' : 'full'
+  if (rigCache.has(key)) return rigCache.get(key) ?? null
+
+  let renderer: THREE.WebGLRenderer
+  try {
+    renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false, powerPreference: 'low-power' })
+  } catch {
+    // No WebGL: cached as a null rig so every later mount goes straight to the
+    // flat fallback instead of retrying a context that will not come.
+    rigCache.set(key, null)
+    return null
+  }
+  renderer.setClearColor(0x000000, 0)
+  renderer.outputColorSpace = THREE.SRGBColorSpace
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, lite ? 1 : 1.35))
+
+  const effect = new AsciiEffect(renderer, ' .,:;irsXA253hMHGS#9B&@', {
+    resolution: lite ? 0.12 : 0.18,
+    scale: 1,
+    color: false,
+    alpha: true,
+    block: false,
+    invert: false,
+    // `strResolution` is missing from @types/three's AsciiEffectOptions but is
+    // read by the runtime (three/examples/jsm/effects/AsciiEffect.js) and
+    // documented in its own JSDoc. Stated explicitly rather than left to the
+    // default because it is the setting the prototype's alignment depends on.
+    strResolution: 'low',
+  } as AsciiEffectOptions & { strResolution: 'low' })
+  effect.domElement.setAttribute('aria-hidden', 'true')
+
+  const rig = { renderer, effect }
+  rigCache.set(key, rig)
+  return rig
+}
+
+/**
+ * Build the solid and the renderer now, from the app's start-up, so the first
+ * visit to ABOUT renders on its first frame. Called via `preloadAboutObject`.
+ */
+export function warmAboutObject(tier: PerfTier): void {
+  const lite = tier === 'lite'
+  void markGeometry(lite).catch(() => {})
+  markRig(lite)
+}
+
 export default function AboutAsciiObject({ tier }: { tier: PerfTier }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
 
@@ -43,36 +159,16 @@ export default function AboutAsciiObject({ tier }: { tier: PerfTier }) {
     let geometry: THREE.ExtrudeGeometry | null = null
     let material: THREE.MeshStandardMaterial | null = null
     let sideMaterial: THREE.MeshStandardMaterial | null = null
-    let renderer: THREE.WebGLRenderer
-    let effect: AsciiEffect
-
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(27, 1, 0.1, 5000)
 
-    try {
-      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false, powerPreference: 'low-power' })
-    } catch {
+    // Warm if start-up got there first, built here if it did not.
+    const rig = markRig(lite)
+    if (!rig) {
       showFallback()
       return
     }
-    renderer.setClearColor(0x000000, 0)
-    renderer.outputColorSpace = THREE.SRGBColorSpace
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, lite ? 1 : 1.35))
-
-    effect = new AsciiEffect(renderer, ' .,:;irsXA253hMHGS#9B&@', {
-      resolution: lite ? 0.12 : 0.18,
-      scale: 1,
-      color: false,
-      alpha: true,
-      block: false,
-      invert: false,
-      // `strResolution` is missing from @types/three's AsciiEffectOptions but is
-      // read by the runtime (three/examples/jsm/effects/AsciiEffect.js) and
-      // documented in its own JSDoc. Stated explicitly rather than left to the
-      // default because it is the setting the prototype's alignment depends on.
-      strResolution: 'low',
-    } as AsciiEffectOptions & { strResolution: 'low' })
-    effect.domElement.setAttribute('aria-hidden', 'true')
+    const { renderer, effect } = rig
     host.appendChild(effect.domElement)
 
     scene.add(new THREE.HemisphereLight(0xf5fff0, 0x111810, 1.15))
@@ -166,30 +262,13 @@ export default function AboutAsciiObject({ tier }: { tier: PerfTier }) {
     const onVisibility = () => { if (!document.hidden && ready) render(performance.now(), true) }
     document.addEventListener('visibilitychange', onVisibility)
 
-    new SVGLoader()
-      .loadAsync(`${import.meta.env.BASE_URL}assets/about-upload-mark.svg`)
-      .then((data) => {
-        // A load that lands after the tab was left must not build a scene.
+    // Already built if the site warmed it during start-up, which is the point:
+    // this resolves in a microtask rather than after a parse and an extrude.
+    markGeometry(lite)
+      .then((built) => {
+        // A build that lands after the tab was left must not make a scene.
         if (disposed) return
-        const shapes = data.paths.flatMap((path) => path.toShapes())
-        geometry = new THREE.ExtrudeGeometry(shapes, {
-          depth: 20,
-          steps: 1,
-          curveSegments: 8,
-          bevelEnabled: true,
-          bevelThickness: 3,
-          bevelSize: 2.1,
-          bevelSegments: lite ? 1 : 3,
-        })
-        // SVG y points down; flip once, then centre from the ACTUAL bounds.
-        // Hand-authored offsets are what let a rotation drift off-axis.
-        geometry.scale(1, -1, 1)
-        geometry.computeBoundingBox()
-        const center = new THREE.Vector3()
-        geometry.boundingBox!.getCenter(center)
-        geometry.translate(-center.x, -center.y, -center.z)
-        geometry.computeBoundingBox()
-        geometry.computeVertexNormals()
+        geometry = built
 
         material = new THREE.MeshStandardMaterial({ color: 0xf4f8f1, roughness: 0.43, metalness: 0.48 })
         sideMaterial = new THREE.MeshStandardMaterial({ color: 0x465044, roughness: 0.58, metalness: 0.36 })
@@ -211,10 +290,13 @@ export default function AboutAsciiObject({ tier }: { tier: PerfTier }) {
       resizeObserver.disconnect()
       document.removeEventListener('visibilitychange', onVisibility)
       if (model) scene.remove(model)
-      geometry?.dispose()
+      // NOT disposed: the geometry is the shared cached build (see
+      // `markGeometry`) and outlives this mount on purpose. Disposing it here
+      // would hand the next visit a gutted buffer. Materials are per-mount.
       material?.dispose()
       sideMaterial?.dispose()
-      renderer.dispose()
+      // The rig is shared and outlives this mount (see `markRig`) — detach its
+      // DOM, but do not dispose the renderer or the context behind it.
       effect.domElement.remove()
       // The panel unmounts on every tab switch, so anything left attached here
       // accumulates one node per visit.
