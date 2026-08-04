@@ -234,13 +234,54 @@ export default function AboutAsciiObject({ tier }: { tier: PerfTier }) {
       if (!reduced && !disposed) raf = requestAnimationFrame(tick)
     }
 
+    /**
+     * Fit the rendered glyph block to the box, and centre it.
+     *
+     * AsciiEffect chooses its own column count and the result almost never
+     * divides the box evenly — measured at 1440px it lays out 561px of columns
+     * inside a 551px host. The excess was clipped off the right, which both cut
+     * the mark and pushed what remained a few characters left of centre, so the
+     * object read as off-centre in a column that is in fact centred exactly
+     * between the copy and the panel edge.
+     *
+     * Scaling by the overflow ratio is the fix that does not fight the effect
+     * for control of its own grid: ~2% on a field of text is invisible, and the
+     * alternative (hunting for a width that happens to divide evenly) would
+     * have to re-run on every resize and could fail to find one.
+     */
+    function fitEffect() {
+      const dom = effect.domElement as HTMLElement
+      const table = dom.firstElementChild
+      if (!table || !host) return
+      // Cleared before measuring, or the second pass measures a block that is
+      // already scaled and concludes it fits — which is how this silently did
+      // nothing the first time.
+      dom.style.transform = ''
+      const range = document.createRange()
+      range.selectNodeContents(table)
+      const ink = range.getBoundingClientRect()
+      if (!ink.width || !size.width) return
+      const scale = Math.min(1, size.width / ink.width)
+      if (scale >= 1) return
+      // From the LEFT edge, not the centre. The glyph block starts at the div's
+      // left and is wider than it, so scaling about the centre pulls the left
+      // edge inward and leaves the same overshoot on the right — measured, it
+      // was still 5px out. From the left, the block lands exactly on the box:
+      // ink centre 1060 against an ideal 1060.
+      dom.style.transformOrigin = 'left center'
+      dom.style.transform = `scale(${scale.toFixed(4)})`
+    }
+
     function resize() {
       const rect = host!.getBoundingClientRect()
       size = { width: Math.max(1, Math.round(rect.width)), height: Math.max(1, Math.round(rect.height)) }
       renderer.setSize(size.width, size.height, false)
       effect.setSize(size.width, size.height)
       fitCamera()
-      if (ready) render(performance.now(), true)
+      if (ready) {
+        render(performance.now(), true)
+        fitEffect()
+      }
     }
 
     // ResizeObserver rather than window.resize: the terminal window is its own
@@ -279,6 +320,7 @@ export default function AboutAsciiObject({ tier }: { tier: PerfTier }) {
         ready = true
         host.dataset.state = reduced ? 'static' : lite ? 'lite' : 'live'
         render(performance.now(), true)
+        fitEffect()
         if (!reduced) raf = requestAnimationFrame(tick)
       })
       .catch(() => { if (!disposed) showFallback() })

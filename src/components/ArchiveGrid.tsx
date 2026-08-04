@@ -18,7 +18,7 @@ export default function ArchiveGrid() {
   const perPage = useCardsPerPage()
   const pages = useMemo(() => paginate(ARCHIVE, perPage), [perPage])
   const [page, setPage] = useState(0)
-  const { activate } = useArchiveSelection()
+  const { activate, select, selectedId } = useArchiveSelection()
   const safePage = Math.min(page, pages.length - 1)
 
   // The page turn. A new page used to replace the old one between frames, which
@@ -50,7 +50,13 @@ export default function ArchiveGrid() {
     <div className="panel archive-grid">
       <div className="grid-cards" ref={cardsRef}>
         {pages[safePage].map((f) => (
-          <FileCard key={f.id} file={f} onClick={() => activate(f.id, 'tile')} />
+          <FileCard
+            key={f.id}
+            file={f}
+            selected={f.id === selectedId}
+            onSelect={() => select(f.id)}
+            onClick={() => activate(f.id, 'tile')}
+          />
         ))}
       </div>
       {pages.length > 1 && (

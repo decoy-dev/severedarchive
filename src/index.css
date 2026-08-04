@@ -183,10 +183,18 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   border: 1px solid var(--hair-bright);
   border-top-color: var(--glass-rim);
   border-left-color: var(--glass-rim);
+  /* The bevel's dark underside. It reads as depth on a FILE WINDOW, which sits
+     over bright footage — but the terminal sits over the near-black stage, and
+     a dark rim on a dark ground is simply an edge you cannot see. Overridden
+     below for that one surface rather than dropped here, because on the windows
+     it is doing its job. */
   border-bottom-color: var(--glass-rim-dark);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
   position: relative;
 }
+/* The terminal's bottom edge, made visible. Matched to the other three so the
+   panel reads as a closed rectangle rather than one that fades out downward. */
+.terminal-window.glass { border-bottom-color: var(--hair-bright); }
 .glass::before {   /* specular sheen, top third */
   content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
   background: linear-gradient(115deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 28%, transparent 36%);
@@ -232,10 +240,11 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   5%, 9% { opacity: 0.25; }
   10%, 100% { opacity: 1; }
 }
-/* The dot flares for the length of its own pulse. Driven by a data attribute
-   from the canvas loop rather than a second animation, so the flare and the
-   wave cannot drift apart. */
-.tw-dot[data-pulsing] { box-shadow: 0 0 14px rgba(182, 255, 46, 0.85); }
+/* The blink, driven from the canvas loop rather than by a second animation, so
+   the dot going dark and the wave leaving are the same instant. `SessionPulse`
+   turns the keyframes above off when it takes over; they remain the behaviour
+   on lite tier and under reduced motion, where the wave never runs. */
+.tw-dot[data-blink='off'] { opacity: 0.16; box-shadow: none; }
 /* Grain, not glow: the buffer is a quarter-scale image stretched back up, and
    `pixelated` is what keeps the cells hard-edged instead of interpolating them
    into a soft gradient. */
@@ -317,16 +326,54 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .panel-label { display: block; font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--dim); margin-bottom: 6px; }
 .panel-big { font-size: clamp(18px, 2.4vw, 26px); letter-spacing: 0.02em; color: var(--bright); } /* Share Tech Mono is single-weight — no bold anywhere */
 
-.links-panel { display: flex; flex-direction: column; justify-content: center; gap: 12px; max-width: 560px; }
-.link-row {
-  display: grid; grid-template-columns: 110px 1fr auto; align-items: center; gap: 12px;
-  border: 1px solid var(--hair); padding: 14px 16px;
+/* Three square-ish cards filling the panel, even widths. `auto-fit` with a
+   floor rather than `repeat(3, 1fr)`: a fourth link wraps to a 2x2 by itself,
+   which is the shape asked for without a second rule to maintain. */
+/* `align-content: center` with a square aspect rather than stretching to the
+   panel's full height: three cards stretched to 587px in a 1296px row are
+   portrait slabs, not the square-ish cards asked for. Width still divides the
+   row evenly; the height follows from it. */
+.links-panel {
+  display: grid; gap: 16px; align-content: center; justify-content: stretch;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  min-height: 0; height: 100%;
 }
-.link-row .panel-label { margin: 0; }
-.link-value { color: var(--bright); font-size: var(--fs-base); }
-.link-go { color: var(--dim); }
-.link-row:hover { border-color: var(--acid); }
-.link-row:hover .link-go { color: var(--acid); }
+.link-card {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; padding: 24px; min-height: 0;
+  /* Square, but never taller than the panel — at a narrow width the square
+     would otherwise overflow a short terminal body, and the page cannot
+     scroll. */
+  aspect-ratio: 1; max-height: 100%;
+  border: 1px solid var(--hair); background: rgba(0, 0, 0, 0.28);
+  text-align: center;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+/* The icon is the focus point, so it takes the space rather than a fixed size —
+   capped so it does not become absurd on a wide desktop, and floored so it is
+   still the largest thing on the card when the panel is short. */
+.link-icon {
+  width: clamp(48px, 34%, 104px); height: auto; aspect-ratio: 1;
+  color: var(--text); flex: 0 1 auto;
+}
+.link-card-label { font-size: var(--fs-lg); letter-spacing: 0.06em; color: var(--bright); }
+.link-card-value { font-size: var(--fs-xs); letter-spacing: 0.06em; overflow-wrap: anywhere; }
+.link-card:hover, .link-card:focus-visible {
+  border-color: var(--acid); background: rgba(182, 255, 46, 0.05); outline: none;
+}
+.link-card:hover .link-icon, .link-card:focus-visible .link-icon { color: var(--acid); }
+.link-card:hover .link-card-label, .link-card:focus-visible .link-card-label { color: var(--acid); }
+@media (prefers-reduced-motion: reduce) {
+  .link-card { transition: none; }
+}
+/* Stacked and shorter on a phone, where three square cards would not fit a
+   single screen and the page must not scroll. */
+@media (max-width: 640px) {
+  .links-panel { grid-template-columns: 1fr; gap: 10px; }
+  .link-card { aspect-ratio: auto; flex-direction: row; justify-content: flex-start; gap: 16px; padding: 14px 16px; text-align: left; }
+  .link-icon { width: 34px; flex: 0 0 auto; }
+  .link-card-label { font-size: var(--fs-base); }
+}
 
 /* ── archive grid ── */
 .archive-grid { display: flex; flex-direction: column; }
@@ -353,15 +400,18 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 /* The explorer's tile treatment, applied to the grid so the two views behave
    the same way: the poster resolves, the frame takes the accent, the name goes
    with it. Accent on hover/focus only, never at rest. */
-.file-card:hover, .file-card:focus-visible {
+.file-card:hover, .file-card:focus-visible, .file-card.is-selected {
   border-color: var(--acid); background: rgba(182, 255, 46, 0.05); outline: none;
 }
 .file-card:hover .file-card-media img,
-.file-card:focus-visible .file-card-media img { opacity: 1; }
+.file-card:focus-visible .file-card-media img,
+.file-card.is-selected .file-card-media img { opacity: 1; }
 .file-card:hover .file-card-label,
-.file-card:focus-visible .file-card-label { color: var(--acid); border-top-color: var(--acid); }
+.file-card:focus-visible .file-card-label,
+.file-card.is-selected .file-card-label { color: var(--acid); border-top-color: var(--acid); }
 .file-card:hover .file-card-label .tw-dim,
-.file-card:focus-visible .file-card-label .tw-dim { color: var(--acid); }
+.file-card:focus-visible .file-card-label .tw-dim,
+.file-card.is-selected .file-card-label .tw-dim { color: var(--acid); }
 
 .grid-pager {
   display: flex; align-items: center; gap: 14px; justify-content: center;

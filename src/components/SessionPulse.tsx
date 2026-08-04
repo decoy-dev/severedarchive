@@ -6,6 +6,8 @@ import { pulseCell } from '../lib/pulseWave'
 const PERIOD_MS = 5000
 /** How long one wave takes to cross and spend itself. */
 const PULSE_MS = 1800
+/** How long the dot stays dark. Short — it is a blink, not a state. */
+const BLINK_MS = 150
 /**
  * Cell size in CSS pixels. The canvas is drawn at 1/CELL scale and stretched
  * back up with `image-rendering: pixelated`, which is where the chunky grain
@@ -41,8 +43,14 @@ export default function SessionPulse({ tier }: { tier: PerfTier }) {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
+    // The CSS keyframes are the fallback for the paths this effect never takes
+    // (lite tier, reduced motion). Where it does run, the blink is driven from
+    // `fire` so it cannot drift away from the wave.
+    dot.style.animation = 'none'
+
     let raf = 0
     let timer: number | undefined
+    let blinkTimer: number | undefined
     let cols = 0
     let rows = 0
     let originX = 0
@@ -138,12 +146,19 @@ export default function SessionPulse({ tier }: { tier: PerfTier }) {
       // ever notice. It is one layout read every five seconds.
       measure()
       const start = performance.now()
-      dot.dataset.pulsing = 'true'
+      // The dot goes dark and the wave leaves on the SAME event, because it is
+      // one event: the blink is the pulse being emitted. It used to be a CSS
+      // keyframe animation on its own 5s clock, started when the component
+      // mounted, while the wave ran off a JS interval started 900ms later — two
+      // clocks that were never in step, so the wave arrived just before the
+      // blink it was supposed to come from.
+      dot.dataset.blink = 'off'
+      window.clearTimeout(blinkTimer)
+      blinkTimer = window.setTimeout(() => { delete dot.dataset.blink }, BLINK_MS)
       const step = (now: number) => {
         const progress = (now - start) / PULSE_MS
         if (progress >= 1) {
           draw(1)
-          delete dot.dataset.pulsing
           return
         }
         draw(progress)
@@ -170,8 +185,11 @@ export default function SessionPulse({ tier }: { tier: PerfTier }) {
 
     return () => {
       window.clearTimeout(first)
+      window.clearTimeout(blinkTimer)
       window.clearInterval(timer)
       cancelAnimationFrame(raf)
+      delete dot.dataset.blink
+      dot.style.animation = ''
       observer.disconnect()
       document.removeEventListener('visibilitychange', onVisibility)
     }
