@@ -8,7 +8,10 @@ import { test, expect } from '@playwright/test'
  */
 test('locked single screen, wordmark and window render', async ({ page }) => {
   await page.goto('./')
-  await expect(page.locator('.wordmark')).toHaveText('SEVEREDARCHIVE')
+  // The wordmark is outlines, not text — `createDrawable` animates a stroke by
+  // its length and SVG <text> has no `getTotalLength()`. So it carries its name
+  // rather than containing it, and this asserts the name a screen reader gets.
+  await expect(page.getByRole('img', { name: 'SEVEREDARCHIVE' })).toBeVisible()
   await expect(page.locator('.tw-title')).toHaveText('FILE SYSTEM')
 
   const scroll = await page.evaluate(() => ({
@@ -33,15 +36,21 @@ test('the stage clips rather than scrolls', async ({ page }) => {
 })
 
 /**
- * The wordmark is sized to fit rather than to bleed (10.1vw against a measured
- * 9.657em string). Font metrics are exactly the kind of thing that drifts
- * silently — a font update or a change to the word itself would push it back
- * off the edge — so the fit is asserted rather than trusted.
+ * The wordmark is sized to fit rather than to bleed. It used to be text at
+ * 10.1vw against a measured 9.657em string; it is now traced outlines in a
+ * viewBox whose aspect is generated from the same font, so the fit comes from
+ * the box rather than from font metrics at render time. Still asserted rather
+ * than trusted: regenerating the paths after a font update, or changing the
+ * word, could push it back off the edge.
  */
 test('the wordmark reads in full, inside the viewport', async ({ page }) => {
   await page.goto('./')
   const mark = page.locator('.wordmark')
-  await expect(mark).toHaveText('SEVEREDARCHIVE')
+  await expect(mark).toHaveAttribute('aria-label', 'SEVEREDARCHIVE')
+  // One path per letter, twice over: the filled wordmark and the stroked copy
+  // the trace animates. Per letter, because the draw staggers across them.
+  await expect(page.locator('.wordmark-fill path')).toHaveCount(14)
+  await expect(page.locator('.wordmark-stroke path')).toHaveCount(14)
   const fit = await mark.evaluate((el) => {
     const r = el.getBoundingClientRect()
     return { left: r.left, right: r.right, top: r.top, vw: window.innerWidth }

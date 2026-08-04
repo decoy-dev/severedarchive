@@ -6,6 +6,7 @@ import ArchivePanel from './components/ArchivePanel'
 import AboutPanel, { preloadAboutObject } from './components/AboutPanel'
 import LinksPanel from './components/LinksPanel'
 import BootSequence from './components/BootSequence'
+import Wordmark from './components/Wordmark'
 import Desktop from './components/Desktop'
 import { readPerfTier, prefersReducedMotion } from './lib/perfTier'
 import { ArchiveSelectionProvider, useArchiveSelection } from './lib/selection'
@@ -64,7 +65,7 @@ function AppShell() {
   return (
     <div className="stage" data-tier={tier} data-booted={booted ? 'true' : 'false'}>
       <BackgroundVideo tier={tier} fileId={selectedId} />
-      <span className="wordmark" aria-hidden="true">SEVEREDARCHIVE</span>
+      <Wordmark />
       <div className="glass-strip top" /><div className="glass-strip bottom" />
       <div className="glass-strip left" /><div className="glass-strip right" />
       {!booted ? (

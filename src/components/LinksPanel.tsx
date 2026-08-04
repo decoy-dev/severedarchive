@@ -47,10 +47,9 @@ const LINKS: Link[] = [
     href: '#',
     icon: (
       <>
-        {/* A frame with a mark in it rather than a literal envelope or cart:
-            the status is the content here, not the medium. */}
-        <rect x="4" y="6" width="24" height="20" rx="2" />
-        <path d="M10.5 16.4 L14.4 20.2 L21.8 12.4" />
+        {/* An inbox: the tray, its shoulders, and the slot the work lands in. */}
+        <path d="M4 18.5 L8.2 6.8 A1.6 1.6 0 0 1 9.7 5.8 L22.3 5.8 A1.6 1.6 0 0 1 23.8 6.8 L28 18.5" />
+        <path d="M4 18.5 L4 24.6 A1.6 1.6 0 0 0 5.6 26.2 L26.4 26.2 A1.6 1.6 0 0 0 28 24.6 L28 18.5 L21.3 18.5 A1 1 0 0 0 20.3 19.3 A4.5 4.5 0 0 1 11.7 19.3 A1 1 0 0 0 10.7 18.5 Z" />
       </>
     ),
   },

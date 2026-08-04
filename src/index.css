@@ -107,20 +107,20 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
    stay inside it. */
 .wordmark {
   position: absolute; z-index: 2;
-  right: 0; text-align: center;
-  /* `top: 0`, not the old -0.14em. line-height 0.82 already pulls the glyph box
-     tighter than the ascent, so a negative offset on top of that clipped the
-     cap heights against the viewport edge — the word was cut off at the top
-     even once it fit horizontally. */
-  top: 0; left: 0;
-  font-family: var(--display);
-  font-size: 10.1vw;
-  line-height: 0.82;
-  letter-spacing: -0.04em;
-  color: rgba(201, 210, 216, 0.13);
-  white-space: nowrap;
+  top: 0; left: 0; right: 0;
+  /* The 18px each side the owner asked for, split evenly — the SVG carries a
+     tight ink viewBox, so its box IS the letters and margin is not guesswork
+     against a line box any more. Height follows from the aspect ratio. */
+  width: calc(100% - 36px); margin: 0 auto;
+  overflow: visible;
   pointer-events: none; user-select: none;
 }
+.wordmark-fill path { fill: rgba(201, 210, 216, 0.13); }
+/* The traced outline. Barely there: it reads as the edge of the letters
+   catching light, not as a second wordmark drawn over the first. Width is in
+   user units against a 712-unit-tall viewBox, so it stays a hairline at any
+   viewport. */
+.wordmark-stroke path { fill: none; stroke: rgba(182, 255, 46, 0.34); stroke-width: 4; }
 
 /* glass margin: four strips around the window */
 .glass-strip { position: absolute; z-index: 1; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); background: rgba(7, 9, 11, 0.35); }
@@ -193,8 +193,15 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   position: relative;
 }
 /* The terminal's bottom edge, made visible. Matched to the other three so the
-   panel reads as a closed rectangle rather than one that fades out downward. */
-.terminal-window.glass { border-bottom-color: var(--hair-bright); }
+   panel reads as a closed rectangle rather than one that fades out downward —
+   measured, the top border is rgb(76,78,81) and this is rgb(74,78,82).
+   
+   And no drop shadow. `.glass` casts one so a file window separates from the
+   footage behind it; the terminal is a fixed background layer (binding ruling
+   7) that implies no elevation, and on the near-black stage the shadow was a
+   35px gradient fading out beneath the panel — invisible while the bottom edge
+   was too, and a visible seam the moment the edge was drawn above it. */
+.terminal-window.glass { border-bottom-color: var(--hair-bright); box-shadow: none; }
 .glass::before {   /* specular sheen, top third */
   content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
   background: linear-gradient(115deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 28%, transparent 36%);
