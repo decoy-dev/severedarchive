@@ -36,11 +36,14 @@ export default function MediaKindIcon({ kind }: { kind: MediaKind }) {
         </>
       ) : (
         <>
-          {/* film frame: sprocket rail on the left, play mark in the gate */}
-          <rect x="1.5" y="2.5" width="13" height="11" />
-          <path d="M5 2.5 L5 13.5" />
-          <path d="M3.25 5 L3.25 5.01 M3.25 8 L3.25 8.01 M3.25 11 L3.25 11.01" strokeLinecap="round" />
-          <path d="M7.75 5.75 L11.75 8 L7.75 10.25 Z" />
+          {/* Cine camera: body, lens cone, and the two feed reels on top. The
+              reels are what make it read as a movie camera rather than as a
+              generic video box at 13px — they are the silhouette everyone
+              recognises, so they get the top third to themselves. */}
+          <rect x="1.5" y="6.5" width="9.5" height="7" rx="0.5" />
+          <path d="M11 9 L14.5 6.75 L14.5 13.25 L11 11 Z" />
+          <circle cx="4.25" cy="3.75" r="2.25" />
+          <circle cx="9" cy="4.25" r="1.75" />
         </>
       )}
     </svg>

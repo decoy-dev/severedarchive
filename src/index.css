@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import '@fontsource/share-tech-mono';
+@import '@fontsource/vt323'; /* EXPERIMENT — see --mono below */
 @import '@fontsource/archivo-black/latin-400.css';
 
 :root {
@@ -13,12 +14,20 @@
   --hair-bright: rgba(201, 210, 216, 0.34);
   --acid: #b6ff2e;
   --alert: #ff3524;
-  --mono: 'Share Tech Mono', ui-monospace, monospace;
-  /* type scale — 12px is a hard floor; no literal below --fs-xs anywhere */
-  --fs-xs: 12px;
-  --fs-sm: 13px;
-  --fs-base: 15px;
-  --fs-lg: 17px;
+  --mono: 'VT323', ui-monospace, monospace;
+  /* Type scale. The floor is a hard 12px of APPARENT size and no literal sits
+     below --fs-xs anywhere.
+     
+     The numbers are +3 on what they were under Share Tech Mono, and that is
+     not a preference: VT323's glyphs are small and light for their em, so its
+     12px reads visibly smaller and thinner than 12px of the old face. Lifting
+     the tokens keeps the floor meaning what it says rather than quietly
+     dropping the whole interface under it. If the face ever changes back,
+     these come back down with it. */
+  --fs-xs: 15px;
+  --fs-sm: 16px;
+  --fs-base: 18px;
+  --fs-lg: 20px;
   --display: 'Archivo Black', var(--mono);  /* wordmark + BUFFER FULL only — never interface text */
   --frame: clamp(16px, 4.5vw, 56px);
   --glass-fill: rgba(10, 13, 16, 0.5); /* tuned up from 0.42 — dim text washed out over bright videos */

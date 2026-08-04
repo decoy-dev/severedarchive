@@ -76,16 +76,15 @@ export default function SessionPulse({ tier }: { tier: PerfTier }) {
       ctx.clearRect(0, 0, cols, rows)
       if (progress <= 0 || progress >= 1) return
       const width = cols * CELL
-      const height = rows * CELL
-      // How far there is to go on each side. The dot is not centred — it sits
-      // beside SESSION OPEN, roughly 100px from the right edge and 1200px from
-      // the left — so a single reach means the front clears the right in the
-      // first instant and spends the rest of the pulse crossing the left. That
-      // is what read as the right side dying early: it was never arriving, it
-      // was already over. Each direction gets its own reach, so the front lands
-      // on both edges at the same moment and the whole bar fills together.
-      const reachRight = Math.max(40, width - originX)
-      const reachLeft = Math.max(40, originX)
+      // ONE reach, so the front travels at one speed in every direction — a
+      // single expanding pulse, not two. Per-direction reaches were tried to
+      // make the front land on both edges together; the cost was that the right
+      // side crawled while the left raced, which reads as two different waves
+      // leaving the same dot. The right edge is only ~100px away and is
+      // therefore lit almost at once, which is simply what a pulse from a point
+      // near an edge does — it stays lit because there is no hard back edge
+      // (see BAND), so nothing dies there early.
+      const reach = Math.max(originX, width - originX) + 120
       const image = ctx.createImageData(cols, rows)
       const data = image.data
       const halfRows = Math.max(1, rows / 2)
@@ -97,10 +96,6 @@ export default function SessionPulse({ tier }: { tier: PerfTier }) {
           const px = rx * CELL + CELL / 2
           const dx = px - originX
           const i = ry * cols + rx
-          // The vertical half-height is folded in so cells directly above and
-          // below the dot are not normalised against a near-zero horizontal
-          // reach.
-          const reach = Math.hypot(dx >= 0 ? reachRight : reachLeft, height / 2)
           const value = pulseCell({
             distance: Math.sqrt(dx * dx + dy * dy),
             progress,
