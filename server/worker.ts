@@ -194,9 +194,18 @@ export default {
       if (url.pathname === '/api/upload' && req.method === 'POST') return await handleUpload(req, env)
       if (url.pathname === '/api/content') return await handleContent(req, env)
       return json({ error: 'not found' }, 404, env)
-    } catch {
-      // Never surface an upstream message: it can echo request content, and a
-      // GitHub error can name the repo and the token's scopes.
+    } catch (err) {
+      // Logged, never returned. The caller gets a bare 502 — an upstream
+      // message can echo request content, and a GitHub error can name the repo
+      // and the token's scopes — but a Worker with no diagnostic at all is a
+      // Worker you debug by guessing, which is how a 502 on the login path went
+      // unexplained. `wrangler tail` shows this; the internet does not.
+      console.error('handler failed', {
+        path: url.pathname,
+        name: err instanceof Error ? err.name : typeof err,
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      })
       return json({ error: 'upstream failure' }, 502, env)
     }
   },

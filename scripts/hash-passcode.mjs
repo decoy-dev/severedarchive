@@ -13,7 +13,7 @@ import { createInterface } from 'node:readline/promises'
 import { stdin, stderr, stdout } from 'node:process'
 import { webcrypto as crypto } from 'node:crypto'
 
-const ITERATIONS = 210_000
+const ITERATIONS = 100_000 // Cloudflare Workers rejects PBKDF2 above this — see server/auth.ts
 
 const b64 = (buf) => Buffer.from(buf).toString('base64')
 

@@ -14,8 +14,26 @@
 
 const enc = new TextEncoder()
 
-/** PBKDF2 rounds. Deliberately slow — this guards a single reused passcode. */
-export const PBKDF2_ITERATIONS = 210_000
+/**
+ * The hard ceiling Cloudflare Workers puts on PBKDF2. Above it, `deriveBits`
+ * throws `NotSupportedError` rather than running slowly — so this is a platform
+ * limit to respect, not a performance knob to tune.
+ */
+export const WORKERS_MAX_PBKDF2_ITERATIONS = 100_000
+
+/**
+ * PBKDF2 rounds. Deliberately slow — this guards a single reused passcode — and
+ * pinned to the platform's ceiling because that is as slow as it is allowed to
+ * be here.
+ *
+ * This was 210_000, which is a fine number everywhere except the runtime this
+ * actually deploys to. Every correct passcode threw, the handler caught it, and
+ * the endpoint answered 502 on success and 401 on failure — so the deployment
+ * looked merely misconfigured rather than broken. The tests did not catch it
+ * because they all ran at 1_000 rounds for speed and never exercised the real
+ * constant; `respects the platform ceiling` below is that gap closed.
+ */
+export const PBKDF2_ITERATIONS = WORKERS_MAX_PBKDF2_ITERATIONS
 
 const b64 = (bytes: ArrayBuffer): string =>
   btoa(String.fromCharCode(...new Uint8Array(bytes)))
@@ -68,11 +86,23 @@ export async function hashPasscode(passcode: string, iterations = PBKDF2_ITERATI
  * server is broken", not "you are not getting in".
  */
 export async function verifyPasscode(passcode: string, stored: string): Promise<boolean> {
-  if (typeof stored !== 'string' || stored.length === 0) return false
-  const parts = stored.split('$')
+  if (typeof stored !== 'string') return false
+  // Trimmed because a secret almost always arrives with a trailing newline:
+  // `node hash-passcode.mjs | wrangler secret put` pipes the line ending along
+  // with the record, and a pasted value often carries one too. Without this the
+  // stored hash never matches and the failure is indistinguishable from a wrong
+  // passcode — an operational trap that costs an hour of rate limit to diagnose.
+  const record = stored.trim()
+  if (record.length === 0) return false
+  const parts = record.split('$')
   if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false
   const iterations = Number(parts[1])
   if (!Number.isInteger(iterations) || iterations < 1000) return false
+  // A record asking for more rounds than the platform allows cannot be checked
+  // at all: `deriveBits` throws instead of answering. Fail closed and quietly,
+  // like every other bad record — a throw here becomes a 502, which tells a
+  // caller the difference between "wrong passcode" and "broken deployment".
+  if (iterations > WORKERS_MAX_PBKDF2_ITERATIONS) return false
   let salt: Uint8Array
   try {
     salt = unb64(parts[2])

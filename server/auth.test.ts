@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  hashPasscode, verifyPasscode, signSession, verifySession, timingSafeEqual, SESSION_TTL_S,
+  hashPasscode, verifyPasscode, signSession, verifySession, timingSafeEqual,
+  SESSION_TTL_S, PBKDF2_ITERATIONS, WORKERS_MAX_PBKDF2_ITERATIONS,
 } from './auth'
 
 // Low rounds so the suite stays fast. Production uses PBKDF2_ITERATIONS.
@@ -25,6 +26,25 @@ describe('timingSafeEqual', () => {
 })
 
 describe('passcode', () => {
+  it('respects the platform ceiling, and works at the real iteration count', async () => {
+    // The regression this exists for: 210_000 rounds is unremarkable in Node
+    // and throws NotSupportedError on Workers, so every correct passcode became
+    // a 502 while every wrong one stayed a 401 — a deployment that looked
+    // misconfigured rather than broken. Every other test here runs at 1_000
+    // rounds for speed, so none of them would ever have noticed.
+    expect(PBKDF2_ITERATIONS).toBeLessThanOrEqual(WORKERS_MAX_PBKDF2_ITERATIONS)
+    const stored = await hashPasscode('a real passcode here')
+    expect(Number(stored.split('$')[1])).toBe(PBKDF2_ITERATIONS)
+    expect(await verifyPasscode('a real passcode here', stored)).toBe(true)
+  })
+
+  it('refuses a record demanding more rounds than the platform allows', async () => {
+    // Such a record cannot be checked at all — deriveBits throws rather than
+    // answering — so it must fail closed instead of becoming a 502.
+    const tooMany = `pbkdf2$${WORKERS_MAX_PBKDF2_ITERATIONS + 1}$c2FsdHNhbHRzYWx0c2E=$aGFzaA==`
+    expect(await verifyPasscode('anything', tooMany)).toBe(false)
+  })
+
   it('accepts the right passcode and rejects the wrong one', async () => {
     const stored = await hashPasscode('correct horse battery staple', FAST)
     expect(await verifyPasscode('correct horse battery staple', stored)).toBe(true)
@@ -44,6 +64,15 @@ describe('passcode', () => {
     // and both still verify
     expect(await verifyPasscode('same', a)).toBe(true)
     expect(await verifyPasscode('same', b)).toBe(true)
+  })
+
+  it('tolerates the whitespace a piped or pasted secret arrives with', async () => {
+    // `node hash-passcode.mjs | wrangler secret put` sends the trailing newline
+    // too. Failing on that looks exactly like a wrong passcode.
+    const stored = await hashPasscode('correct horse battery staple', FAST)
+    for (const wrapped of [`${stored}\n`, `\n${stored}`, ` ${stored} `, `${stored}\r\n`]) {
+      expect(await verifyPasscode('correct horse battery staple', wrapped)).toBe(true)
+    }
   })
 
   it('carries its own iteration count, so the cost can be raised later', async () => {
