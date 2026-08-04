@@ -16,6 +16,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>SEVEREDARCHIVE</title>
     <meta name="description" content="severedarchive — motion + visual art. Renders set to sound." />
+
+    <!--
+      The upload mark, from the same traced source the About object is extruded
+      from (assets/about-upload-mark.svg).
+
+      Order matters: the SVG is listed first and is the one modern browsers
+      take. It carries its own `prefers-color-scheme` rule, so the ink flips
+      with the tab strip — near-black on a light one, near-white on a dark one —
+      and follows the OS theme changing under it. A favicon is 16px, where "a
+      bit low contrast" is just a smudge.
+
+      The 32px PNG is only for browsers that will not take an SVG favicon. It
+      cannot know the theme, so it is a mid-grey that stays legible on either
+      rather than a colour that is right on one and invisible on the other.
+    -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="alternate icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <!-- iOS composites this onto an opaque tile, so it brings its own dark
+         background and wears the accent rather than a neutral. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#07090b" />
   </head>
   <body>
     <svg width="0" height="0" style="position: absolute" color-interpolation-filters="sRGB" aria-hidden="true">

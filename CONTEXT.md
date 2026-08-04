@@ -102,6 +102,7 @@ How the wiring landed, and the trap in it:
 - The window dashboard runs a ~2.4s bring-up the **first time** anything is opened in a page load, then never again. The flag is module scope in `WindowDashboard.tsx` on purpose: the component unmounts whenever the last window closes and on every trip to ABOUT, so component state would replay it.
 - Git: commits under Chris's identity as-is. **NEVER** any `Co-Authored-By`, "Generated with Claude Code", or AI attribution anywhere in the repo.
 - The DCY.DSGN ASCII header comment stays verbatim at the top of `index.html`.
+- The favicon is the traced upload mark (`public/favicon.svg`, same source as the About object) and **flips ink with `prefers-color-scheme`** — a favicon is 16px against a strip that is near-white in one theme and near-black in the other, so one baked-in colour is a smudge in half of them. The 32px PNG beside it is only for browsers that refuse an SVG favicon, and is a mid-grey because it cannot know the theme.
 
 ## Governing documents
 
@@ -161,7 +162,11 @@ Owner decisions: GitHub stays the store, auth must be genuinely private, **only 
 - `wrangler.toml` — config only. Secrets go in with `wrangler secret put`, never the repo.
 - `.github/workflows/ingest.yml` + `scripts/process-upload.sh` — the transcoder. The ladder is duplicated from `process-media.sh`'s per-file loop and **must stay in step with it**: a thumb whose ratio drifts from its full is the letterboxing the true-frame ruling forbids.
 
-**Not wired up yet:** `scripts/write-entry.mjs` appends to `src/data/entries.json`, which the app does not read — `archive.ts` is still the source. The migration is the next slice, along with the admin UI, the `(i)` popover, date sorting and photo support.
+**The app reads uploads now.** `archive.ts` imports `src/data/entries.json` (written by the ingest run, empty until the first upload) and puts those entries **on top, newest first**, with the hand-arranged twelve beneath in their order. The twelve deliberately carry no `date`: they have a `year` and a curated sequence, and inventing a day for each to sort by would reorder an arrangement nobody asked to change. Give one a real date and it joins the sort.
+
+The `(i)` control (`InfoPopover.tsx`) sits in the window title bar and in each dashboard card's control column, and shows the description and date. Legacy entries fall back to their tagline and show the year alone rather than a fabricated day. On the dashboard it is a **sibling** of the card, never a child — the card is itself a button, and a button inside a button is invalid markup React reports at runtime (it did).
+
+**Still to build:** the admin UI (upload form, ABOUT and LINKS editors) and photo support in the explorer.
 
 **Deployed 2026-08-04** to `https://severedarchive-admin.chris-216.workers.dev` on the Cloudflare account `chris@hvddox.com`. The KV namespace (`a43a8b8af70d449699ab1ae763970a4a`) and `SESSION_SECRET` are set. Verified live: 401 unauthenticated, 401 on a forged cookie, 403 cross-origin, 404 unknown route, and 401 — not 502 — for a login attempt while the passcode secret is unset.
 

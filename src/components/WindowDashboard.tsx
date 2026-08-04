@@ -6,6 +6,7 @@ import {
   TELEMETRY_KEYS, TELEMETRY_LABELS, telemetryValue, type WindowSample,
 } from '../lib/telemetry'
 import { MAX_WINDOWS } from '../lib/windowManager'
+import InfoPopover from './InfoPopover'
 import MediaKindIcon from './MediaKindIcon'
 import { useMediaController } from './MediaLayer'
 import type { OpenWindowInfo } from '../lib/windowRegistry'
@@ -251,21 +252,26 @@ export default function WindowDashboard({
           if (!file) return null
           return (
             <li key={w.id} className={w.focused ? 'dash-row is-focused' : 'dash-row'} data-dash-row={w.id}>
-              {/* The ✕ leads the card rather than trailing it, and that is
-                  geometry rather than style: the cascade starts at x 240 and
+              {/* Both controls lead the card rather than trailing it, and that
+                  is geometry rather than style: the cascade starts at x 240 and
                   this box starts at x 104, so the card's left edge is the one
                   column that is never under a window. A trailing ✕ sat at
                   x ~985, inside every window's span, and could not be clicked
-                  for the two cards that most need it. A nested button would be
-                  invalid markup inside a button, so the card is a button and
-                  this is its sibling. */}
-              <button
-                className="dash-close"
-                onClick={() => onClose(w.id)}
-                aria-label={`Close ${file.name}.${file.ext}`}
-              >
-                ✕
-              </button>
+                  for the two cards that most need it.
+                  
+                  They are siblings of the card, never children: the card is
+                  itself a button, and a button inside a button is invalid
+                  markup that React reports at runtime. */}
+              <span className="dash-controls">
+                <button
+                  className="dash-close"
+                  onClick={() => onClose(w.id)}
+                  aria-label={`Close ${file.name}.${file.ext}`}
+                >
+                  ✕
+                </button>
+                <InfoPopover file={file} align="start" />
+              </span>
               <button
                 className="dash-row-main"
                 onClick={() => onFocus(w.id)}

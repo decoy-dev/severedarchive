@@ -191,6 +191,33 @@ test.describe('desktop explorer', () => {
     await expect(page.locator('[data-file-window]')).toHaveCount(1)
   })
 
+  test('the (i) control shows the note and date without closing the window', async ({ page }) => {
+    await ready(page)
+    await page.locator('[data-file-row]').nth(0).click()
+    await expect(page.locator('[data-dash-phase="ready"]')).toBeVisible({ timeout: 6000 })
+
+    // In the window bar.
+    await page.locator('[data-file-window="file01"] .info-trigger').click()
+    const panel = page.locator('[data-file-window="file01"] .info-panel')
+    await expect(panel).toContainText('CHROME_SEQ')
+    // The original twelve carry a year and no day, and say so rather than
+    // inventing one; their tagline stands in for the description they lack.
+    await expect(panel).toContainText('2026')
+    await expect(panel).toContainText('LIQUID METAL STUDY')
+
+    // Escape closes the popover and must NOT reach the desktop's global handler.
+    await page.keyboard.press('Escape')
+    await expect(panel).toHaveCount(0)
+    await expect(page.locator('[data-file-window]')).toHaveCount(1)
+
+    // And on the dashboard card, where it lives in the control column beside
+    // the ✕ — both are siblings of the card, because a button inside a button
+    // is invalid markup.
+    await page.locator('[data-dash-row="file01"] .info-trigger').click()
+    await expect(page.locator('[data-dash-row="file01"] .info-panel')).toContainText('CHROME_SEQ')
+    await expect(page.locator('[data-dash-row="file01"] .dash-row-main button')).toHaveCount(0)
+  })
+
   test('the close control is a real pointer target', async ({ page }) => {
     await ready(page)
     await page.locator('[data-file-row]').nth(0).click()

@@ -1,5 +1,6 @@
 import { aspectRatio, type ArchiveFile } from '../data/archive'
 import { windowWidthCss } from '../lib/windowManager'
+import InfoPopover from './InfoPopover'
 import VolumeControl from './VolumeControl'
 
 export default function FileWindow({
@@ -52,6 +53,7 @@ export default function FileWindow({
             numbers files any more — a file is its name. */}
         <span className="fw-title" data-drag-handle>{file.name}.{file.ext}</span>
         <span className="fw-controls">
+          <InfoPopover file={file} />
           <VolumeControl value={volume} onChange={onVolume} />
           {/* Closes on pointerdown, not click: the press is the commit, so
               nothing downstream — a drift, a re-render, a media reconcile —

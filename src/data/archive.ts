@@ -1,4 +1,5 @@
 import { MEDIA_META, type MediaMeta } from './mediaMeta.generated'
+import UPLOADED_ENTRIES from './entries.json'
 
 /**
  * What the explorer draws where the index number used to be. Everything in the
@@ -12,10 +13,27 @@ export type MediaKind = 'video' | 'photo'
 type ArchiveEntry = {
   id: string
   name: string
-  ext: 'MP4'
+  ext: 'MP4' | 'JPG'
   kind: MediaKind
   tagline: string
   year: string
+  /**
+   * Long-form note, shown by the (i) control. Optional: the twelve original
+   * entries predate the field and fall back to their tagline, so this is only
+   * ever set by an upload or a later edit.
+   */
+  description?: string
+  /**
+   * ISO `YYYY-MM-DD`, and only on entries that came through the admin backend.
+   *
+   * The original twelve deliberately have none. They carry a `year` and a
+   * curated order, and inventing a day for each of them to sort by would
+   * reorder the archive the owner arranged by hand — a side effect nobody asked
+   * for. So dated entries sort newest-first ABOVE them and the twelve keep
+   * their order below, which is exactly what "uploads default to the top"
+   * means. Give one a real date through the admin UI and it joins the sort.
+   */
+  date?: string
   /**
    * The post this clip came from. Every entry currently points at the profile —
    * the per-post permalinks are not known here and must be filled in by the
@@ -53,7 +71,26 @@ const ENTRIES: ArchiveEntry[] = [
  * a missing width silently becomes 16:9 everywhere and nobody notices. The
  * throw fires at module load, and `archive.test.ts` fires before that.
  */
-export const ARCHIVE: ArchiveFile[] = ENTRIES.map((e) => {
+/**
+ * Written by the ingest run (`scripts/write-entry.mjs`), committed, and read
+ * here. Empty until the first upload — the file exists so this import is not
+ * conditional and the build does not depend on whether anything was published
+ * yet.
+ */
+const UPLOADED = UPLOADED_ENTRIES as ArchiveEntry[]
+
+/** Newest first. Ties break on name so the order is total across builds. */
+const byDateDesc = (a: ArchiveEntry, b: ArchiveEntry): number =>
+  a.date === b.date ? a.name.localeCompare(b.name) : (b.date ?? '').localeCompare(a.date ?? '')
+
+/**
+ * Uploads on top, newest first; the hand-arranged twelve beneath, in their
+ * order. See `ArchiveEntry.date` for why the twelve are not swept into the
+ * sort.
+ */
+const ALL_ENTRIES: ArchiveEntry[] = [...UPLOADED].sort(byDateDesc).concat(ENTRIES)
+
+export const ARCHIVE: ArchiveFile[] = ALL_ENTRIES.map((e) => {
   const meta = MEDIA_META[e.id]
   if (!meta) throw new Error(`archive: ${e.id} has no generated media metadata — run npm run gen:media-meta`)
   return { ...e, ...meta }
@@ -74,6 +111,20 @@ export const formatDuration = (sec: number): string => {
 export const formatResolution = (f: ArchiveFile): string => `${f.width}×${f.height}`
 
 export const aspectRatio = (f: ArchiveFile): number => f.width / f.height
+
+/**
+ * What the (i) panel shows for a date. An entry with a real date reads as
+ * `04 AUG 2026`; one of the original twelve has only a year, and says so rather
+ * than inventing a day it does not have.
+ */
+export const formatEntryDate = (f: ArchiveFile): string => {
+  if (!f.date) return f.year
+  const [y, m, d] = f.date.split('-')
+  const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+  const month = months[Number(m) - 1]
+  // A malformed date must not render as `04 undefined 2026`.
+  return month ? `${d} ${month} ${y}` : f.year
+}
 
 // Which file leads the stack (and seeds the backdrop) on load.
 export const DEFAULT_FRONT_ID = 'file03'
