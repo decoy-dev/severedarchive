@@ -59,9 +59,10 @@ export function pulseCell({ distance, progress, reach, noise, spread }: PulseCel
   if (progress <= 0 || progress >= 1) return 0
   // The surface of the wave, not a clean arc: the leading edge undulates as it
   // travels, so different heights of the bar are reached at slightly different
-  // moments. This is the whole of the "liquid" — a circle expanding at a
-  // constant rate reads as a radar sweep, and this does not.
-  const wobble = 1 + 0.09 * Math.sin(spread * 5.5 + progress * 7)
+  // moments. Kept small — at 0.09 the front was distorted enough that the wave
+  // stopped reading as a circle centred on the dot, which is the shape it is
+  // supposed to have.
+  const wobble = 1 + 0.035 * Math.sin(spread * 5.5 + progress * 7)
   const front = frontAt(progress, reach) * wobble
 
   // Behind the front only: nothing lights up before the wave arrives.

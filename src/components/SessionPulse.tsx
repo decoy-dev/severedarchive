@@ -53,21 +53,33 @@ export default function SessionPulse({ tier }: { tier: PerfTier }) {
     // The bar, not the flex span the canvas is nested in: the wave fills the
     // whole title bar, and `.tw-pulse` is positioned against it (the span is
     // unpositioned, so it is not the containing block either).
-    const bar = canvas.closest('.tw-titlebar')
+    const bar = canvas.closest<HTMLElement>('.tw-titlebar')
     if (!bar) return
 
     const measure = () => {
-      const rect = bar.getBoundingClientRect()
-      cols = Math.max(1, Math.ceil(rect.width / CELL))
-      rows = Math.max(1, Math.ceil(rect.height / CELL))
+      // `offsetWidth`, NOT `getBoundingClientRect`. The terminal window plays a
+      // `scale(0.985 → 1)` entrance on mount, and a rect measured during it is
+      // ~1.5% small — which sized the canvas 1308px inside a 1326px bar and
+      // left the last 18px of it permanently dark, right about the middle of
+      // SESSION OPEN. A ResizeObserver never corrected it either: transforms do
+      // not resize a box, so nothing fired. Layout size is transform-free.
+      const width = bar.offsetWidth
+      const height = bar.offsetHeight
+      cols = Math.max(1, Math.ceil(width / CELL))
+      rows = Math.max(1, Math.ceil(height / CELL))
       canvas.width = cols
       canvas.height = rows
-      canvas.style.width = `${rect.width}px`
-      canvas.style.height = `${rect.height}px`
+      canvas.style.width = `${width}px`
+      canvas.style.height = `${height}px`
       // The wave leaves the dot, so the origin is where the dot actually is.
+      // Both rects come from the same painted frame, so dividing by the scale
+      // that frame is under puts the origin back in layout coordinates — the
+      // same space the canvas is now sized in.
+      const barRect = bar.getBoundingClientRect()
+      const scale = barRect.width > 0 ? barRect.width / width : 1
       const dotRect = dot.getBoundingClientRect()
-      originX = dotRect.x + dotRect.width / 2 - rect.x
-      originY = dotRect.y + dotRect.height / 2 - rect.y
+      originX = (dotRect.x + dotRect.width / 2 - barRect.x) / scale
+      originY = (dotRect.y + dotRect.height / 2 - barRect.y) / scale
       noise = new Float32Array(cols * rows)
       for (let i = 0; i < noise.length; i++) noise[i] = Math.random()
     }
@@ -120,6 +132,11 @@ export default function SessionPulse({ tier }: { tier: PerfTier }) {
     }
 
     const fire = () => {
+      // Re-measured every pulse rather than only on resize: the dot moves
+      // whenever the text beside it does — a font swapping in, the scale
+      // changing — and none of that resizes the bar, so nothing else would
+      // ever notice. It is one layout read every five seconds.
+      measure()
       const start = performance.now()
       dot.dataset.pulsing = 'true'
       const step = (now: number) => {
