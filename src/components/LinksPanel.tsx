@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { SITE_CONTENT, type LinkIcon } from '../data/content'
 
 /**
  * Three large cards rather than three rows. The panel has the full height of
@@ -9,10 +10,7 @@ import type { ReactNode } from 'react'
  * link it wraps into a 2×2 on its own, which is the shape asked for without a
  * second rule to keep in step.
  */
-type Link = {
-  label: string
-  value: string
-  href: string
+type IconSpec = {
   /**
    * `currentColor`, so it takes the accent with the card.
    *
@@ -26,11 +24,8 @@ type Link = {
   strokeWidth: number
 }
 
-const LINKS: Link[] = [
-  {
-    label: 'INSTAGRAM',
-    value: '@severedarchive',
-    href: 'https://instagram.com/severedarchive',
+const ICONS: Record<LinkIcon, IconSpec> = {
+  instagram: {
     viewBox: '0 0 32 32',
     strokeWidth: 1.5,
     icon: (
@@ -43,10 +38,7 @@ const LINKS: Link[] = [
       </>
     ),
   },
-  {
-    label: 'MAIL',
-    value: 'CONTACT@SEVEREDARCHIVE',
-    href: 'mailto:hello@example.com',
+  mail: {
     viewBox: '0 0 24 24',
     strokeWidth: 2,
     icon: (
@@ -69,10 +61,7 @@ const LINKS: Link[] = [
       </>
     ),
   },
-  {
-    label: 'COMMISSIONS',
-    value: 'STATUS: OPEN',
-    href: '#',
+  inbox: {
     viewBox: '0 0 24 24',
     strokeWidth: 2,
     icon: (
@@ -87,12 +76,13 @@ const LINKS: Link[] = [
       </>
     ),
   },
-]
+}
 
 export default function LinksPanel() {
   return (
     <div className="panel links-panel">
-      {LINKS.map((l) => {
+      {SITE_CONTENT.links.map((l) => {
+        const spec = ICONS[l.icon]
         // A mailto and an in-page anchor must not open a tab; only a real
         // outbound link does.
         const external = l.href.startsWith('http')
@@ -106,16 +96,16 @@ export default function LinksPanel() {
           >
             <svg
               className="link-icon"
-              viewBox={l.viewBox}
+              viewBox={spec.viewBox}
               fill="none"
               stroke="currentColor"
-              strokeWidth={l.strokeWidth}
+              strokeWidth={spec.strokeWidth}
               strokeLinecap="round"
               strokeLinejoin="round"
               aria-hidden="true"
               focusable="false"
             >
-              {l.icon}
+              {spec.icon}
             </svg>
             <span className="link-card-label">{l.label}</span>
             <span className="link-card-value tw-dim">{l.value}</span>

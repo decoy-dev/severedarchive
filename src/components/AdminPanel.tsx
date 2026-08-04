@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { createDraggable } from 'animejs'
 import { ARCHIVE } from '../data/archive'
+import { SITE_CONTENT, UPLOAD_LIMITS, formatBytes } from '../data/content'
 
 /**
  * What the passcode was for: publishing.
@@ -41,8 +43,25 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   const [content, setContent] = useState('')
   const [sha, setSha] = useState<string | null>(null)
   const firstRef = useRef<HTMLInputElement | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => { firstRef.current?.focus() }, [])
+
+  // Draggable by its header, like a file window — it covers the archive, and
+  // being able to shove it aside to read what is underneath is the point.
+  // `containerPadding` keeps it from being dragged off screen entirely.
+  useEffect(() => {
+    const panel = panelRef.current
+    if (!panel) return
+    const drag = createDraggable(panel, {
+      trigger: panel.querySelector('[data-admin-drag]') as HTMLElement,
+      container: document.body,
+      // Negative, so it can be pushed most of the way off screen — the point of
+      // dragging it is to see what it covers.
+      containerPadding: -260,
+    })
+    return () => { drag.revert() }
+  }, [])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -64,7 +83,10 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
     fetch(`${API}/api/content`, { credentials: 'include' })
       .then((r) => r.json())
       .then((body) => {
-        setContent(body.content ?? '{\n  "about": {},\n  "links": []\n}\n')
+        // Seeded from what the site is currently showing when the file does not
+        // exist yet. An empty box asks the owner to retype the site from memory
+        // in JSON, which is the opposite of an editor.
+        setContent(body.content ?? `${JSON.stringify(SITE_CONTENT, null, 2)}\n`)
         setSha(body.sha ?? null)
         setStatus({ kind: 'idle' })
       })
@@ -126,8 +148,8 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="admin-panel glass" role="dialog" aria-label="Admin">
-      <header className="admin-head">
+    <div className="admin-panel glass" ref={panelRef} role="dialog" aria-label="Admin">
+      <header className="admin-head" data-admin-drag>
         <span className="admin-title">PUBLISH</span>
         <nav className="admin-tabs">
           <button className={tab === 'upload' ? 'is-active' : ''} onClick={() => setTab('upload')}>UPLOAD</button>
@@ -140,6 +162,8 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
         <form className="admin-body" onSubmit={upload}>
           <label className="admin-field">
             <span>FILE</span>
+            {/* Stated rather than left to be discovered by a rejection. The size
+                comes from the same constant the Worker enforces. */}
             <input
               ref={firstRef}
               type="file"
@@ -177,6 +201,11 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
           <label className="admin-field admin-field-wide"><span>DESCRIPTION</span>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
           </label>
+          <p className="admin-hint">
+            VIDEO {UPLOAD_LIMITS.video.join(' / ')} · PHOTO {UPLOAD_LIMITS.photo.join(' / ')}
+            {' · UP TO '}{formatBytes(UPLOAD_LIMITS.maxBytes)}
+            {file ? ` · SELECTED ${formatBytes(file.size)}` : ''}
+          </p>
           <button className="admin-submit" type="submit" disabled={!file || status.kind === 'busy'}>
             {status.kind === 'busy' ? '···' : 'UPLOAD'}
           </button>

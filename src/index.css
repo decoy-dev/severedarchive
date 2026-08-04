@@ -980,16 +980,27 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
    for the archive. */
 .admin-panel {
   position: fixed; z-index: 60;
+  /* Visible bottom edge. `.glass` gives every surface a dark underside for its
+     bevel, which vanishes on a dark ground — the same reason the terminal
+     needed this. */
+  border-bottom-color: var(--hair-bright);
+  /* Draggable, so it can be shoved aside to read what it covers. */
+  cursor: default;
   /* Nearly opaque, unlike the rest of the glass. The archive showing through a
      form you are typing into is noise, not depth — this is a mode, and it should
      read as one. */
   background: rgba(9, 12, 15, 0.96);
-  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  /* Centred with the `translate` property, not `transform` — anime's draggable
+     owns `transform`, and having both write it made the panel jump on grab and
+     then fight the drag. `translate` composes with `transform` instead. */
+  top: 50%; left: 50%; translate: -50% -50%;
   width: min(760px, calc(100vw - 2 * var(--frame)));
   max-height: calc(100dvh - 2 * var(--frame));
   display: flex; flex-direction: column;
   overflow: hidden;
 }
+.admin-head[data-admin-drag] { cursor: grab; }
+.admin-head[data-admin-drag]:active { cursor: grabbing; }
 .admin-head {
   display: flex; align-items: center; gap: 16px;
   padding: 0 14px; height: 46px; flex: 0 0 auto;
@@ -1032,6 +1043,9 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   color: var(--acid); border-color: var(--acid); outline: none;
 }
 .admin-submit:disabled { color: var(--dim); cursor: default; }
+.admin-hint {
+  grid-column: 1 / -1; font-size: var(--fs-xs); letter-spacing: 0.06em; color: var(--dim);
+}
 .admin-status {
   flex: 0 0 auto; padding: 10px 16px; font-size: var(--fs-xs); letter-spacing: 0.05em;
   border-top: 1px solid var(--hair); position: relative; z-index: 2;
@@ -1178,11 +1192,14 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   font-family: var(--display);   /* sanctioned display exception — wordmark + this */
   font-size: clamp(48px, 9vw, 160px);
   letter-spacing: -0.03em;
-  /* White, with a shadow so it survives the blowout's brightest instant. The
-     type was black against the near-white flash — legible, but it read as a
-     hole punched in the screen rather than as the interface shouting. */
+  /* Inverted against whatever is behind it, rather than a fixed colour with a
+     shadow propping it up. The blowout runs the stage from near-black to
+     near-white inside 450ms and the archive itself runs from a dark clip to a
+     pale mint, so no single ink is legible across all of it. `difference` on
+     white gives black type over a light frame and white over a dark one,
+     automatically, at every instant of the flash. */
   color: #ffffff;
-  text-shadow: 0 0 18px rgba(0, 0, 0, 0.55), 0 2px 0 rgba(0, 0, 0, 0.35);
+  mix-blend-mode: difference;
 }
 /* Reduced motion keeps the announcement and drops the assault: the type still
    appears, the page does not blow out. */

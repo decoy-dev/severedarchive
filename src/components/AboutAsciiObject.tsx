@@ -267,7 +267,32 @@ export default function AboutAsciiObject({ tier }: { tier: PerfTier }) {
       dom.style.transformOrigin = '0 0'
 
       const hostRect = host.getBoundingClientRect()
-      const hostCx = hostRect.x + hostRect.width / 2
+
+      /**
+       * The gap the mark should sit in the middle of: from whatever is to its
+       * left to the inside of the panel's right edge.
+       *
+       * NOT the middle of this element's own grid column, which is what every
+       * previous attempt centred. Those are the same thing only when the copy
+       * fills its track — and it does not always. Measured at 2000px wide, the
+       * copy ended at 53% here and at 38% on the owner's machine, so the gap's
+       * centre was 135px further left for him while the mark sat where this
+       * column put it. The mark was centred; it was centred in the wrong space.
+       *
+       * Read structurally — previous sibling, parent's padding — rather than by
+       * class name, so this surface still knows nothing about the About layout.
+       */
+      const parent = host.parentElement
+      const left = host.previousElementSibling?.getBoundingClientRect().right
+      let bandL = hostRect.x
+      let bandR = hostRect.right
+      if (parent && left !== undefined) {
+        const p = parent.getBoundingClientRect()
+        const padRight = parseFloat(getComputedStyle(parent).paddingRight) || 0
+        bandL = left
+        bandR = p.right - padRight
+      }
+      const hostCx = (bandL + bandR) / 2
       const hostCy = hostRect.y + hostRect.height / 2
 
       /**
@@ -386,8 +411,16 @@ export default function AboutAsciiObject({ tier }: { tier: PerfTier }) {
 
     // ResizeObserver rather than window.resize: the terminal window is its own
     // box and may change size without the viewport doing so.
+    //
+    // The PREVIOUS SIBLING is observed as well, because the mark is centred in
+    // the gap between it and the panel's edge — and that gap can change without
+    // this element's own box changing at all. The copy narrowing inside its
+    // track is exactly that case, and it is the one that had the mark sitting
+    // 135px off on the owner's machine while measuring as centred here.
     const resizeObserver = new ResizeObserver(resize)
     resizeObserver.observe(host)
+    const sibling = host.previousElementSibling
+    if (sibling) resizeObserver.observe(sibling)
     resize()
 
     function showFallback() {

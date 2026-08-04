@@ -1,6 +1,7 @@
 import { useEffect, useState, type ComponentType } from 'react'
 import type { PerfTier } from '../lib/perfTier'
 import { useMediaQuery } from '../hooks/useMediaQuery'
+import { SITE_CONTENT } from '../data/content'
 
 /**
  * Split out, not statically imported: three.js is ~590kB of the bundle and this
@@ -77,26 +78,15 @@ export default function AboutPanel({ tier }: { tier: PerfTier }) {
 
   return (
     <div className="panel about-panel" data-with-object="true" data-wide={wide ? 'true' : 'false'}>
+      {/* From `SITE_CONTENT`, which is also what the admin editor seeds itself
+          from — the copy has one home rather than one per surface. */}
       <div className="about-copy">
-        <div className="panel-block">
-          <span className="panel-label">OPERATOR</span>
-          <p className="panel-big">SEVEREDARCHIVE</p>
-        </div>
-        <div className="panel-block">
-          <span className="panel-label">FIELD</span>
-          <p className="panel-big">MOTION + VISUAL ART</p>
-        </div>
-        <div className="panel-block">
-          <span className="panel-label">BACKSTORY</span>
-          <p>
-            Blender-built worlds set to music. Chrome, glass, and metal — still frames and
-            moving sequences in a neo-2000s register. The archive updates when the renders survive.
-          </p>
-        </div>
-        <div className="panel-block">
-          <span className="panel-label">TOOLING</span>
-          <p>BLENDER · GEOMETRY NODES · SOUND-SYNCED SEQUENCING</p>
-        </div>
+        {SITE_CONTENT.about.map((block) => (
+          <div className="panel-block" key={block.label}>
+            <span className="panel-label">{block.label}</span>
+            {block.big ? <p className="panel-big">{block.body}</p> : <p>{block.body}</p>}
+          </div>
+        ))}
       </div>
       {/* No spinner: the object is decorative, so its absence is an empty
           column for a moment rather than something to announce. */}
