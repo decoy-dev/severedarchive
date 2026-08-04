@@ -38,11 +38,33 @@ export default function FileWindow({
       }}
       onPointerDown={onFocus}
     >
-      <header className="fw-titlebar" data-drag-handle>
-        <span className="fw-title">FILE_{file.index} <span className="tw-dim">·</span> {file.name}.{file.ext}</span>
+      <header className="fw-titlebar">
+        {/* The drag handle is the TITLE, not the whole bar. It was the bar, and
+            the controls live inside it, so pressing ✕ or VOL started a drag:
+            anime takes pointer capture, and a press that drifts even 2–3px then
+            delivers its click to the capture target instead of the button. The
+            ✕ simply did not fire for anyone who does not click perfectly still,
+            and the volume slider dragged the whole window. The title stretches
+            to fill the bar (see `.fw-title`), so the grabbable area is every
+            part of the bar that is not a control — which is what it looks like.
+
+            The bar carries the name and nothing else. Nothing in the interface
+            numbers files any more — a file is its name. */}
+        <span className="fw-title" data-drag-handle>{file.name}.{file.ext}</span>
         <span className="fw-controls">
           <VolumeControl value={volume} onChange={onVolume} />
-          <button className="fw-close" onClick={onClose} aria-label={`Close FILE_${file.index}`}>✕</button>
+          {/* Closes on pointerdown, not click: the press is the commit, so
+              nothing downstream — a drift, a re-render, a media reconcile —
+              can swallow it. `onClick` is still here for the keyboard, which
+              never emits a pointer event. */}
+          <button
+            className="fw-close"
+            onPointerDown={(e) => { e.stopPropagation(); onClose() }}
+            onClick={onClose}
+            aria-label={`Close ${file.name}.${file.ext}`}
+          >
+            ✕
+          </button>
         </span>
       </header>
       {/* An empty, stable slot — never a `<video>` of its own. mediaController

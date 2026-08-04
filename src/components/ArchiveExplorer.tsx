@@ -1,6 +1,9 @@
 import { useRef, type KeyboardEvent } from 'react'
 import { ARCHIVE, fileById, formatDuration, formatResolution, posterSrc } from '../data/archive'
 import { useArchiveSelection } from '../lib/selection'
+import { useWindowView } from '../lib/windowRegistry'
+import MediaKindIcon from './MediaKindIcon'
+import WindowDashboard from './WindowDashboard'
 
 /**
  * Two-column file explorer (spec §2). A thumbnail grid on the right, a standby
@@ -18,6 +21,9 @@ import { useArchiveSelection } from '../lib/selection'
  */
 export default function ArchiveExplorer() {
   const { selectedId, select, activate } = useArchiveSelection()
+  // The registry, not DesktopContext: this surface must not depend on Desktop
+  // (selection contract rule 1). Desktop publishes into it from above.
+  const { windows: openWindows, focus, close, node: windowNode } = useWindowView()
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
 
   const selectedFile = fileById(selectedId) ?? ARCHIVE[0]
@@ -60,35 +66,48 @@ export default function ArchiveExplorer() {
               <img src={posterSrc(f.id)} alt="" loading="lazy" />
             </span>
             <span className="explorer-row-name">
-              <span className="explorer-row-index">{f.index}</span>
+              {/* The media-kind glyph stands where the 001/002 index used to.
+                  Nothing in the interface numbers files any more — a file is
+                  its name. */}
+              <span className="explorer-row-kind"><MediaKindIcon kind={f.kind} /></span>
               {f.name}<span className="tw-dim">.{f.ext}</span>
             </span>
           </button>
         ))}
       </div>
 
+      {/* One box, floor to ceiling. The selected-file readout used to be a
+          separate strip under it; it now lives INSIDE the standby state, so the
+          column is a single surface and the box gets that height back.
+
+          The pane holds no media in either state. Nothing previews on hover and
+          nothing decodes here: a file plays when it is opened into a window and
+          not before, so this is a readout rather than a viewer.
+
+          With nothing open it is the standby prompt plus the selected file.
+          Once anything is open it is the dashboard for those windows — the box
+          was otherwise dead space at exactly the moment there was most to
+          report. */}
       <div className="explorer-preview">
-        {/* The pane holds no media. Nothing previews on hover and nothing
-            decodes here: a file plays when it is opened into a window and not
-            before, so this is a prompt rather than a viewer. Hovering a tile
-            still updates the metadata line below. */}
-        <div className="preview-frame-wrap">
+        {openWindows.length > 0 ? (
+          <WindowDashboard windows={openWindows} onFocus={focus} onClose={close} windowNode={windowNode} />
+        ) : (
           <div className="preview-standby" data-preview-standby>
             <p className="standby-line">&gt; AWAITING SELECTION.</p>
             <p className="standby-line tw-dim">
               &gt; PLEASE CHOOSE A SUBJECT FROM THE LIST ON THE RIGHT.
               <span className="standby-caret" aria-hidden="true" />
             </p>
+            <div className="preview-meta">
+              <div className="preview-meta-head">
+                {selectedFile.name}<span className="tw-dim">.{selectedFile.ext}</span>
+              </div>
+              <div className="preview-meta-sub tw-dim">
+                {selectedFile.tagline.toUpperCase()} · {formatDuration(selectedFile.durationSec)} · {selectedFile.year} · {formatResolution(selectedFile)}
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="preview-meta">
-          <div className="preview-meta-head">
-            FILE_{selectedFile.index} <span className="tw-dim">·</span> {selectedFile.name}.{selectedFile.ext}
-          </div>
-          <div className="preview-meta-sub tw-dim">
-            {selectedFile.tagline.toUpperCase()} · {formatDuration(selectedFile.durationSec)} · {selectedFile.year} · {formatResolution(selectedFile)}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   )

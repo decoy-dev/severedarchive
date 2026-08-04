@@ -1,7 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { animate } from 'animejs'
 import { thumbSrc, posterSrc } from '../data/archive'
 import { prefersReducedMotion, type PerfTier } from '../lib/perfTier'
+import { loopFadeAction, type LoopFadePhase } from '../lib/loopFade'
+
+/** Seconds. Long enough to read as a transition, short enough not to eat the clip. */
+const LOOP_FADE = 0.55
+/** How far down the tail goes. Not 0 — a hole to the void reads as a dropout. */
+const LOOP_FLOOR = 0.12
 
 export default function BackgroundVideo({ tier, fileId }: { tier: PerfTier; fileId: string }) {
   const [layers, setLayers] = useState<string[]>([fileId]) // newest last
@@ -26,6 +32,45 @@ export default function BackgroundVideo({ tier, fileId }: { tier: PerfTier; file
     })
   }, [layers])
 
+  // Loop softening for the settled layer. The backdrop is one clip on repeat,
+  // so its hard wrap is the most-seen cut in the app; `loopFadeAction` decides
+  // when to dip and when to come back, and this only carries out the verdict.
+  //
+  // Deliberately NOT attached while a file change is crossfading: that beat
+  // animates opacity on the incoming layer, and two owners of one property
+  // fight. `layers.length === 1` is the steady state, which is also the only
+  // time a wrap is what the eye is on.
+  const loopPhase = useRef<LoopFadePhase>('in')
+  const lastTime = useRef(0)
+  const settled = layers.length === 1
+  const attachLoopFade = useCallback((el: HTMLVideoElement | null) => {
+    if (!el || prefersReducedMotion()) return
+    loopPhase.current = 'in'
+    lastTime.current = el.currentTime
+    const onTime = () => {
+      const action = loopFadeAction({
+        time: el.currentTime,
+        last: lastTime.current,
+        duration: el.duration,
+        fade: LOOP_FADE,
+        phase: loopPhase.current,
+      })
+      lastTime.current = el.currentTime
+      if (action.kind === 'none') return
+      loopPhase.current = action.to
+      animate(el, {
+        opacity: action.to === 'out' ? LOOP_FLOOR : 1,
+        duration: action.ms,
+        ease: 'linear',
+      })
+    }
+    el.addEventListener('timeupdate', onTime)
+    return () => {
+      el.removeEventListener('timeupdate', onTime)
+      el.style.opacity = ''
+    }
+  }, [])
+
   if (tier === 'lite') {
     return (
       <div className="bg-video" aria-hidden="true">
@@ -40,7 +85,7 @@ export default function BackgroundVideo({ tier, fileId }: { tier: PerfTier; file
         return (
           <video
             key={id}
-            ref={incoming ? incomingRef : undefined}
+            ref={incoming ? incomingRef : settled ? attachLoopFade : undefined}
             src={thumbSrc(id)}
             poster={posterSrc(id)}
             autoPlay

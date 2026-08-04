@@ -89,9 +89,16 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
    9.657em wide (measured, and stable across sizes since it is pure metrics), so
    100vw / 9.657 = 10.355vw is the exact fit and 10.1vw leaves a hair of margin.
    smoke.spec.ts asserts it stays inside the viewport — that test is the guard if
-   the font or the string ever changes. */
+   the font or the string ever changes.
+
+   That slack is ~2.5vw, and left-anchoring spent all of it on the right edge.
+   The box now spans the viewport and centres its own line, so the margin is
+   split evenly. `text-align`, not a transform: the element is the full width of
+   a `overflow: clip` stage, and a translate would be one more thing that has to
+   stay inside it. */
 .wordmark {
   position: absolute; z-index: 2;
+  right: 0; text-align: center;
   /* `top: 0`, not the old -0.14em. line-height 0.82 already pulls the glyph box
      tighter than the ascent, so a negative offset on top of that clipped the
      cap heights against the viewport edge — the word was cut off at the top
@@ -249,6 +256,14 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   color: inherit !important; background: transparent !important;
   text-shadow: 0 0 7px rgba(182, 255, 46, 0.22);
 }
+/* Left-aligned on purpose, or rather unavoidably: AsciiEffect's character grid
+   does not divide the box evenly (measured at 1440px: 561px of columns in a
+   551px box) and the excess is clipped off the right, so the object reads a
+   couple of characters left of centre. It cannot be fixed from here — the
+   overflow is INSIDE this box, so centring the box moves nothing, and
+   `text-align` would centre each glyph row independently and deform the image.
+   The real fix is to hand `effect.setSize` a width that is a whole number of
+   cells, which means knowing the cell width AsciiEffect chose. */
 .ascii-object table { display: block; width: 100%; height: 100%; color: inherit !important; background: transparent !important; }
 .ascii-object td, .ascii-object span { color: inherit !important; background: transparent !important; }
 .ascii-fallback {
@@ -381,7 +396,12 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   background: #000; border: 1px solid var(--hair); overflow: hidden;
 }
 .explorer-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.62; }
-.explorer-row-index { color: var(--dim); margin-right: 6px; }
+/* The media-kind glyph, where the 001/002 index used to be. `inline-flex` and a
+   nudged baseline rather than `vertical-align: middle`: the icon is a 13px box
+   next to 12px type, and middle-aligning it sat it visibly high against the
+   x-height of Share Tech Mono. It inherits `currentColor`, so the accent rules
+   below reach it with no rule of its own. */
+.explorer-row-kind { display: inline-flex; margin-right: 6px; color: var(--dim); transform: translateY(2px); }
 .explorer-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 /* Accent marks the hovered/selected tile only (spec §2) — never a resting default. */
 .explorer-row:hover, .explorer-row:focus-visible, .explorer-row.is-selected {
@@ -393,19 +413,26 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .explorer-row:hover .explorer-thumb img,
 .explorer-row:focus-visible .explorer-thumb img,
 .explorer-row.is-selected .explorer-thumb img { opacity: 1; }
-.explorer-row:hover .explorer-row-index,
-.explorer-row:focus-visible .explorer-row-index,
-.explorer-row.is-selected .explorer-row-index { color: var(--acid); }
+.explorer-row:hover .explorer-row-kind,
+.explorer-row:focus-visible .explorer-row-kind,
+.explorer-row.is-selected .explorer-row-kind { color: var(--acid); }
 
-.explorer-preview { grid-column: 1; grid-row: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
-/* The pane holds no media, so this is simply the box the standby prompt fills. */
-.preview-frame-wrap {
-  flex: 1 1 auto; min-height: 0;
-  display: flex; align-items: stretch; justify-content: center; overflow: hidden;
-}
-/* Standby prompt, not a viewer: nothing previews on hover and nothing decodes
-   here. The pane fills its column rather than hugging a media aspect ratio,
-   because there is no media to hug. */
+/* `min-width: 0` is not decoration: a grid item's default `min-width: auto`
+   sizes the 1fr track to its min-content, and the dashboard strip's cards made
+   that ~1100px — the pane grew straight over the file list beside it. */
+/* One box, floor to ceiling — the selected-file readout used to be a second
+   strip below this one and is now inside it, so there is a single child to
+   stretch. `min-width: 0` is not decoration: a grid item's default
+   `min-width: auto` sizes the 1fr track to its min-content, and the dashboard's
+   cards made that ~1100px — the box grew straight over the file list beside
+   it. */
+.explorer-preview { grid-column: 1; grid-row: 1; min-height: 0; min-width: 0; display: flex; }
+.explorer-preview > * { flex: 1 1 auto; min-width: 0; }
+/* Standby state, not a viewer: nothing previews on hover and nothing decodes
+   here. It fills its column rather than hugging a media aspect ratio, because
+   there is no media to hug. Centred as one block — prompt and selected file
+   together — so the file line reads as part of the readout rather than as a
+   caption stranded along the bottom edge. */
 .preview-standby {
   width: 100%; height: 100%;
   display: flex; flex-direction: column; justify-content: center; gap: 6px;
@@ -421,7 +448,81 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 @media (prefers-reduced-motion: reduce) {
   .standby-caret { animation: none; }
 }
-.preview-meta { flex: 0 0 auto; border-top: 1px solid var(--hair); padding-top: 10px; }
+
+/* Window dashboard — what the standby box becomes while anything is open.
+
+   It fills the box, and the cards divide the height between them: one window
+   gets a tall card, three get a third each. Worth knowing before changing it:
+   the terminal is a fixed background layer (binding ruling 7) and file windows
+   float above it, so this box sits UNDER the cascade. At 1440×900 the three
+   spawn boxes cover x 240–1016, y 151–645, and this box is x 104–1020,
+   y 225–774 — so with the buffer full the cards are read down their left edge
+   and through the band below y 645. That is the owner's call: the readout says
+   more, and the windows it describes are the thing on top of it. */
+.window-dash {
+  width: 100%; height: 100%; min-height: 0;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 16px; border: 1px solid var(--hair-bright); background: rgba(0, 0, 0, 0.35);
+}
+.dash-head { flex: 0 0 auto; font-size: var(--fs-xs); letter-spacing: 0.06em; line-height: 1.5; }
+/* The bring-up beat, the first time anything is opened. Same log idiom as the
+   app's own boot — this is the panel booting, so it says so the same way. Lines
+   are revealed by render rather than by keyframes, so there is no animation to
+   suppress under reduced motion: that path never enters this state at all. */
+.dash-boot { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+.dash-boot-line { font-size: var(--fs-sm); letter-spacing: 0.06em; line-height: 1.7; }
+/* At most MAX_WINDOWS cards, so this never actually scrolls — the overflow is a
+   floor under a short box, not a scrolling region by design. */
+.dash-list { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+.dash-row {
+  flex: 1 1 0; min-height: 0; display: flex; align-items: stretch;
+  border: 1px solid var(--hair); background: rgba(0, 0, 0, 0.5);
+}
+.dash-row-main {
+  flex: 1 1 auto; min-width: 0; text-align: left;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 12px; color: var(--text);
+}
+.dash-row-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* Fixed width so the names in stacked cards start on one column: the label is
+   'TOP' on one card and a single digit on the others. */
+.dash-rank { flex: 0 0 auto; width: 2.4em; font-size: var(--fs-xs); color: var(--dim); letter-spacing: 0.08em; }
+.dash-row-kind { flex: 0 0 auto; display: flex; color: var(--dim); }
+.dash-name, .dash-tagline { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-name { font-size: var(--fs-sm); flex: 0 0 auto; }
+/* Trails the name on the same line now that the name is short — the FILE_00x
+   prefix is gone, so there is room, and the card gets a line back for stats. */
+.dash-tagline { font-size: var(--fs-xs); letter-spacing: 0.06em; min-width: 0; }
+/* The stats themselves. `auto-fit` with a floor rather than a fixed column
+   count: the same card is ~840px wide with one window open and the same width
+   with three, but the box is a third of the height, so the grid reflows to as
+   many columns as the width allows instead of being told a number. */
+.dash-grid {
+  margin-top: auto; display: grid; gap: 4px 18px;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  font-size: var(--fs-xs); letter-spacing: 0.04em;
+}
+/* The live half. `tabular-nums` is the whole point: these cells are rewritten
+   every animation frame, and proportional digits would make the numbers jitter
+   sideways as they tick. The accent marks them as the moving ones. */
+.dash-grid.is-live { margin-top: 6px; }
+.dash-grid.is-live .dash-stat-value { font-variant-numeric: tabular-nums; color: var(--acid); opacity: 0.85; }
+.dash-stat { display: flex; gap: 8px; justify-content: space-between; min-width: 0; border-bottom: 1px solid var(--hair); padding-bottom: 2px; }
+.dash-stat-label { flex: 0 0 auto; }
+.dash-stat-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Leads the card — see the comment in WindowDashboard.tsx. The width is set so
+   the control clears the cascade's left edge on its own: the box starts at
+   x 104 and windows at x 240, so a ~40px column at the card's head is always
+   clickable, whatever is stacked over the rest of the card. */
+.dash-close { flex: 0 0 auto; width: 40px; color: var(--dim); border-right: 1px solid var(--hair); align-self: stretch; }
+/* Accent marks the top window and whatever the pointer is on — never a resting
+   default, same rule as the file tiles. */
+.dash-row.is-focused { border-color: var(--hair-bright); background: rgba(182, 255, 46, 0.07); }
+.dash-row.is-focused .dash-rank, .dash-row.is-focused .dash-name { color: var(--acid); }
+.dash-row-main:hover, .dash-row-main:focus-visible { color: var(--acid); outline: none; }
+.dash-row-main:hover .dash-rank, .dash-row-main:focus-visible .dash-rank { color: var(--acid); }
+.dash-close:hover, .dash-close:focus-visible { color: var(--acid); outline: none; }
+.preview-meta { flex: 0 0 auto; border-top: 1px solid var(--hair); margin-top: 18px; padding-top: 12px; }
 .preview-meta-head { font-size: var(--fs-lg); color: var(--bright); letter-spacing: 0.02em; }
 .preview-meta-sub { font-size: var(--fs-sm); margin-top: 4px; letter-spacing: 0.03em; }
 
@@ -565,19 +666,29 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   overflow: hidden;
   will-change: transform;   /* dragged via anime.js transforms */
 }
+/* No cursor and no drag here any more: the bar is a container, and the title
+   inside it is the handle. */
 .fw-titlebar {
   display: flex; justify-content: space-between; align-items: center;
-  height: 40px; flex: 0 0 auto; padding: 0 12px;
+  height: 40px; flex: 0 0 auto; padding: 0 12px; gap: 16px;
   font-size: var(--fs-sm);
   border-bottom: 1px solid var(--hair);
-  cursor: grab;
   position: relative; z-index: 2;   /* glass host child — see the sheen note above */
 }
-.fw-titlebar:active { cursor: grabbing; }
-/* min-width: 0 is load-bearing — a flex item's default min-width is its content,
+/* The handle. It stretches to fill everything the controls do not use, so the
+   grabbable area is the whole bar minus the controls — which is what the bar
+   looks like, and it keeps a press on ✕ or VOL from starting a drag.
+   min-width: 0 is load-bearing: a flex item's default min-width is its content,
    so without it a long portrait-window title refuses to shrink and crushes the
-   expanded volume control off the end of the bar. */
-.fw-title { color: var(--dim); letter-spacing: 0.04em; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+   expanded volume control off the end of the bar. The 16px bar gap is the rest
+   of that fix — at ~250px of portrait bar the name ran straight into VOL. */
+.fw-title {
+  flex: 1 1 auto; min-width: 0;
+  color: var(--dim); letter-spacing: 0.04em;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  cursor: grab;
+}
+.fw-title:active { cursor: grabbing; }
 .file-window[data-focused='true'] .fw-title { color: var(--bright); }
 .file-window[data-focused='true'] { border-color: var(--hair-bright); }
 .fw-controls { display: flex; align-items: center; gap: 14px; flex: 0 0 auto; }

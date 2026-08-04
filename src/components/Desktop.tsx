@@ -12,6 +12,9 @@ import { flipMove } from '../lib/mediaMove'
 import { VideoDirector } from '../lib/videoDirector'
 import FileWindow from './FileWindow'
 import { MediaControllerProvider, MediaLayer } from './MediaLayer'
+import {
+  EMPTY_WINDOW_VIEW, usePublishWindows, type OpenWindowInfo, type WindowView,
+} from '../lib/windowRegistry'
 
 export type DesktopApi = {
   open: (id: string) => void
@@ -238,6 +241,47 @@ export default function Desktop({
     const next = desiredFor(selectedId, windows, isDesktop, tier)
     media.reconcile(next.desired, { animate: true, focus: next.focus })
   })
+
+  const focus = useCallback((id: string) => setWindows((cur) => focusWindow(cur, id)), [])
+
+  // `nodes` is a ref, so this identity is stable and reading it always sees the
+  // element currently mounted for that id.
+  const windowNode = useCallback((id: string) => nodes.current.get(id) ?? null, [])
+
+  // Top of the stack first, so the dashboard's reading order is the screen's
+  // depth order. Volume comes from the controller record rather than `volumes`
+  // alone: that mirror is only populated once a window's slider has been
+  // touched, and an untouched window still has a real volume.
+  const openWindows = useMemo<OpenWindowInfo[]>(
+    () =>
+      [...windows]
+        .sort((a, b) => b.z - a.z)
+        .map((w) => ({
+          id: w.id,
+          slot: w.slot,
+          z: w.z,
+          x: w.x,
+          y: w.y,
+          focused: w.id === focusedId,
+          volume: volumes[w.id] ?? media.stateOf(w.id).volume,
+        })),
+    [windows, focusedId, volumes, media],
+  )
+
+  // Handed UP, never reached down for: the explorer is forbidden from importing
+  // DesktopContext (selection contract rule 1), so what is open travels the same
+  // way the opener does — into a registry that sits above this component.
+  const publishWindows = usePublishWindows()
+  const view = useMemo<WindowView>(
+    () => ({ windows: openWindows, focus, close, node: windowNode }),
+    [openWindows, focus, close, windowNode],
+  )
+  useEffect(() => {
+    publishWindows(view)
+    // Desktop outlives every surface that reads this, but it does unmount on a
+    // reload boundary in tests; leaving a stale list behind would outlive it.
+    return () => publishWindows(EMPTY_WINDOW_VIEW)
+  }, [publishWindows, view])
 
   const api = useMemo<DesktopApi>(() => ({ open }), [open])
 

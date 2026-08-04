@@ -69,7 +69,7 @@ export default function ArchiveMobile() {
 
       <div className="primary-meta">
         <div className="primary-meta-head">
-          FILE_{selectedFile.index} <span className="tw-dim">·</span> {selectedFile.name}.{selectedFile.ext}
+          {selectedFile.name}<span className="tw-dim">.{selectedFile.ext}</span>
         </div>
         <div className="primary-meta-sub tw-dim">
           {selectedFile.tagline.toUpperCase()} · {formatDuration(selectedFile.durationSec)} · {selectedFile.year} · {formatResolution(selectedFile)}
@@ -88,7 +88,6 @@ export default function ArchiveMobile() {
             onClick={() => activate(f.id, 'tile')}
           >
             <img src={posterSrc(f.id)} alt="" loading="lazy" />
-            <span className="mobile-tile-index">{f.index}</span>
           </button>
         ))}
       </div>

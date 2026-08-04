@@ -25,19 +25,18 @@ The v2 archive-stack build was replaced by a desktop window manager. Work was re
 
 All six slices are complete and deployed. The owner's 2026-08-03 revision pass (wordmark fit, thumbnail LIST, standby pane, refusal blowout, About ASCII object, close-button target) is also in and live.
 
-## Next task — the standby pane becomes a live dashboard
+## The live window dashboard — done, 2026-08-03
 
-**Owner request, 2026-08-03.** Right now `.preview-standby` says `AWAITING SELECTION` and never says anything else. Once a file is selected and viewer windows are open, that pane should stop being a prompt and become a **status dashboard for the active windows**: which files are open, where each one sits, and their details — position, size, focus state, encode tier, volume, playhead.
+The standby pane is no longer only a prompt. With nothing open it reads `AWAITING SELECTION` plus the selected file; once anything is open it becomes a **dashboard for the active windows**, filling the box: one card per window, top of the z-stack first, each with a static grid (slot, z, run, frame, ratio, year) and a live one re-read every animation frame (POS, SIZE, TIME, FRAMES, DROP, BUF, RDY, SRC, VOL, AUDIO). Click a card to raise it, ✕ to close it. First open in a page load plays a ~2.4s bring-up log; after that cards just appear.
 
-Notes for whoever picks this up:
+How the wiring landed, and the trap in it:
 
-- **The data already exists and is already correct.** `WinState` (`src/lib/windowManager.ts`) holds `id`, `x`, `y`, `z`, `slot`; `mediaController.stateOf(id)` holds volume/muted/currentTime; `tierOf(id)` holds `full`/`thumb`; `topWindowId(windows)` is focus. Nothing new needs to be computed — it needs to be *read* and rendered.
-- **The wiring is the actual work.** `Desktop` owns window state and the explorer is deliberately below it and forbidden from importing `DesktopContext` (selection contract rule 1). So the window list has to reach the pane the same way the opener reaches the activation policy: handed *up* through a context, not pulled down. Adding a `DesktopContext` import to `ArchiveExplorer` would break a binding rule — don't.
-- Window position changes on every drag frame. Read it for display at a rate the pane can afford rather than re-rendering the explorer on each `pointermove`.
-- Keep the `AWAITING SELECTION` copy as the zero-window state; the dashboard is what replaces it once something is open.
-- The pane must still hold no media and register no slot. It is a readout, not a viewer.
+- **The rule was real and it was broken first.** `ArchiveExplorer` must not import `DesktopContext` (selection contract rule 1). The dashboard was built that way, it worked, and every test passed. What is open now travels the same way the opener does: `lib/windowRegistry.tsx` provides above `Desktop`, `Desktop` publishes into it from an effect, and the explorer reads. `src/components/surfaceIndependence.test.ts` is the executable version of the rule — it did not exist before, which is why nothing caught it.
+- **The live half is not React state.** A rAF loop in `WindowDashboard` samples and writes `textContent` straight to the cells; re-rendering three cards 60×/s next to five decodes is not affordable. Reads are batched before writes, and an unchanged string is not written at all, so a still desktop costs nothing.
+- **Sampling still goes through the owners.** The window's node comes from the registry (`WindowView.node`, backed by the map `Desktop` already keeps for drag), the element from `mediaController.videoFor(id)` — added for this. No `document.querySelector`, no finding media by DOM shape; `mediaLookup.test.ts` enforces it.
+- Position has to be sampled from the live node: anime drags by transform and never tells React, so `OpenWindowInfo.x/y` is the spawn position forever.
 
-**Tests: everything is green.** `npm test` 114/114, `npm run lint` clean, `npm run e2e` **70 passed / 44 skipped / 0 failed** across all three Playwright projects. This is the first point in the branch where that is true — there are no expected-red tests any more, so **any** failure now is a regression. (114, not the 120 of Slice D: `stackLayout.test.ts` went with the module it tested. The skips are viewport-gated by design.)
+**Tests: everything is green.** `npm test` 137/137, `npm run lint` clean, `npm run e2e` **75 passed / 54 skipped / 0 failed**. There are no expected-red tests, so **any** failure is a regression.
 
 **Node compatibility:** `src/test/setup.ts` restores `localStorage` under vitest's jsdom environment. Node 26 defines an inert `localStorage` global, vitest skips copying any jsdom window key that already exists as a Node global, and `selection.test.tsx` then dies in `beforeEach`. It is a shim for the test environment only — no production code depends on it.
 
@@ -46,13 +45,13 @@ Notes for whoever picks this up:
 1. Boot log, then the terminal window draws in. No notification — it was deleted.
 2. `SEVEREDARCHIVE` renders as huge Archivo Black display type across the top, **sized to fit the viewport in full** (10.1vw against a measured 9.657em string), **behind** the window layer so the glass blurs and refracts it. It used to bleed off both edges; the owner asked for the whole word to read. `smoke.spec.ts` asserts the fit.
 3. Tabs: ARCHIVE / ABOUT / LINKS. Arrow keys switch tabs.
-4. ARCHIVE defaults to **LIST** — a two-column explorer. On the **right**, a two-column thumbnail grid (the Windows medium-icons shape). On the **left**, a standby pane reading `> AWAITING SELECTION. > PLEASE CHOOSE A SUBJECT FROM THE LIST ON THE RIGHT.` with a blinking caret, and the hovered file's metadata below it. Tiles are on the right because cascading windows were landing on them and making them unclickable.
+4. ARCHIVE defaults to **LIST** — a two-column explorer. On the **right**, a two-column thumbnail grid (the Windows medium-icons shape), each tile led by a video/photo glyph rather than an index number. On the **left**, one full-height box: `> AWAITING SELECTION.` plus the hovered file's metadata inside it, replaced by the live window dashboard as soon as anything is open. Tiles are on the right because cascading windows were landing on them and making them unclickable.
 5. **Nothing plays on hover.** Hover and keyboard focus only select — they move the backdrop and the metadata readout. The explorer registers no media slot at all, so no decode happens anywhere in the pane.
 6. **Clicking a tile opens a draggable window**, and that is the only thing that starts playback. Max 3 windows; a 4th is refused by blowing the whole stage out to near-white for 450ms with `BUFFER FULL` punched through it in black.
 7. Focused window plays `_full` with audio available; unfocused windows drop to the 240p `_thumb`, muted, under a scanline/grain overlay so the low resolution reads as intentional.
 8. Windows are **true-frame** — the aspect ratio applies to `.fw-body`, so the window is 40px taller than the media. No pillarboxing at any ratio.
 9. GRID is the same file list as large poster tiles. Clicking a tile returns to LIST and opens that window. There is no focused video inside grid view.
-10. **ABOUT** carries the extruded upload mark rendered through an ASCII pass, to the right of the copy — real 3D, so turning it changes the character density on its side faces. Not mounted below 641px (no room, and it keeps the three.js chunk off phones).
+10. **ABOUT** carries the extruded upload mark rendered through an ASCII pass, to the right of the copy — real 3D, so turning it changes the character density on its side faces. Its chunk and SVG are warmed on idle after boot, so the first visit does not pop in. Not mounted below 641px (no room, and it keeps the three.js chunk off phones).
 11. **Below 861px the explorer does not render at all.** `ArchiveMobile` takes its place: one true-frame primary player, the file's metadata, and a single horizontally-scrolling row of poster tiles. Tapping a tile selects it; swiping the player advances selection; the row keeps the selected tile in view. No window is ever created, and GRID still works at every width. Mobile is the one surface where a video still plays in place.
 12. Build stamp bottom-right (`BLD <sha> · <utc>`) — compare against `git log --oneline -1` to detect a cached page.
 
@@ -68,6 +67,11 @@ Notes for whoever picks this up:
 - `src/components/ArchiveMobile.tsx` — the mobile surface. Same slot discipline as the explorer: an empty `primary` slot over a poster, never a `<video>` in JSX.
 - `src/components/AboutAsciiObject.tsx` — three.js + `AsciiEffect`, ported from `docs/prototypes/about-ascii-3d/` with its tuned constants intact. **`strResolution: 'low'` and `invert: false` are not arbitrary** — see the comments in the file; changing either misaligns the character grid or fills the field. Lazy-loaded: three.js is ~585kB and is its own chunk, fetched only when ABOUT opens.
 - `src/hooks/useMediaQuery.ts` — one reactive media query; `useIsDesktop` is the named 861px case built on it.
+- `src/components/WindowDashboard.tsx` — what the explorer's box becomes once anything is open: one card per window, filling the box. Each card carries a static grid (slot, z, run, frame, ratio, year) and a **live** one re-read every animation frame. Click a card to raise, ✕ to close. A readout only — it owns no window state and renders no media; both verbs delegate to Desktop.
+- `src/lib/telemetry.ts` — the live readout's formatting, pure over a sample: POS/SIZE from the window's rect, TIME, FRAMES, DROP, BUF, RDY, SRC, VOL, AUDIO from its `<video>`. The sampling is a rAF loop in the dashboard that writes `textContent` straight to the cells — **not** React state: re-rendering three cards 60×/s beside five decodes is not affordable. Reads are batched before writes, and an unchanged string is not written at all.
+- `src/components/MediaKindIcon.tsx` — the video/photo glyph that replaced the 001/002 index in the explorer tiles, driven by `ArchiveFile.kind`. Inline SVG on `currentColor` so the accent rules reach it. Everything in the archive is `video` today; `photo` is drawn and unused until a still is added.
+- **Nothing in the interface numbers files.** `FILE_00x` is gone from windows, cards, the grid, the mobile readout and every accessible name, and the `index` field is gone from `ArchiveEntry` — a file is its name, which `archive.test.ts` now requires to be unique. Do not reintroduce a display index.
+- `src/lib/loopFade.ts` — when a looping clip should dip and when it should come back, as a pure decision over the clock. Wired to the backdrop only (`BackgroundVideo`); window playback still hard-cuts at the wrap. It is a dip through the backdrop, **not** a crossfade: a crossfade needs head and tail on screen together, i.e. a second decoder per clip, and `MAX_PLAYING` is the tightest resource in the app.
 - `src/lib/windowManager.ts` — pure z-order, focus, 3-window cap, slot allocation, cascade positions. No React, no DOM.
 - `src/lib/mediaMove.ts` — the single-element FLIP for the open beat.
 - `src/lib/keyboard.ts` — the keydown guard (arrow keys must not fire from inside a range input).
@@ -89,6 +93,10 @@ Notes for whoever picks this up:
 - No engine-conditional media paths. Chromium, WebKit and Firefox were all measured keeping `<video>` playing across a same-document reparent (`readyState` 4→4, buffered intact).
 - Desktop/mobile split is a **width query at 861px**, deliberately not pointer capability — touch tablets get the full desktop.
 - The terminal/explorer window is a **fixed background layer**: not draggable, never raises, not in the focus stack.
+- **A window's drag handle is its title, never the whole title bar.** The bar was the handle with the controls inside it, so pressing ✕ or VOL started a drag — anime takes pointer capture, and a press that drifts 2–3px then delivers its click to the capture target instead of the button. The ✕ did nothing for anyone who does not click perfectly still, and the volume slider dragged the window. `.fw-title` stretches to fill the bar, so the grabbable area still looks like the whole bar. The ✕ also commits on `pointerdown` (with `onClick` kept for the keyboard), so no re-render or reconcile downstream can swallow it. `explorer.spec.ts`'s "a press that drifts still closes" is the guard.
+- The window title bar shows `NAME.MP4` only. `FILE_00x` was dropped there because a portrait bar is ~250px and the index pushed the name into VOL; the index still leads every dashboard card, the grid, and the ✕'s accessible name.
+- The ABOUT object's chunk and its SVG are warmed on idle after boot (`preloadAboutObject`, called from `AppShell`), so the first visit renders instead of popping in. The width gate matches `hasRoom` — a phone must never fetch 590kB of three.js for something it will not mount.
+- The window dashboard runs a ~2.4s bring-up the **first time** anything is opened in a page load, then never again. The flag is module scope in `WindowDashboard.tsx` on purpose: the component unmounts whenever the last window closes and on every trip to ABOUT, so component state would replay it.
 - Git: commits under Chris's identity as-is. **NEVER** any `Co-Authored-By`, "Generated with Claude Code", or AI attribution anywhere in the repo.
 - The DCY.DSGN ASCII header comment stays verbatim at the top of `index.html`.
 
@@ -109,7 +117,7 @@ The remaining work was re-cut along **ownership boundaries** instead of file bou
 ## Outstanding bugs and deferred work
 
 **Needs a decision**
-- **The 28/24px window cascade is too tight.** Three 16:9 windows are all 720×446 at 1440px, so the back two are ~97% covered — "max 3 windows" currently reads as a stack of one. Either widen the cascade, vary spawn size, or offset more aggressively.
+- **The 28/24px window cascade is too tight.** Three 16:9 windows are all 720×446 at 1440px, so the back two are ~97% covered — "max 3 windows" currently reads as a stack of one. Either widen the cascade, vary spawn size, or offset more aggressively. **The window dashboard now has a stake in this.** It fills the explorer box (x 104–1020, y 225–774 at 1440×900), which sits under the cascade, so with the buffer full each card is read down its left edge and through the band below y 645. That is an accepted trade — the owner asked for the box filled with stats — but it is why each card's ✕ *leads* the card instead of trailing it: the left ~40px is the only column windows never reach. `explorer.spec.ts`'s "every card can be closed with the buffer full" is the guard, and it is what breaks first if the cascade is re-based.
 - **Decode ceiling has never been measured.** 1 full + 2 thumb + 1 preview + 1 backdrop = 5 concurrent decodes. If it fails on real hardware, the contract names the first cut: pause the explorer preview whenever a window is open.
 
 **Left over from Slice D — needs a decision**

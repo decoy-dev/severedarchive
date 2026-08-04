@@ -1,14 +1,15 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { animate } from 'animejs'
 import BackgroundVideo from './components/BackgroundVideo'
 import TerminalWindow, { type TabId } from './components/TerminalWindow'
 import ArchivePanel from './components/ArchivePanel'
-import AboutPanel from './components/AboutPanel'
+import AboutPanel, { preloadAboutObject } from './components/AboutPanel'
 import LinksPanel from './components/LinksPanel'
 import BootSequence from './components/BootSequence'
 import Desktop from './components/Desktop'
 import { readPerfTier, prefersReducedMotion } from './lib/perfTier'
 import { ArchiveSelectionProvider, useArchiveSelection } from './lib/selection'
+import { WindowRegistryProvider } from './lib/windowRegistry'
 
 const TAB_ORDER: TabId[] = ['archive', 'about', 'links']
 
@@ -17,7 +18,11 @@ export default function App() {
   // so a tab switch or a list/grid switch cannot reset them.
   return (
     <ArchiveSelectionProvider>
-      <AppShell />
+      {/* Above Desktop so what is open can be handed up to it rather than
+          reached down for — the explorer must not import DesktopContext. */}
+      <WindowRegistryProvider>
+        <AppShell />
+      </WindowRegistryProvider>
     </ArchiveSelectionProvider>
   )
 }
@@ -36,6 +41,18 @@ function AppShell() {
   }, [])
 
   const setTab = useCallback((t: TabId) => { setTabState(t); flashBody() }, [flashBody])
+
+  // The ABOUT object is a 590kB chunk plus an SVG it cannot build without, and
+  // fetching both on the click meant the column sat empty for a beat the first
+  // time. Warmed here instead: after boot, on idle, so it costs the first paint
+  // nothing and the tab is instant when it is finally opened.
+  useEffect(() => {
+    if (!booted) return
+    const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 300))
+    const cancel = window.cancelIdleCallback ?? window.clearTimeout
+    const handle = idle(() => preloadAboutObject())
+    return () => cancel(handle as number)
+  }, [booted])
 
   // The application has exactly one window-level keydown listener and Desktop
   // registers it (§4.6). App only says what a tab shift means.

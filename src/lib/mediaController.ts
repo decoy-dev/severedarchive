@@ -84,6 +84,14 @@ export type MediaController = {
   acquire(fileId: string): HTMLDivElement
   hostFor(fileId: string): HTMLDivElement | undefined
   /**
+   * The element attached for this file, or null. Read-only, and by fileId —
+   * which is the whole point: the dashboard needs a live `<video>` to sample
+   * (clock, buffered, readyState, playback quality) and the binding rule is
+   * that nothing finds a media element by DOM shape. This is the sanctioned
+   * way to ask, and `mediaLookup.test.ts` is what enforces the alternative.
+   */
+  videoFor(fileId: string): HTMLVideoElement | null
+  /**
    * Returns a cleanup bound to `el`. React 19 uses a ref callback's return value
    * as its cleanup, so the safe idiom is the whole call:
    * `ref={(el) => media.registerSlot('preview', el)}`. Because the cleanup
@@ -460,6 +468,7 @@ export function createMediaController(
   return {
     acquire,
     hostFor: (fileId) => hosts.get(fileId),
+    videoFor: (fileId) => videos.get(fileId) ?? null,
 
     registerSlot(slot, el) {
       const detach = () => {

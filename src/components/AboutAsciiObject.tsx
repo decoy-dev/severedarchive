@@ -111,7 +111,13 @@ export default function AboutAsciiObject({ tier }: { tier: PerfTier }) {
       const fov = THREE.MathUtils.degToRad(camera.fov)
       const fitHeight = dimensions.y / (2 * Math.tan(fov / 2))
       const fitWidth = dimensions.x / (2 * Math.tan(fov / 2) * camera.aspect)
-      camera.position.set(0, 0, Math.max(fitHeight, fitWidth) * 1.18 + dimensions.z)
+      // The margin covers the animated yaw/pitch/roll and the ±5 depth drift —
+      // the object must not clip at the extremes of its own motion. 1.18 was
+      // far more than that needs and left it reading small in its column: it
+      // filled ~85% of the box on the limiting axis. 1.06 measures ~94% and
+      // still clears the rotation. Anything tighter starts shaving the mark's
+      // corners at full yaw.
+      camera.position.set(0, 0, Math.max(fitHeight, fitWidth) * 1.06 + dimensions.z)
       camera.lookAt(0, 0, 0)
     }
 

@@ -13,7 +13,7 @@ test.describe('desktop windows', () => {
     await page.locator('[data-file-row]').first().click()
     const win = page.locator('[data-file-window]')
     await expect(win).toHaveCount(1)
-    await win.getByRole('button', { name: /^Close FILE_/ }).click()
+    await win.getByRole('button', { name: /^Close \w+\.MP4$/ }).click()
     await expect(win).toHaveCount(0)
   })
 

@@ -12,7 +12,7 @@ export default function FileCard({ file, onClick }: { file: ArchiveFile; onClick
         <img src={posterSrc(file.id)} alt={file.name} />
       </div>
       <div className="file-card-label">
-        <span>FILE_{file.index} <span className="tw-dim">// {file.name}.{file.ext}</span></span>
+        <span>{file.name}<span className="tw-dim">.{file.ext}</span></span>
         <span className="tw-dim">{formatDuration(file.durationSec)}</span>
       </div>
     </button>

@@ -1,11 +1,19 @@
 import { MEDIA_META, type MediaMeta } from './mediaMeta.generated'
 
+/**
+ * What the explorer draws where the index number used to be. Everything in the
+ * archive is a clip today, so `kind` is a constant in practice — it exists so
+ * the tile does not have to infer the icon from the extension, and so a still
+ * can be added without touching the explorer.
+ */
+export type MediaKind = 'video' | 'photo'
+
 /** Hand-authored editorial fields. Everything measurable comes from ffprobe. */
 type ArchiveEntry = {
   id: string
-  index: string
   name: string
   ext: 'MP4'
+  kind: MediaKind
   tagline: string
   year: string
 }
@@ -13,18 +21,18 @@ type ArchiveEntry = {
 export type ArchiveFile = ArchiveEntry & MediaMeta
 
 const ENTRIES: ArchiveEntry[] = [
-  { id: 'file01', index: '001', name: 'CHROME_SEQ', ext: 'MP4', tagline: 'liquid metal study', year: '2026' },
-  { id: 'file02', index: '002', name: 'HALO_DRIFT', ext: 'MP4', tagline: 'render set to sound', year: '2026' },
-  { id: 'file03', index: '003', name: 'GLASS_RITE', ext: 'MP4', tagline: 'refraction pass', year: '2025' },
-  { id: 'file04', index: '004', name: 'WIRE_SAINT', ext: 'MP4', tagline: 'neo-2000s loop', year: '2025' },
-  { id: 'file05', index: '005', name: 'COLD_BLOOM', ext: 'MP4', tagline: 'particle bloom', year: '2025' },
-  { id: 'file06', index: '006', name: 'STEEL_HYMN', ext: 'MP4', tagline: 'metalheart sketch', year: '2024' },
-  { id: 'file07', index: '007', name: 'VELVET_ROT', ext: 'MP4', tagline: 'decay pass', year: '2025' },
-  { id: 'file08', index: '008', name: 'NULL_CHOIR', ext: 'MP4', tagline: 'vertical study', year: '2025' },
-  { id: 'file09', index: '009', name: 'SALT_INDEX', ext: 'MP4', tagline: 'crystalline loop', year: '2024' },
-  { id: 'file10', index: '010', name: 'MERCY_LOOP', ext: 'MP4', tagline: 'square format test', year: '2024' },
-  { id: 'file11', index: '011', name: 'ASH_MERIDIAN', ext: 'MP4', tagline: 'particle drift', year: '2024' },
-  { id: 'file12', index: '012', name: 'GHOST_PROTOCOL', ext: 'MP4', tagline: 'final transmission', year: '2026' },
+  { id: 'file01', name: 'CHROME_SEQ', ext: 'MP4', kind: 'video', tagline: 'liquid metal study', year: '2026' },
+  { id: 'file02', name: 'HALO_DRIFT', ext: 'MP4', kind: 'video', tagline: 'render set to sound', year: '2026' },
+  { id: 'file03', name: 'GLASS_RITE', ext: 'MP4', kind: 'video', tagline: 'refraction pass', year: '2025' },
+  { id: 'file04', name: 'WIRE_SAINT', ext: 'MP4', kind: 'video', tagline: 'neo-2000s loop', year: '2025' },
+  { id: 'file05', name: 'COLD_BLOOM', ext: 'MP4', kind: 'video', tagline: 'particle bloom', year: '2025' },
+  { id: 'file06', name: 'STEEL_HYMN', ext: 'MP4', kind: 'video', tagline: 'metalheart sketch', year: '2024' },
+  { id: 'file07', name: 'VELVET_ROT', ext: 'MP4', kind: 'video', tagline: 'decay pass', year: '2025' },
+  { id: 'file08', name: 'NULL_CHOIR', ext: 'MP4', kind: 'video', tagline: 'vertical study', year: '2025' },
+  { id: 'file09', name: 'SALT_INDEX', ext: 'MP4', kind: 'video', tagline: 'crystalline loop', year: '2024' },
+  { id: 'file10', name: 'MERCY_LOOP', ext: 'MP4', kind: 'video', tagline: 'square format test', year: '2024' },
+  { id: 'file11', name: 'ASH_MERIDIAN', ext: 'MP4', kind: 'video', tagline: 'particle drift', year: '2024' },
+  { id: 'file12', name: 'GHOST_PROTOCOL', ext: 'MP4', kind: 'video', tagline: 'final transmission', year: '2026' },
 ]
 
 /**

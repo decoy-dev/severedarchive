@@ -48,9 +48,12 @@ describe('archive metadata', () => {
     }
   })
 
-  it('has a unique index and id per file', () => {
+  it('has a unique id and name per file', () => {
+    // The name carries the identity now: the FILE_00x index is gone from the
+    // data as well as the interface, so a duplicate name would be genuinely
+    // ambiguous rather than merely confusing.
     expect(new Set(ARCHIVE.map((f) => f.id)).size).toBe(ARCHIVE.length)
-    expect(new Set(ARCHIVE.map((f) => f.index)).size).toBe(ARCHIVE.length)
+    expect(new Set(ARCHIVE.map((f) => f.name)).size).toBe(ARCHIVE.length)
   })
 
   it('DEFAULT_FRONT_ID names a real file', () => {

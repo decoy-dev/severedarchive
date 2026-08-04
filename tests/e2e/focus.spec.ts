@@ -154,8 +154,10 @@ test.describe('window focus and playback tiers', () => {
 
     // The explorer pane used to be checked here too, as a permanently-overlaid
     // 240p surface. It no longer shows media at all, so the window is the only
-    // place the overlay has left to apply.
-    await expect(page.locator('.preview-standby')).toBeVisible()
+    // place the overlay has left to apply. With two windows open the pane is the
+    // dashboard rather than the standby prompt — either way it is text, and the
+    // point of this assertion is that no third decode is hiding in it.
+    await expect(page.locator('[data-window-dash]')).toBeVisible()
     await expect(page.locator('.explorer-preview video')).toHaveCount(0)
   })
 

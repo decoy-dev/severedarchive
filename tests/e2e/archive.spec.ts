@@ -8,7 +8,8 @@ test('archive shows the exact per-breakpoint card count, with the pager always p
   const cards = page.locator('[data-card]')
   await expect(cards.first()).toBeVisible()
   await expect(cards).toHaveCount(expectedPerPage)
-  await expect(page.getByText('FILE_001')).toBeVisible()
+  // Cards name the file; nothing in the interface numbers files any more.
+  await expect(page.getByText('CHROME_SEQ')).toBeVisible()
 
   // 12 archive files now exceed the per-page count at every breakpoint, so the
   // pager always shows (it used to hide on desktop when 6 files fit one page).

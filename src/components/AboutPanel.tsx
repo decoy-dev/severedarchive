@@ -8,14 +8,36 @@ import { useMediaQuery } from '../hooks/useMediaQuery'
  * cost of the first paint for everyone who never opens ABOUT. The panel only
  * mounts when the tab is selected, so the chunk is fetched exactly then.
  */
-const AboutAsciiObject = lazy(() => import('./AboutAsciiObject'))
+const loadAsciiObject = () => import('./AboutAsciiObject')
+const AboutAsciiObject = lazy(loadAsciiObject)
+
+/** The width at which the object is mounted at all. Shared with `hasRoom`. */
+const OBJECT_QUERY = '(min-width: 641px)'
+
+/**
+ * Warm the chunk and its geometry source during the site's own start-up, so the
+ * first visit to ABOUT renders the object instead of popping it in a beat late.
+ * Called once from `AppShell` after boot, on idle — deliberately not at import
+ * time, which would put three.js back on the critical path it was split off.
+ *
+ * The width gate is the one from `hasRoom`: a phone never mounts the object, so
+ * it must never fetch 590kB to be ready for something that will not happen.
+ */
+export function preloadAboutObject(): void {
+  if (!window.matchMedia(OBJECT_QUERY).matches) return
+  void loadAsciiObject()
+  // The scene cannot be built until the SVG lands, so warming the module alone
+  // would just move the wait. A plain fetch is enough — the loader's own request
+  // then answers from cache.
+  void fetch(`${import.meta.env.BASE_URL}assets/about-upload-mark.svg`).catch(() => {})
+}
 
 export default function AboutPanel({ tier }: { tier: PerfTier }) {
   // Not a CSS hide: at 390px the copy already fills the panel, so the object
   // would render into a box with no room and the page must not scroll to make
   // some. Gating the mount rather than the display also means a phone never
   // fetches the three.js chunk at all.
-  const hasRoom = useMediaQuery('(min-width: 641px)')
+  const hasRoom = useMediaQuery(OBJECT_QUERY)
 
   return (
     <div className="panel about-panel" data-with-object={hasRoom ? 'true' : 'false'}>
