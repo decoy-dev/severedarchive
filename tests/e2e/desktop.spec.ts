@@ -170,4 +170,21 @@ test.describe('desktop windows', () => {
     expect(after.x).toBeCloseTo(before.x, 0)
     expect(after.y).toBeCloseTo(before.y, 0)
   })
+
+  test('closing a window dissolves it before it goes', async ({ page }) => {
+    await boot(page)
+    await page.locator('[data-file-row]').first().click()
+    const win = page.locator('[data-file-window]')
+    await expect(win).toHaveCount(1)
+
+    await page.locator('.fw-close').click()
+    // Deferred, not faked: the window is still mounted, painting its dissolve,
+    // and the media inside it has not been reconciled away yet.
+    await expect(page.locator('[data-file-window][data-dissolving]')).toHaveCount(1)
+    await expect(page.locator('.fw-burn')).toBeAttached()
+    // Nothing in a closing window is pressable.
+    await expect(page.locator('[data-file-window][data-dissolving]')).toHaveCSS('pointer-events', 'none')
+    // And then it goes.
+    await expect(win).toHaveCount(0, { timeout: 3000 })
+  })
 })

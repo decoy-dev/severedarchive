@@ -147,10 +147,18 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 /* glass margin: four strips around the window */
 .glass-strip { position: absolute; z-index: 1; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); background: rgba(7, 9, 11, 0.35); }
-.glass-strip.top    { top: 0; left: 0; right: 0; height: var(--frame); }
-.glass-strip.bottom { bottom: 0; left: 0; right: 0; height: var(--frame); }
-.glass-strip.left   { top: var(--frame); bottom: var(--frame); left: 0; width: var(--frame); }
-.glass-strip.right  { top: var(--frame); bottom: var(--frame); right: 0; width: var(--frame); }
+/* Each strip runs 1px PAST where the terminal begins, so the four of them and
+   the panel cannot leave a hairline of unblurred stage between them. The extra
+   pixel is underneath the terminal (z-index 1 against its 3) and therefore
+   never seen. Rounding `--frame` removed the fractional case; this removes the
+   rest, including the rounding the browser does when it rasterises each strip's
+   own edge — two adjacent backdrop-filter surfaces do not share a seam if they
+   overlap. The corners overlap too, which is why the fill is subtle enough that
+   doubling it there is not visible. */
+.glass-strip.top    { top: 0; left: 0; right: 0; height: calc(var(--frame) + 1px); }
+.glass-strip.bottom { bottom: 0; left: 0; right: 0; height: calc(var(--frame) + 1px); }
+.glass-strip.left   { top: 0; bottom: 0; left: 0; width: calc(var(--frame) + 1px); }
+.glass-strip.right  { top: 0; bottom: 0; right: 0; width: calc(var(--frame) + 1px); }
 /* lite tier: no live blur */
 [data-tier='lite'] .glass-strip { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(7, 9, 11, 0.82); }
 
@@ -371,10 +379,11 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .link-card {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 14px; padding: 24px; min-height: 0;
-  /* Square, but never taller than the panel — at a narrow width the square
-     would otherwise overflow a short terminal body, and the page cannot
-     scroll. */
-  aspect-ratio: 1; max-height: 100%;
+  /* Taller than wide, capped by the panel. Square left a band of empty panel
+     above and below on a tall window; 4:5 uses that height without becoming the
+     full-height slab that stretching produces. Never taller than the panel
+     itself, because the page cannot scroll to fit it. */
+  aspect-ratio: 4 / 5; max-height: 100%;
   border: 1px solid var(--hair); background: rgba(0, 0, 0, 0.28);
   text-align: center;
   transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
@@ -428,12 +437,15 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   opacity: 1; transform: translateY(0);
 }
 
-/* Between the phone and the desktop the grid resolves to two columns, which
-   leaves COMMISSIONS alone on a second row beside a hole. A last child that is
-   also the third spans the row instead — it is a wide block rather than a
-   square with an empty seat next to it. */
+/* Between the phone and the desktop the grid resolves to two columns, and a
+   fixed aspect there gives two squares floating in a half-empty row with
+   COMMISSIONS alone beneath them. Dropping the aspect and sharing the height
+   between the rows makes it a bento: two blocks splitting the width, one wide
+   block under them. */
 @media (min-width: 641px) and (max-width: 1023px) {
-  .link-card:nth-child(3):last-child { grid-column: 1 / -1; aspect-ratio: 2.6; }
+  .links-panel { grid-auto-rows: minmax(0, 1fr); align-content: stretch; }
+  .link-card { aspect-ratio: auto; max-height: none; }
+  .link-card:nth-child(3):last-child { grid-column: 1 / -1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -911,6 +923,54 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   display: inline-flex; align-items: center; justify-content: center;
 }
 .fw-close:hover, .fw-close:focus-visible { color: var(--acid); background: rgba(182, 255, 46, 0.08); outline: none; }
+/* Admin login, in the footer. Dim until wanted — it is for one person, and it
+   must not compete with the archive for attention. */
+.tw-footer-left { display: inline-flex; align-items: center; gap: 14px; min-width: 0; }
+.admin-open, .admin-again {
+  font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--dim);
+  border: 1px solid transparent; padding: 2px 6px;
+}
+.admin-open:hover, .admin-open:focus-visible,
+.admin-again:hover, .admin-again:focus-visible {
+  color: var(--acid); border-color: var(--hair); outline: none;
+}
+.admin-form { display: inline-flex; align-items: center; gap: 8px; }
+.admin-label { font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--dim); }
+.admin-input {
+  width: 190px; padding: 3px 8px;
+  font: inherit; font-size: var(--fs-xs); letter-spacing: 0.14em;
+  color: var(--bright); background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--hair-bright);
+}
+.admin-input:focus-visible { outline: none; border-color: var(--acid); }
+.admin-go {
+  font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--text);
+  border: 1px solid var(--hair-bright); padding: 3px 10px;
+}
+.admin-go:hover:not(:disabled), .admin-go:focus-visible:not(:disabled) {
+  color: var(--acid); border-color: var(--acid); outline: none;
+}
+.admin-go:disabled { color: var(--dim); cursor: default; }
+.admin-result { display: inline-flex; align-items: center; gap: 10px; font-size: var(--fs-xs); letter-spacing: 0.06em; }
+.admin-result[data-result='ok'] { color: var(--acid); }
+.admin-result[data-result='denied'], .admin-result[data-result='limited'] { color: var(--text); }
+.admin-result[data-result='offline'] { color: var(--dim); }
+/* No room for it beside the tab bar on a phone, and publishing from one is not
+   a thing anyone does. */
+@media (max-width: 640px) { .tw-footer-left { display: none; } }
+
+/* The dissolve, painted over the whole window as it closes. Above every part of
+   the chrome: a frame left standing around disintegrating media reads as a bug
+   rather than as the window going. Pointer-events off so the last frames cannot
+   be clicked. */
+.fw-burn {
+  position: absolute; inset: 0; z-index: 9;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+/* Nothing in a closing window is pressable. */
+.file-window[data-dissolving] { pointer-events: none; }
+
 /* The (i) control and its panel. Used in the window title bar and on dashboard
    cards, so it positions against itself rather than against either host. */
 .info { position: relative; flex: 0 0 auto; display: inline-flex; align-items: center; }
@@ -1043,7 +1103,11 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   font-family: var(--display);   /* sanctioned display exception — wordmark + this */
   font-size: clamp(48px, 9vw, 160px);
   letter-spacing: -0.03em;
-  color: #000;
+  /* White, with a shadow so it survives the blowout's brightest instant. The
+     type was black against the near-white flash — legible, but it read as a
+     hole punched in the screen rather than as the interface shouting. */
+  color: #ffffff;
+  text-shadow: 0 0 18px rgba(0, 0, 0, 0.55), 0 2px 0 rgba(0, 0, 0, 0.35);
 }
 /* Reduced motion keeps the announcement and drops the assault: the type still
    appears, the page does not blow out. */

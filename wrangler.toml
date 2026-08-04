@@ -23,7 +23,7 @@ GITHUB_OWNER = "decoy-dev"
 GITHUB_REPO = "severedarchive"
 # Exact origin allowed to call the API. No wildcard: this is the only site that
 # may hold a session for it.
-ALLOWED_ORIGIN = "https://decoy-dev.github.io"
+ALLOWED_ORIGIN = "https://decoy-dev.github.io,http://localhost:5173,http://localhost:4173"
 
 # Rate-limit counters. One read and one write per login attempt, with a TTL, so
 # the namespace stays empty between sessions.

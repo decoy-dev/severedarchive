@@ -9,6 +9,7 @@ import { desiredPlacement } from '../lib/placement'
 import { useIsDesktop } from '../hooks/useIsDesktop'
 import { createMediaController } from '../lib/mediaController'
 import { flipMove } from '../lib/mediaMove'
+import { DISSOLVE_MS } from '../lib/dissolve'
 import { VideoDirector } from '../lib/videoDirector'
 import FileWindow from './FileWindow'
 import { MediaControllerProvider, MediaLayer } from './MediaLayer'
@@ -143,7 +144,14 @@ export default function Desktop({
   selectedRef.current = selectedId
   envRef.current = { isDesktop, tier }
 
-  const close = useCallback((id: string) => {
+  /**
+   * Windows mid-dissolve. They are still mounted and still hold their media —
+   * the close is deferred, not faked, so nothing is torn out from under the
+   * animation. Kept in state because the window has to re-render to paint.
+   */
+  const [dissolving, setDissolving] = useState<readonly string[]>([])
+
+  const closeNow = useCallback((id: string) => {
     scopes.current.get(id)?.revert()
     scopes.current.delete(id)
     nodes.current.delete(id)
@@ -157,6 +165,24 @@ export default function Desktop({
     media.reconcile(next.desired, { animate: false, focus: next.focus })
     setWindows((cur) => closeWindow(cur, id))
   }, [media])
+
+  /**
+   * Closing is two beats now: the window dissolves where it stands, then it is
+   * actually closed. Deferred rather than animated-on-the-way-out, because the
+   * media node inside it belongs to the controller and `closeWindow` reconciles
+   * it away synchronously — start that first and the dissolve would be painting
+   * over a window whose contents had already left.
+   */
+  const requestClose = useCallback((id: string) => {
+    if (prefersReducedMotion()) { closeNow(id); return }
+    setDissolving((cur) => (cur.includes(id) ? cur : [...cur, id]))
+    window.setTimeout(() => {
+      closeNow(id)
+      setDissolving((cur) => cur.filter((x) => x !== id))
+    }, DISSOLVE_MS)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
 
   // Drag wiring. createScope gives us the React-ref root, the desktop/mobile
   // split as a media query, and automatic teardown of the draggable.
@@ -210,11 +236,11 @@ export default function Desktop({
       if (isInteractiveTarget(e)) return
       if (e.key === 'ArrowLeft') { onTabShift?.(-1); return }
       if (e.key === 'ArrowRight') { onTabShift?.(1); return }
-      if (e.key === 'Escape' && focusedId) close(focusedId)
+      if (e.key === 'Escape' && focusedId) requestClose(focusedId)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [focusedId, close, onTabShift])
+  }, [focusedId, requestClose, onTabShift])
 
   useEffect(() => () => window.clearTimeout(refusalTimer.current), [])
 
@@ -273,8 +299,8 @@ export default function Desktop({
   // way the opener does — into a registry that sits above this component.
   const publishWindows = usePublishWindows()
   const view = useMemo<WindowView>(
-    () => ({ windows: openWindows, focus, close, node: windowNode }),
-    [openWindows, focus, close, windowNode],
+    () => ({ windows: openWindows, focus, close: requestClose, node: windowNode }),
+    [openWindows, focus, requestClose, windowNode],
   )
   useEffect(() => {
     publishWindows(view)
@@ -300,12 +326,13 @@ export default function Desktop({
                 file={file}
                 x={w.x} y={w.y} z={w.z}
                 focused={focusedId === w.id}
+                dissolving={dissolving.includes(w.id)}
                 // Hydrated from the controller record, which outlives the window:
                 // adopting a node already at 0.6 renders VOL 060, not 000.
                 volume={volumes[w.id] ?? media.stateOf(w.id).volume}
                 onVolume={(v) => setVolume(w.id, v)}
                 onFocus={() => setWindows((cur) => focusWindow(cur, w.id))}
-                onClose={() => close(w.id)}
+                onClose={() => requestClose(w.id)}
                 registerEl={(el) => attachDrag(w.id, el)}
                 bodyRef={(el) => media.registerSlot(`window:${w.id}`, el)}
               />

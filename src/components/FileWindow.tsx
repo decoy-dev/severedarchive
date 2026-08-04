@@ -1,14 +1,19 @@
+import { useEffect, useRef } from 'react'
 import { aspectRatio, type ArchiveFile } from '../data/archive'
+import { cellGone, sweepAt, DISSOLVE_CELL, DISSOLVE_MS } from '../lib/dissolve'
+import { prefersReducedMotion } from '../lib/perfTier'
 import { windowWidthCss } from '../lib/windowManager'
 import InfoPopover from './InfoPopover'
 import VolumeControl from './VolumeControl'
 
 export default function FileWindow({
-  file, x, y, z, focused, volume, onVolume, onFocus, onClose, registerEl, bodyRef,
+  file, x, y, z, focused, dissolving, volume, onVolume, onFocus, onClose, registerEl, bodyRef,
 }: {
   file: ArchiveFile
   x: number; y: number; z: number
   focused: boolean
+  /** Closing: the window plays its dissolve and Desktop unmounts it after. */
+  dissolving: boolean
   volume: number
   onVolume: (v: number) => void
   onFocus: () => void
@@ -24,6 +29,48 @@ export default function FileWindow({
   // exist rather than the file that was clicked.
   const ar = aspectRatio(file)
 
+  // The dissolve. Painted over the whole window — chrome included, because a
+  // frame left standing around disintegrating media reads as a bug rather than
+  // as the window going. Void-coloured blocks rather than erasure: the media
+  // node underneath belongs to the controller and is still being reconciled out
+  // from under this, so nothing here may touch it.
+  const burnRef = useRef<HTMLCanvasElement | null>(null)
+  useEffect(() => {
+    const canvas = burnRef.current
+    if (!dissolving || !canvas) return
+    const host = canvas.parentElement
+    const ctx = canvas.getContext('2d')
+    if (!host || !ctx) return
+    if (prefersReducedMotion()) return
+
+    const w = host.offsetWidth
+    const h = host.offsetHeight
+    const cols = Math.max(1, Math.ceil(w / DISSOLVE_CELL))
+    const rows = Math.max(1, Math.ceil(h / DISSOLVE_CELL))
+    canvas.width = w
+    canvas.height = h
+    // One fixed value per cell, so cells do not flicker back in between frames.
+    const noise = new Float32Array(cols * rows)
+    for (let i = 0; i < noise.length; i++) noise[i] = Math.random()
+
+    let raf = 0
+    const start = performance.now()
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - start) / DISSOLVE_MS)
+      ctx.clearRect(0, 0, w, h)
+      ctx.fillStyle = '#07090b'
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          if (!cellGone(progress, noise[row * cols + col], sweepAt(col, row, cols, rows))) continue
+          ctx.fillRect(col * DISSOLVE_CELL, row * DISSOLVE_CELL, DISSOLVE_CELL, DISSOLVE_CELL)
+        }
+      }
+      if (progress < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [dissolving])
+
   return (
     <div
       className="file-window glass"
@@ -38,7 +85,9 @@ export default function FileWindow({
         width: windowWidthCss(ar),
       }}
       onPointerDown={onFocus}
+      data-dissolving={dissolving ? 'true' : undefined}
     >
+      {dissolving && <canvas className="fw-burn" ref={burnRef} aria-hidden="true" />}
       <header className="fw-titlebar">
         {/* The drag handle is the TITLE, not the whole bar. It was the bar, and
             the controls live inside it, so pressing ✕ or VOL started a drag:

@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from 'react'
 import { animate } from 'animejs'
 import { prefersReducedMotion, type PerfTier } from '../lib/perfTier'
+import AdminLogin from './AdminLogin'
 import SessionPulse from './SessionPulse'
 
 export type TabId = 'archive' | 'about' | 'links'
@@ -58,7 +59,9 @@ export default function TerminalWindow({
       </nav>
       <div className="tw-body" ref={bodyRef}>{children}</div>
       <footer className="tw-footer">
-        <span>{footer}</span>
+        {/* The way in to the backend. In the footer rather than the title bar:
+            it is for one person and it should not compete with the archive. */}
+        <span className="tw-footer-left"><AdminLogin />{footer}</span>
         <span className="tw-dim">SVRD.ARCV V1.0 · 2026</span>
       </footer>
     </section>

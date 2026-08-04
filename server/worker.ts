@@ -24,7 +24,11 @@ export type Env = {
   GITHUB_TOKEN: string
   GITHUB_OWNER: string
   GITHUB_REPO: string
-  /** Origin allowed to call this. Exact match — no wildcards. */
+  /**
+   * Origins allowed to call this, comma-separated. Exact matches only — never a
+   * wildcard, and never a pattern: `*` with `credentials: include` is refused by
+   * browsers anyway, and a pattern is how a lookalike domain gets in.
+   */
   ALLOWED_ORIGIN: string
   RATE_LIMIT: CounterStore
 }
@@ -40,12 +44,31 @@ const MAX_UPLOAD_BYTES = 512 * 1024 * 1024
 
 const SESSION_COOKIE = 'sa_admin'
 
-const json = (body: unknown, status: number, env: Env, extra: HeadersInit = {}): Response =>
+/** The allow-list, parsed. Empty entries dropped so a trailing comma is harmless. */
+const allowedOrigins = (env: Env): string[] =>
+  env.ALLOWED_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean)
+
+/**
+ * The caller's origin if it is allowed, else the first configured one.
+ *
+ * Echoing the matching origin is required rather than stylistic: with
+ * `credentials: include` a browser rejects `*`, so the header has to name one
+ * origin, and with several allowed it has to be the one that asked. A caller
+ * from anywhere else gets the header for someone else's origin, which its
+ * browser then refuses — the request fails on their side, not ours.
+ */
+const originFor = (req: Request, env: Env): string => {
+  const origin = req.headers.get('origin')
+  const allowed = allowedOrigins(env)
+  return origin && allowed.includes(origin) ? origin : (allowed[0] ?? '')
+}
+
+const json = (body: unknown, status: number, env: Env, extra: HeadersInit = {}, req?: Request): Response =>
   new Response(JSON.stringify(body), {
     status,
     headers: {
       'content-type': 'application/json',
-      'access-control-allow-origin': env.ALLOWED_ORIGIN,
+      'access-control-allow-origin': req ? originFor(req, env) : allowedOrigins(env)[0] ?? '',
       'access-control-allow-credentials': 'true',
       // Nothing this Worker returns should ever be cached anywhere.
       'cache-control': 'no-store',
@@ -81,7 +104,7 @@ async function handleSession(req: Request, env: Env): Promise<Response> {
     limit: LOGIN_LIMIT, windowS: LOGIN_WINDOW_S,
   })
   if (!limit.allowed) {
-    return json({ error: 'too many attempts' }, 429, env, { 'retry-after': String(limit.retryAfter) })
+    return json({ error: 'too many attempts' }, 429, env, { 'retry-after': String(limit.retryAfter) }, req)
   }
 
   const body = (await req.json().catch(() => null)) as { passcode?: unknown } | null
@@ -89,30 +112,30 @@ async function handleSession(req: Request, env: Env): Promise<Response> {
   // Verified even when empty, so a missing passcode costs the same time as a
   // wrong one and the endpoint does not answer "is this field required?".
   const ok = await verifyPasscode(passcode, env.ADMIN_PASSCODE_HASH)
-  if (!ok) return json({ error: 'unauthorized' }, 401, env)
+  if (!ok) return json({ error: 'unauthorized' }, 401, env, {}, req)
 
   const token = await signSession(env.SESSION_SECRET)
   return json({ ok: true }, 200, env, {
     // httpOnly so no script can read it, SameSite=Strict so no other site can
     // cause it to be sent, Secure so it never crosses plaintext.
     'set-cookie': `${SESSION_COOKIE}=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=3600`,
-  })
+  }, req)
 }
 
 async function handleUpload(req: Request, env: Env): Promise<Response> {
-  if (!(await requireSession(req, env))) return json({ error: 'unauthorized' }, 401, env)
+  if (!(await requireSession(req, env))) return json({ error: 'unauthorized' }, 401, env, {}, req)
 
   const limit = await countAttempt(env.RATE_LIMIT, `upload:${clientKey(req.headers)}`, {
     limit: UPLOAD_LIMIT, windowS: UPLOAD_WINDOW_S,
   })
   if (!limit.allowed) {
-    return json({ error: 'too many uploads' }, 429, env, { 'retry-after': String(limit.retryAfter) })
+    return json({ error: 'too many uploads' }, 429, env, { 'retry-after': String(limit.retryAfter) }, req)
   }
 
   const form = await req.formData().catch(() => null)
   const file = form?.get('file')
-  if (!(file instanceof File)) return json({ error: 'file is required' }, 400, env)
-  if (file.size > MAX_UPLOAD_BYTES) return json({ error: 'file is too large' }, 413, env)
+  if (!(file instanceof File)) return json({ error: 'file is required' }, 400, env, {}, req)
+  if (file.size > MAX_UPLOAD_BYTES) return json({ error: 'file is too large' }, 413, env, {}, req)
 
   const fields = validateEntry({
     name: form?.get('name'),
@@ -122,7 +145,7 @@ async function handleUpload(req: Request, env: Env): Promise<Response> {
     date: form?.get('date'),
     postUrl: form?.get('postUrl'),
   }, JSON.parse(String(form?.get('existingNames') ?? '[]')))
-  if (!fields.ok) return json({ error: 'invalid entry', details: fields.errors }, 422, env)
+  if (!fields.ok) return json({ error: 'invalid entry', details: fields.errors }, 422, env, {}, req)
 
   // The raw is staged as a release asset — outside the git tree, so it is never
   // committed and never enters history. The ingest run deletes it.
@@ -135,25 +158,25 @@ async function handleUpload(req: Request, env: Env): Promise<Response> {
   )
 
   await dispatchIngest(ghConfig(env), { asset: { id: asset.id, url: asset.url }, entry: fields.value })
-  return json({ ok: true, staged: asset.name, entry: fields.value }, 202, env)
+  return json({ ok: true, staged: asset.name, entry: fields.value }, 202, env, {}, req)
 }
 
 /** ABOUT copy and LINKS rows. One committed JSON file, no media, no transcode. */
 async function handleContent(req: Request, env: Env): Promise<Response> {
-  if (!(await requireSession(req, env))) return json({ error: 'unauthorized' }, 401, env)
+  if (!(await requireSession(req, env))) return json({ error: 'unauthorized' }, 401, env, {}, req)
   const path = 'src/data/content.json'
 
   if (req.method === 'GET') {
     const file = await readFile(ghConfig(env), path)
-    return json({ ok: true, content: file?.content ?? null, sha: file?.sha ?? null }, 200, env)
+    return json({ ok: true, content: file?.content ?? null, sha: file?.sha ?? null }, 200, env, {}, req)
   }
 
   const body = (await req.json().catch(() => null)) as { content?: unknown; sha?: unknown } | null
-  if (typeof body?.content !== 'string') return json({ error: 'content is required' }, 400, env)
+  if (typeof body?.content !== 'string') return json({ error: 'content is required' }, 400, env, {}, req)
   try {
     JSON.parse(body.content)
   } catch {
-    return json({ error: 'content must be valid JSON' }, 422, env)
+    return json({ error: 'content must be valid JSON' }, 422, env, {}, req)
   }
   // The sha is the one just read. GitHub rejects a stale one, which is what
   // stops two sessions overwriting each other rather than merging silently.
@@ -161,14 +184,14 @@ async function handleContent(req: Request, env: Env): Promise<Response> {
     ghConfig(env), path, body.content, 'Update site content from admin',
     typeof body.sha === 'string' ? body.sha : undefined,
   )
-  return json({ ok: true }, 200, env)
+  return json({ ok: true }, 200, env, {}, req)
 }
 
-export function corsPreflight(env: Env): Response {
+export function corsPreflight(env: Env, req: Request): Response {
   return new Response(null, {
     status: 204,
     headers: {
-      'access-control-allow-origin': env.ALLOWED_ORIGIN,
+      'access-control-allow-origin': originFor(req, env),
       'access-control-allow-credentials': 'true',
       'access-control-allow-methods': 'GET,POST,OPTIONS',
       'access-control-allow-headers': 'content-type',
@@ -180,20 +203,22 @@ export function corsPreflight(env: Env): Response {
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url)
-    if (req.method === 'OPTIONS') return corsPreflight(env)
+    if (req.method === 'OPTIONS') return corsPreflight(env, req)
 
     // Exact-origin check on everything that mutates. The session cookie is
     // SameSite=Strict, so this is belt and braces — but the braces are cheap.
     if (req.method !== 'GET') {
       const origin = req.headers.get('origin')
-      if (origin && origin !== env.ALLOWED_ORIGIN) return json({ error: 'forbidden' }, 403, env)
+      if (origin && !allowedOrigins(env).includes(origin)) {
+        return json({ error: 'forbidden' }, 403, env, {}, req)
+      }
     }
 
     try {
       if (url.pathname === '/api/session' && req.method === 'POST') return await handleSession(req, env)
       if (url.pathname === '/api/upload' && req.method === 'POST') return await handleUpload(req, env)
       if (url.pathname === '/api/content') return await handleContent(req, env)
-      return json({ error: 'not found' }, 404, env)
+      return json({ error: 'not found' }, 404, env, {}, req)
     } catch (err) {
       // Logged, never returned. The caller gets a bare 502 — an upstream
       // message can echo request content, and a GitHub error can name the repo
@@ -206,7 +231,7 @@ export default {
         message: err instanceof Error ? err.message : String(err),
         stack: err instanceof Error ? err.stack : undefined,
       })
-      return json({ error: 'upstream failure' }, 502, env)
+      return json({ error: 'upstream failure' }, 502, env, {}, req)
     }
   },
 }

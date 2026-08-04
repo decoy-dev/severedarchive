@@ -21,7 +21,7 @@ async function makeEnv(): Promise<Env> {
     GITHUB_TOKEN: 'ghp_secret_token_value',
     GITHUB_OWNER: 'decoy-dev',
     GITHUB_REPO: 'severedarchive',
-    ALLOWED_ORIGIN: ORIGIN,
+    ALLOWED_ORIGIN: `${ORIGIN},http://localhost:5173`,
     RATE_LIMIT: store(),
   }
 }
@@ -110,6 +110,16 @@ describe('authorisation', () => {
       headers: { cookie: 'sa_admin=eyJzdWIiOiJvd25lciJ9.deadbeef' },
     }), env)
     expect(res.status).toBe(401)
+  })
+
+  it('allows every configured origin, and echoes the one that asked', async () => {
+    // `credentials: include` makes a browser refuse `*`, so the header has to
+    // name one origin — and with several allowed, it has to be the caller's.
+    for (const origin of [ORIGIN, 'http://localhost:5173']) {
+      const res = await worker.fetch(post('/api/session', { passcode: 'wrong' }, { headers: { origin } }), env)
+      expect(res.status).toBe(401)
+      expect(res.headers.get('access-control-allow-origin')).toBe(origin)
+    }
   })
 
   it('refuses a cross-origin mutation', async () => {
