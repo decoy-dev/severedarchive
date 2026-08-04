@@ -66,3 +66,31 @@ test.describe('mobile archive', () => {
     expect(overflow.row).toBeGreaterThan(0) // 12 files do not fit 390px
   })
 })
+
+test.describe('mobile chrome', () => {
+  test.skip(({ viewport }) => viewport!.width > 640, 'mobile-only')
+
+  test('the wordmark clears the panel, and the build stamp is gone', async ({ page }) => {
+    await page.goto('./')
+    await expect(page.locator('.stage')).toHaveAttribute('data-booted', 'true', { timeout: 6000 })
+
+    // The panel used to start at y10 against a wordmark running y4–30, so the
+    // word was almost entirely behind it. The top margin is asymmetric now.
+    const [mark, panel] = await Promise.all([
+      page.locator('.wordmark').boundingBox(),
+      page.locator('.terminal-window').boundingBox(),
+    ])
+    expect(panel!.y).toBeGreaterThanOrEqual(mark!.y + mark!.height)
+
+    // The stamp sat behind the tab bar down here and could not be read anyway.
+    await expect(page.locator('.build-tag')).toBeHidden()
+  })
+
+  test('every tile carries its media-kind glyph', async ({ page }) => {
+    await page.goto('./')
+    await expect(page.locator('.stage')).toHaveAttribute('data-booted', 'true', { timeout: 6000 })
+    // A 56px poster has no room for a caption, so the glyph is the only thing
+    // telling a still from a clip in this view.
+    await expect(page.locator('.mobile-tile .kind-icon')).toHaveCount(12)
+  })
+})

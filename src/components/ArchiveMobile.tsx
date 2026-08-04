@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { ARCHIVE, fileById, formatDuration, formatResolution, posterSrc } from '../data/archive'
 import { useArchiveSelection } from '../lib/selection'
+import MediaKindIcon from './MediaKindIcon'
 import { useSwipe } from '../hooks/useSwipe'
 import { useMediaController } from './MediaLayer'
 
@@ -88,6 +89,10 @@ export default function ArchiveMobile() {
             onClick={() => activate(f.id, 'tile')}
           >
             <img src={posterSrc(f.id)} alt="" loading="lazy" />
+            {/* Overlaid rather than beside the thumbnail: a mobile tile is
+                56px of poster with no room for a caption, and the glyph is
+                the only thing distinguishing a still from a clip here. */}
+            <span className="mobile-tile-kind"><MediaKindIcon kind={f.kind} /></span>
           </button>
         ))}
       </div>

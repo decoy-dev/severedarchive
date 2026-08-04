@@ -295,9 +295,9 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
    The object is decorative and sized by its column; the copy keeps its own
    max-width so the two never fight over the same space. */
 .about-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr); gap: clamp(12px, 2.5vw, 32px); align-items: center; }
-/* Below 641px the object is not mounted at all (see AboutPanel), so the copy
-   takes the whole panel rather than leaving an empty second track. */
-.about-panel[data-with-object='false'] { grid-template-columns: minmax(0, 1fr); }
+/* One column below the split, with the object beneath the copy rather than
+   beside it. It is mounted at every width now; what changes is the shape. */
+.about-panel[data-wide='false'] { grid-template-columns: minmax(0, 1fr); }
 .about-copy { min-width: 0; align-self: start; }
 
 /* Ported from the prototype. The `!important`s are aimed at AsciiEffect's own
@@ -443,6 +443,10 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 /* Same resting dim as the explorer's tiles — a poster is a held frame until it
    is the one you are pointing at. */
 .file-card-media img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.62; }
+.file-card-name { display: inline-flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-card-kind { display: inline-flex; flex: 0 0 auto; color: var(--dim); }
+.file-card:hover .file-card-kind, .file-card:focus-visible .file-card-kind,
+.file-card.is-selected .file-card-kind { color: var(--acid); }
 .file-card-label {
   display: flex; justify-content: space-between; gap: 8px;
   padding: 8px 10px; font-size: var(--fs-xs); letter-spacing: 0.04em;
@@ -739,6 +743,15 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   border: 1px solid var(--hair); overflow: hidden; scroll-snap-align: center;
 }
 .mobile-tile img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.5; }
+/* The media-kind glyph, over the poster's bottom-left corner. A scrim behind it
+   rather than a plain glyph: these thumbnails run from near-black to a pale
+   mint, and a hairline icon disappears on half of them. */
+.mobile-tile-kind {
+  position: absolute; left: 2px; bottom: 2px; z-index: 1;
+  display: flex; padding: 2px;
+  color: var(--text); background: rgba(4, 6, 8, 0.62);
+}
+.mobile-tile.is-selected .mobile-tile-kind { color: var(--acid); }
 .mobile-tile-index {
   position: absolute; left: 4px; bottom: 3px; font-size: var(--fs-xs); color: var(--text);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
@@ -1004,7 +1017,16 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 /* ── mobile: purpose-built layout ── */
 @media (max-width: 640px) {
+  /* Asymmetric on purpose: 10px of margin everywhere except the top, which
+     leaves the overprint wordmark a band to be read in. At a uniform 10px the
+     terminal started at y10 and the wordmark ran y4–30, so the word was almost
+     entirely behind the panel. */
   :root { --frame: 10px; }
+  .terminal-window { top: 38px; height: calc(100% - 48px); }
+  /* Tucked behind the tab bar down here, where it overlapped ARCHIVE/ABOUT/
+     LINKS and could not be read anyway. It is a cache-staleness check for
+     whoever is deploying, and they are not on a phone. */
+  .build-tag { display: none; }
   .tw-titlebar { height: 44px; font-size: var(--fs-sm); }
   .tw-title { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .tw-status { flex: 0 0 auto; }
@@ -1015,6 +1037,22 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   .tw-tab { flex: 1 1 0; text-align: center; padding: 13px 0; border: 0; margin: 0; background: transparent; }
   .tw-tab.is-active { background: rgba(182, 255, 46, 0.06); }
   .tw-body { order: 2; margin: 10px 10px 0; }
+  /* The object gets the band the copy leaves — measured at 194px on a 390x844
+     phone, so this stays inside it with room to spare. Capped rather than
+     flexible: the page must not scroll, and the copy is the content here. */
+  .about-panel { align-items: start; }
+  .ascii-object { height: min(22vh, 168px); flex: 0 0 auto; }
+  /* The primary player takes the room it needs and no more. It was stretching
+     to fill a tall column — 179px of video floating in ~500px of empty panel —
+     and that height is what pushed the whole terminal down over the wordmark.
+     Capped, and pinned to the top of the column so the space it gives back
+     goes to the row of tiles rather than back into padding. */
+  /* The player is capped rather than filling the column, which is what frees
+     the band at the top for the wordmark — but the space it gives up is split
+     around it rather than left in a heap underneath. The cap is on the VIEW,
+     not on its wrapper: capping the wrapper leaves the wrapper short and the
+     slack pooling below it. */
+  .primary-view { max-height: 42vh; }
   .panel { padding: 12px; }
   .panel-block { padding: 10px 12px; }
 }

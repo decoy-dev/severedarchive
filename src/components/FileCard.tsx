@@ -1,4 +1,5 @@
 import { type ArchiveFile, formatDuration, posterSrc } from '../data/archive'
+import MediaKindIcon from './MediaKindIcon'
 
 /**
  * A static poster tile — no video, ever (spec §2: "there is no focused video
@@ -31,7 +32,12 @@ export default function FileCard({
         <img src={posterSrc(file.id)} alt={file.name} />
       </div>
       <div className="file-card-label">
-        <span>{file.name}<span className="tw-dim">.{file.ext}</span></span>
+        <span className="file-card-name">
+          {/* Same glyph the explorer's tiles carry, so a still reads as a still
+              in every view rather than only in LIST. */}
+          <span className="file-card-kind"><MediaKindIcon kind={file.kind} /></span>
+          {file.name}<span className="tw-dim">.{file.ext}</span>
+        </span>
         <span className="tw-dim">{formatDuration(file.durationSec)}</span>
       </div>
     </button>

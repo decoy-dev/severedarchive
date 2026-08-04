@@ -22,7 +22,12 @@ type ObjectComponent = ComponentType<{ tier: PerfTier }>
 /** Resolved once per page load and reused, so a later visit re-mounts instantly. */
 let resolved: ObjectComponent | null = null
 
-/** The width at which the object is mounted at all. Shared with `hasRoom`. */
+/**
+ * The width at which the object is WARMED at start-up. It mounts at every width
+ * now — the owner asked for it on the phone too — but a phone should not spend
+ * 590kB of three.js in the background for a tab it may never open. Below this
+ * the chunk is fetched when ABOUT is actually opened.
+ */
 const OBJECT_QUERY = '(min-width: 641px)'
 
 /**
@@ -44,11 +49,12 @@ export function preloadAboutObject(tier: PerfTier): void {
 }
 
 export default function AboutPanel({ tier }: { tier: PerfTier }) {
-  // Not a CSS hide: at 390px the copy already fills the panel, so the object
-  // would render into a box with no room and the page must not scroll to make
-  // some. Gating the mount rather than the display also means a phone never
-  // fetches the three.js chunk at all.
-  const hasRoom = useMediaQuery(OBJECT_QUERY)
+  // The object is mounted at every width. It used to be gated off below 641px
+  // for want of room; measured on a 390x844 phone the copy leaves 194px of the
+  // panel spare, which is a band the object fits into — see `.ascii-object`'s
+  // mobile rule. The page still must not scroll, so the band is capped rather
+  // than left to the object's own appetite.
+  const wide = useMediaQuery(OBJECT_QUERY)
 
   // Starts non-null on every visit after the first, so this is a no-op then.
   // The initializer form, not `useState(resolved)`. React treats a function
@@ -57,7 +63,7 @@ export default function AboutPanel({ tier }: { tier: PerfTier }) {
   // first once `resolved` was set.
   const [ObjectComponent, setObjectComponent] = useState<ObjectComponent | null>(() => resolved)
   useEffect(() => {
-    if (!hasRoom || resolved) return
+    if (resolved) return
     let live = true
     void loadAsciiObject()
       .then((m) => {
@@ -67,10 +73,10 @@ export default function AboutPanel({ tier }: { tier: PerfTier }) {
       })
       .catch(() => {})
     return () => { live = false }
-  }, [hasRoom])
+  }, [])
 
   return (
-    <div className="panel about-panel" data-with-object={hasRoom ? 'true' : 'false'}>
+    <div className="panel about-panel" data-with-object="true" data-wide={wide ? 'true' : 'false'}>
       <div className="about-copy">
         <div className="panel-block">
           <span className="panel-label">OPERATOR</span>
@@ -94,9 +100,9 @@ export default function AboutPanel({ tier }: { tier: PerfTier }) {
       </div>
       {/* No spinner: the object is decorative, so its absence is an empty
           column for a moment rather than something to announce. */}
-      {hasRoom && (ObjectComponent
+      {ObjectComponent
         ? <ObjectComponent tier={tier} />
-        : <div className="ascii-object" aria-hidden="true" />)}
+        : <div className="ascii-object" aria-hidden="true" />}
     </div>
   )
 }

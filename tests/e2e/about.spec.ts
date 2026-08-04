@@ -59,12 +59,29 @@ test.describe('about ascii object', () => {
   })
 })
 
-test('at the mobile breakpoint the object is absent and the copy fills the panel', async ({ page, viewport }) => {
+test('at the mobile breakpoint the object sits under the copy, and nothing scrolls', async ({ page, viewport }) => {
   test.skip(viewport!.width > 640, 'mobile-only assertion')
   await ready(page)
   await page.getByRole('tab', { name: 'ABOUT' }).click()
   await expect(page.getByText('MOTION + VISUAL ART')).toBeVisible()
-  await expect(page.locator('.ascii-object')).toHaveCount(0)
+
+  // The object used to be gated off below 641px for want of room; the owner
+  // asked for it here too. Measured on a 390x844 phone, the copy leaves 194px
+  // of panel spare and the object is capped well inside that.
+  const host = page.locator('.ascii-object')
+  await expect(host).toHaveCount(1)
+  await expect(host).toHaveAttribute('data-state', /^(live|lite|static|error)$/, { timeout: 15000 })
+
+  // Below the copy, not beside it, and inside the panel.
+  const [copy, obj, panel] = await Promise.all([
+    page.locator('.about-copy').boundingBox(),
+    host.boundingBox(),
+    page.locator('.about-panel').boundingBox(),
+  ])
+  expect(obj!.y).toBeGreaterThanOrEqual(copy!.y + copy!.height - 1)
+  expect(obj!.y + obj!.height).toBeLessThanOrEqual(panel!.y + panel!.height + 1)
+
+  // The cap exists so this stays true: the page must not scroll to fit it.
   const scroll = await page.evaluate(
     () => document.documentElement.scrollHeight - document.documentElement.clientHeight)
   expect(scroll).toBeLessThanOrEqual(1)
