@@ -70,17 +70,23 @@ test.describe('mobile archive', () => {
 test.describe('mobile chrome', () => {
   test.skip(({ viewport }) => viewport!.width > 640, 'mobile-only')
 
-  test('the wordmark clears the panel, and the build stamp is gone', async ({ page }) => {
+  test('the panel cuts the wordmark in half, and the build stamp is gone', async ({ page }) => {
     await page.goto('./')
     await expect(page.locator('.stage')).toHaveAttribute('data-booted', 'true', { timeout: 6000 })
 
-    // The panel used to start at y10 against a wordmark running y4–30, so the
-    // word was almost entirely behind it. The top margin is asymmetric now.
+    // The panel used to start at y10 against a wordmark running y4–30, hiding
+    // it almost entirely. It is positioned against the panel's top edge now, so
+    // FILE SYSTEM crosses the word's middle — the same on desktop and here,
+    // rather than depending on whatever the frame happens to be.
     const [mark, panel] = await Promise.all([
       page.locator('.wordmark').boundingBox(),
       page.locator('.terminal-window').boundingBox(),
     ])
-    expect(panel!.y).toBeGreaterThanOrEqual(mark!.y + mark!.height)
+    const cut = (panel!.y - mark!.y) / mark!.height
+    // Tolerance to match the resolution: the mark is 26px tall at 390px, so a
+    // single pixel of rounding is nearly 4% of it.
+    expect(cut).toBeGreaterThan(0.43)
+    expect(cut).toBeLessThan(0.57)
 
     // The stamp sat behind the tab bar down here and could not be read anyway.
     await expect(page.locator('.build-tag')).toBeHidden()

@@ -13,8 +13,17 @@ type Link = {
   label: string
   value: string
   href: string
-  /** Drawn on a 32-unit grid in `currentColor`, so it takes the accent with the card. */
+  /**
+   * `currentColor`, so it takes the accent with the card.
+   *
+   * MAIL and COMMISSIONS are Lucide's `mail` and `inbox` (ISC, © Lucide Icons
+   * and Contributors), on their native 24-unit grid — my hand-drawn versions of
+   * both read badly. INSTAGRAM stays hand-drawn on a 32-unit grid because
+   * Lucide carries no brand marks.
+   */
   icon: ReactNode
+  viewBox: string
+  strokeWidth: number
 }
 
 const LINKS: Link[] = [
@@ -22,6 +31,8 @@ const LINKS: Link[] = [
     label: 'INSTAGRAM',
     value: '@severedarchive',
     href: 'https://instagram.com/severedarchive',
+    viewBox: '0 0 32 32',
+    strokeWidth: 1.5,
     icon: (
       <>
         <rect x="4" y="4" width="24" height="24" rx="7" />
@@ -36,13 +47,24 @@ const LINKS: Link[] = [
     label: 'MAIL',
     value: 'CONTACT@SEVEREDARCHIVE',
     href: 'mailto:hello@example.com',
+    viewBox: '0 0 24 24',
+    strokeWidth: 2,
     icon: (
       <>
-        <rect x="3" y="7" width="26" height="18" rx="2" />
-        {/* The flap. On hover it swings up about its own top edge — the
-            envelope opening — and the letter behind it rises into view. */}
-        <path className="ico-letter" d="M8.5 13 L23.5 13 L23.5 22 L8.5 22 Z" />
-        <path className="ico-flap" d="M3.8 8.6 L16 18 L28.2 8.6" />
+        {/* Two of Lucide's own icons rather than one animated into the other:
+            `mail` crossfades to `mail-open` on hover. Flipping the closed
+            envelope's flap by transform looked like a box inside a box — the
+            flap is a curve, and mirroring it just laid it over the body. */}
+        <g className="ico-closed">
+          <rect x="2" y="4" width="20" height="16" rx="2" />
+          <path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7" />
+        </g>
+        <g className="ico-open">
+          <path d="M21.2 8.4c.5.38.8.97.8 1.6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10a2 2 0 0 1 .8-1.6l8-6a2 2 0 0 1 2.4 0l8 6Z" />
+          <path d="m22 10-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 10" />
+          {/* The letter, rising out of the opened envelope. */}
+          <path className="ico-letter" d="M7 8.5 L17 8.5 L17 15 L7 15 Z" />
+        </g>
       </>
     ),
   },
@@ -50,13 +72,17 @@ const LINKS: Link[] = [
     label: 'COMMISSIONS',
     value: 'STATUS: OPEN',
     href: '#',
+    viewBox: '0 0 24 24',
+    strokeWidth: 2,
     icon: (
       <>
-        {/* An inbox: the tray, its shoulders, and the slot the work lands in.
-            On hover an arrow rises out of it. */}
-        <path className="ico-arrow" d="M16 11.5 L16 1.8 M12.2 5.4 L16 1.6 L19.8 5.4" />
-        <path d="M4 18.5 L8.2 6.8 A1.6 1.6 0 0 1 9.7 5.8 L22.3 5.8 A1.6 1.6 0 0 1 23.8 6.8 L28 18.5" />
-        <path d="M4 18.5 L4 24.6 A1.6 1.6 0 0 0 5.6 26.2 L26.4 26.2 A1.6 1.6 0 0 0 28 24.6 L28 18.5 L21.3 18.5 A1 1 0 0 0 20.3 19.3 A4.5 4.5 0 0 1 11.7 19.3 A1 1 0 0 0 10.7 18.5 Z" />
+        {/* An arrow rises out of the tray on hover, ABOVE the viewBox — the
+            icon fills its grid to y=4 and an arrow drawn inside it collided
+            with the tray's own shoulders. `.link-icon` lets it overflow. */}
+        <path className="ico-arrow" d="M12 1 L12 -7 M8.8 -3.8 L12 -7 L15.2 -3.8" />
+        {/* Lucide's inbox: the slot, then the tray around it. */}
+        <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+        <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
       </>
     ),
   },
@@ -79,10 +105,10 @@ export default function LinksPanel() {
           >
             <svg
               className="link-icon"
-              viewBox="0 0 32 32"
+              viewBox={l.viewBox}
               fill="none"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeWidth={l.strokeWidth}
               strokeLinecap="round"
               strokeLinejoin="round"
               aria-hidden="true"

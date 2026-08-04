@@ -151,6 +151,7 @@ export default function AboutAsciiObject({ tier }: { tier: PerfTier }) {
     const reduced = prefersReducedMotion()
 
     let raf = 0
+    let settleTimer: number | undefined
     let disposed = false
     let ready = false
     let lastRender = -Infinity
@@ -263,46 +264,98 @@ export default function AboutAsciiObject({ tier }: { tier: PerfTier }) {
       if (!table || !host || !model) return
 
       const pose = { ...motion }
-      motion.yaw = 0; motion.pitch = 0; motion.roll = 0; motion.depth = 0
       dom.style.transform = ''
       dom.style.transformOrigin = '0 0'
-      render(performance.now(), true)
 
-      const range = document.createRange()
-      range.selectNodeContents(table)
-      const block = range.getBoundingClientRect()
       const hostRect = host.getBoundingClientRect()
-      if (!block.width || !block.height) { Object.assign(motion, pose); return }
+      const hostCx = hostRect.x + hostRect.width / 2
+      const hostCy = hostRect.y + hostRect.height / 2
 
-      const scale = Math.min(1, hostRect.width / block.width)
+      /**
+       * Where the lit characters actually are, in page coordinates.
+       *
+       * Page coordinates and not block-relative ones, because
+       * `getBoundingClientRect` already reflects whatever transform is applied
+       * — measuring relative to the block and then multiplying by the scale
+       * counts it twice, which is why the first attempt at a correction only
+       * halved the error instead of removing it.
+       */
+      const sampleInk = () => {
+        const range = document.createRange()
+        range.selectNodeContents(table)
+        const block = range.getBoundingClientRect()
+        if (!block.width || !block.height) return null
+        const lines = (table.textContent ?? '').split('\n')
+        const rowCount = lines.length
+        const colCount = Math.max(...lines.map((l) => l.length), 1)
+        let top = -1, bottom = -1, left = colCount, right = -1
+        lines.forEach((line, i) => {
+          const a = line.search(/\S/)
+          if (a === -1) return
+          const b = line.length - 1 - [...line].reverse().join('').search(/\S/)
+          if (top === -1) top = i
+          bottom = i
+          left = Math.min(left, a)
+          right = Math.max(right, b)
+        })
+        if (right < 0) return null
+        const cellW = block.width / colCount
+        const cellH = block.height / rowCount
+        return {
+          cx: block.x + (left + right + 1) / 2 * cellW,
+          cy: block.y + (top + bottom + 1) / 2 * cellH,
+          width: block.width,
+        }
+      }
 
-      // Ink bounds, in cells, straight from the characters.
-      const lines = (table.textContent ?? '').split('\n')
-      const rowCount = lines.length
-      const colCount = Math.max(...lines.map((l) => l.length), 1)
-      let top = -1, bottom = -1, left = colCount, right = -1
-      lines.forEach((line, i) => {
-        const a = line.search(/\S/)
-        if (a === -1) return
-        const b = line.length - 1 - [...line].reverse().join('').search(/\S/)
-        if (top === -1) top = i
-        bottom = i
-        left = Math.min(left, a)
-        right = Math.max(right, b)
-      })
-      if (right < 0) { Object.assign(motion, pose); return }
+      // Scale first, measured with no transform applied so the block's natural
+      // width is what is read: AsciiEffect lays out more columns than the host
+      // is wide (561px inside 551px at 1440), and the excess was being clipped.
+      motion.yaw = 0; motion.pitch = 0; motion.roll = 0; motion.depth = 0
+      render(performance.now(), true)
+      const natural = sampleInk()
+      if (!natural) { Object.assign(motion, pose); render(performance.now(), true); return }
+      const scale = Math.min(1, hostRect.width / natural.width)
+      dom.style.transform = `scale(${scale.toFixed(4)})`
 
-      const cellW = (block.width * scale) / colCount
-      const cellH = (block.height * scale) / rowCount
-      const inkCx = (left + right + 1) / 2 * cellW
-      const inkCy = (top + bottom + 1) / 2 * cellH
-      const tx = hostRect.width / 2 - inkCx
-      const ty = hostRect.height / 2 - inkCy
-
+      // Then translate, from a fresh measurement taken with that scale in place.
+      const scaled = sampleInk()
+      let tx = scaled ? hostCx - scaled.cx : 0
+      let ty = scaled ? hostCy - scaled.cy : 0
       dom.style.transform = `translate(${tx.toFixed(2)}px, ${ty.toFixed(2)}px) scale(${scale.toFixed(4)})`
 
       Object.assign(motion, pose)
       render(performance.now(), true)
+
+      // And close the loop on the live animation. No static pose predicts where
+      // the ink sits on average: the object sways, the sway eases so it does
+      // not spend equal time at each angle, and the ASCII bounds are a function
+      // of LIGHTING as much as geometry — a face turned away goes dark and
+      // renders as spaces. So this watches a second of the real thing and
+      // shifts by the residual.
+      //
+      // The window has to cover a FULL sway cycle. The four animations run at
+      // 3600/3000/4200/2600ms, so a one-second sample is a slice of the cycle
+      // rather than its mean — it corrected the bias into an equal and opposite
+      // one, 5px left where there had been 5px right. 42 samples at 110ms is
+      // 4.6s, past the longest of them. One correction per fit; it does not
+      // re-arm.
+      window.clearTimeout(settleTimer)
+      let sx = 0, sy = 0, n = 0
+      const settle = (remaining: number) => {
+        if (disposed || !host) return
+        const live = sampleInk()
+        if (live) { sx += live.cx; sy += live.cy; n += 1 }
+        if (remaining > 0) {
+          settleTimer = window.setTimeout(() => settle(remaining - 1), 110)
+          return
+        }
+        if (!n) return
+        tx += hostCx - sx / n
+        ty += hostCy - sy / n
+        dom.style.transform = `translate(${tx.toFixed(2)}px, ${ty.toFixed(2)}px) scale(${scale.toFixed(4)})`
+      }
+      settleTimer = window.setTimeout(() => settle(42), 140)
     }
 
     function resize() {
@@ -361,6 +414,7 @@ export default function AboutAsciiObject({ tier }: { tier: PerfTier }) {
     return () => {
       disposed = true
       cancelAnimationFrame(raf)
+      window.clearTimeout(settleTimer)
       scope.revert()
       resizeObserver.disconnect()
       document.removeEventListener('visibilitychange', onVisibility)

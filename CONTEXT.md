@@ -103,6 +103,8 @@ How the wiring landed, and the trap in it:
 - The window dashboard runs a ~2.4s bring-up the **first time** anything is opened in a page load, then never again. The flag is module scope in `WindowDashboard.tsx` on purpose: the component unmounts whenever the last window closes and on every trip to ABOUT, so component state would replay it.
 - Git: commits under Chris's identity as-is. **NEVER** any `Co-Authored-By`, "Generated with Claude Code", or AI attribution anywhere in the repo.
 - The DCY.DSGN ASCII header comment stays verbatim at the top of `index.html`.
+- The wordmark is **cut in half by the panel's top edge** at every width, positioned against `--panel-top` rather than against `--frame` so it holds on mobile too (frame 10px, panel top 38px). `smoke.spec.ts` and `mobile.spec.ts` assert the ratio.
+- Link icons are **Lucide's** `mail`/`mail-open`/`inbox` (ISC) on their native 24-unit grid. Instagram stays hand-drawn on a 32-unit grid because Lucide carries no brand marks. Do not hand-draw replacements for the others — that is what these replaced.
 - The favicon is the traced upload mark (`public/favicon.svg`, same source as the About object) and **flips ink with `prefers-color-scheme`** — a favicon is 16px against a strip that is near-white in one theme and near-black in the other, so one baked-in colour is a smudge in half of them. The 32px PNG beside it is only for browsers that refuse an SVG favicon, and is a mid-grey because it cannot know the theme.
 
 ## Governing documents

@@ -59,3 +59,22 @@ test('the wordmark reads in full, inside the viewport', async ({ page }) => {
   expect(fit.right).toBeLessThanOrEqual(fit.vw)
   expect(fit.top).toBeGreaterThanOrEqual(0)   // not clipped against the top edge either
 })
+
+/**
+ * The wordmark is cut in half by the panel's top edge, at every width. It is
+ * positioned against that edge rather than against the frame, so this holds on
+ * mobile too — where the frame is 10px and the panel starts at 38px.
+ */
+test('the panel crosses the wordmark at its middle', async ({ page }) => {
+  await page.goto('./')
+  await expect(page.locator('.stage')).toHaveAttribute('data-booted', 'true', { timeout: 6000 })
+  const [mark, panel] = await Promise.all([
+    page.locator('.wordmark').boundingBox(),
+    page.locator('.terminal-window').boundingBox(),
+  ])
+  const cut = (panel!.y - mark!.y) / mark!.height
+  // Tolerance to match the resolution: the mark is 26px tall at 390px, so a
+  // single pixel of rounding is nearly 4% of it.
+  expect(cut).toBeGreaterThan(0.43)
+  expect(cut).toBeLessThan(0.57)
+})

@@ -36,6 +36,7 @@
     "@types/three": "^0.185.3",
     "@vitejs/plugin-react": "^6.0.4",
     "jsdom": "^29.1.1",
+    "lucide-static": "^1.28.0",
     "opentype.js": "^2.0.0",
     "oxlint": "^1.75.0",
     "pngjs": "^7.0.0",
