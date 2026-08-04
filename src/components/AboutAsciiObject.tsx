@@ -4,6 +4,7 @@ import { SVGLoader } from 'three/addons/loaders/SVGLoader.js'
 import { AsciiEffect, type AsciiEffectOptions } from 'three/addons/effects/AsciiEffect.js'
 import { animate, createScope } from 'animejs'
 import { prefersReducedMotion, type PerfTier } from '../lib/perfTier'
+import { bandCentre, contentRight, inkBand, type Box } from '../lib/asciiBand'
 
 /**
  * The About-page upload mark: the traced SVG extruded into a real beveled solid
@@ -281,18 +282,29 @@ export default function AboutAsciiObject({ tier }: { tier: PerfTier }) {
        *
        * Read structurally — previous sibling, parent's padding — rather than by
        * class name, so this surface still knows nothing about the About layout.
+       *
+       * And only when the sibling is actually BESIDE this box. Below the split
+       * the panel is one column and the copy sits above, spanning the full
+       * width: its right edge is the panel's right edge, so treating it as the
+       * band's left put the centre at the panel's corner and threw the mark off
+       * the right edge of the screen. `inkBand` is where that decision lives.
        */
       const parent = host.parentElement
-      const left = host.previousElementSibling?.getBoundingClientRect().right
-      let bandL = hostRect.x
-      let bandR = hostRect.right
-      if (parent && left !== undefined) {
-        const p = parent.getBoundingClientRect()
-        const padRight = parseFloat(getComputedStyle(parent).paddingRight) || 0
-        bandL = left
-        bandR = p.right - padRight
+      const sibEl = host.previousElementSibling
+      let sibling: Box | null = null
+      if (sibEl) {
+        const box = sibEl.getBoundingClientRect()
+        // The blocks' edges, not the track's. See `contentRight` — this is the
+        // 195px the mark was off by, and the reason it measured as centred.
+        const kids = Array.from(sibEl.children, (c) => c.getBoundingClientRect())
+        sibling = { x: box.x, right: contentRight(box, kids), y: box.y, bottom: box.bottom }
       }
-      const hostCx = (bandL + bandR) / 2
+      let panelRight: number | null = null
+      if (parent) {
+        const p = parent.getBoundingClientRect()
+        panelRight = p.right - (parseFloat(getComputedStyle(parent).paddingRight) || 0)
+      }
+      const hostCx = bandCentre(inkBand(hostRect, sibling, panelRight))
       const hostCy = hostRect.y + hostRect.height / 2
 
       /**
@@ -420,7 +432,12 @@ export default function AboutAsciiObject({ tier }: { tier: PerfTier }) {
     const resizeObserver = new ResizeObserver(resize)
     resizeObserver.observe(host)
     const sibling = host.previousElementSibling
-    if (sibling) resizeObserver.observe(sibling)
+    if (sibling) {
+      resizeObserver.observe(sibling)
+      // And its blocks: they are `max-width` capped, so the gap can change while
+      // the track they sit in does not — which is the measurement that matters.
+      for (const child of Array.from(sibling.children)) resizeObserver.observe(child)
+    }
     resize()
 
     function showFallback() {
