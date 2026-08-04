@@ -43,7 +43,7 @@ export function UploadLimitsHint({ file }: { file: File | null }) {
   return (
     <p className="admin-hint">
       CLIP {UPLOAD_LIMITS.video.join(' / ')}
-      {' · THUMBNAIL IMAGE '}{UPLOAD_LIMITS.photo.join(' / ')}
+      {' · STILL '}{UPLOAD_LIMITS.photo.join(' / ')}
       {' · UP TO '}{formatBytes(UPLOAD_LIMITS.maxBytes)}{' EACH'}
       {file ? ` · SELECTED ${formatBytes(file.size)}` : ''}
     </p>
@@ -51,18 +51,17 @@ export function UploadLimitsHint({ file }: { file: File | null }) {
 }
 
 export default function EntryFields({
-  draft, onChange, nameHint, allowPhoto = draft.kind === 'photo',
+  draft, onChange, nameHint, allowPhoto = true,
 }: {
   draft: EntryDraft
   onChange: (next: EntryDraft) => void
   /** Shown under NAME where the name cannot be used to identify files. */
   nameHint?: string
   /**
-   * Whether PHOTO may be chosen. Off for a new upload, because the pipeline
-   * renders `_full.mp4` and `_thumb.mp4` from everything it ingests and the app
-   * expects both — a still would publish as broken video. Defaults to allowed for
-   * an entry that is ALREADY a photo, so editing one does not silently change
-   * what it is. See `UPLOAD_LIMITS.photo`.
+   * Whether PHOTO may be chosen. Allowed by default now that the still pipeline
+   * exists — `process-photo.sh` writes a `.jpg` ladder and every surface renders
+   * an `<img>` for it. It was disabled for a day while only the video ladder
+   * existed, because a still would have published as broken video renditions.
    */
   allowPhoto?: boolean
 }) {
@@ -80,7 +79,7 @@ export default function EntryFields({
           <option value="video">VIDEO</option>
           <option value="photo" disabled={!allowPhoto}>PHOTO</option>
         </select>
-        {!allowPhoto && <em className="admin-note">STILLS AS ENTRIES ARE NOT WIRED UP YET — USE THE THUMBNAIL PICKER FOR IMAGES</em>}
+        {!allowPhoto && <em className="admin-note">STILLS AS ENTRIES ARE NOT AVAILABLE HERE</em>}
       </label>
       <label className="admin-field"><span>DATE</span>
         <input type="date" value={draft.date} onChange={(e) => set('date', e.target.value)} />

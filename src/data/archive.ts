@@ -1,4 +1,4 @@
-import { MEDIA_META, type MediaMeta } from './mediaMeta.generated'
+import { MEDIA_KIND, MEDIA_META, type MediaMeta } from './mediaMeta.generated'
 import UPLOADED_ENTRIES from './entries.json'
 import ENTRY_OVERRIDES from './overrides.json'
 import type { ThumbSpec } from '../lib/thumbCrop'
@@ -69,7 +69,7 @@ const ENTRIES: ArchiveEntry[] = [
   { id: 'file06', name: 'STEEL_HYMN', ext: 'MP4', kind: 'video', tagline: 'metalheart sketch', year: '2024' , postUrl: INSTAGRAM_PROFILE },
   { id: 'file07', name: 'VELVET_ROT', ext: 'MP4', kind: 'video', tagline: 'decay pass', year: '2025' , postUrl: INSTAGRAM_PROFILE },
   { id: 'file08', name: 'NULL_CHOIR', ext: 'MP4', kind: 'video', tagline: 'vertical study', year: '2025' , postUrl: INSTAGRAM_PROFILE },
-  { id: 'file09', name: 'SALT_INDEX', ext: 'MP4', kind: 'photo', tagline: 'crystalline loop', year: '2024' , postUrl: INSTAGRAM_PROFILE },
+  { id: 'file09', name: 'SALT_INDEX', ext: 'MP4', kind: 'video', tagline: 'crystalline loop', year: '2024' , postUrl: INSTAGRAM_PROFILE },
   { id: 'file10', name: 'MERCY_LOOP', ext: 'MP4', kind: 'video', tagline: 'square format test', year: '2024' , postUrl: INSTAGRAM_PROFILE },
   { id: 'file11', name: 'ASH_MERIDIAN', ext: 'MP4', kind: 'video', tagline: 'particle drift', year: '2024' , postUrl: INSTAGRAM_PROFILE },
   { id: 'file12', name: 'GHOST_PROTOCOL', ext: 'MP4', kind: 'video', tagline: 'final transmission', year: '2026' , postUrl: INSTAGRAM_PROFILE },
@@ -201,6 +201,22 @@ export const DEFAULT_FRONT_ID =
   ARCHIVE.some((f) => f.id === PREFERRED_FRONT_ID) ? PREFERRED_FRONT_ID : (ARCHIVE[0]?.id ?? PREFERRED_FRONT_ID)
 
 export const media = (f: string) => import.meta.env.BASE_URL + 'media/' + f
-export const thumbSrc = (id: string) => media(`${id}_thumb.mp4`)
-export const fullSrc = (id: string) => media(`${id}_full.mp4`)
+
+/**
+ * Whether this entry is a still rather than a clip.
+ *
+ * Read from the GENERATED map, which is probed from what is on disk — not from
+ * the entry's own `kind`, which is editorial and has been wrong: `file09` was
+ * flagged `photo` for months as an icon preview while being a video. Everything
+ * that decides between an `<img>` and a `<video>` asks this, because getting it
+ * from the editorial field means a broken frame whenever the two disagree.
+ */
+export const isStill = (id: string): boolean => MEDIA_KIND[id] === 'photo'
+
+/** The ladder's extension: a clip's renditions are `.mp4`, a still's are `.jpg`. */
+const ladder = (id: string): 'mp4' | 'jpg' => (isStill(id) ? 'jpg' : 'mp4')
+
+export const thumbSrc = (id: string) => media(`${id}_thumb.${ladder(id)}`)
+export const fullSrc = (id: string) => media(`${id}_full.${ladder(id)}`)
+/** Always a JPEG: it is a still by definition, whatever the entry is. */
 export const posterSrc = (id: string) => media(`${id}_poster.jpg`)

@@ -42,9 +42,14 @@ CY="$(read_field cy 0.5)"
 
 # The aspect the still has to keep, taken from the clip itself rather than
 # assumed: portrait, square and landscape all exist in this archive.
+# Either ladder: a clip's full is `.mp4`, a still's is `.jpg`. Whichever exists
+# is the reference this poster has to match the shape of.
+REF=""
+for candidate in "public/media/${id}_full.mp4" "public/media/${id}_full.jpg"; do
+  [ -f "$candidate" ] && REF="$candidate" && break
+done
 read -r VW VH <<EOF
-$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "public/media/${id}_full.mp4" 2>/dev/null \
-  | tr ',' ' ' || echo "")
+$([ -n "$REF" ] && ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "$REF" 2>/dev/null | tr ',' ' ' || echo "")
 EOF
 if [ -z "${VW:-}" ] || [ -z "${VH:-}" ]; then
   # During an ingest the full may not exist yet; probe the source instead.

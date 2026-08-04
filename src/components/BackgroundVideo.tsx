@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { animate } from 'animejs'
-import { thumbSrc, posterSrc } from '../data/archive'
+import { isStill, thumbSrc, posterSrc } from '../data/archive'
 import { prefersReducedMotion, type PerfTier } from '../lib/perfTier'
 import { loopHandoffDue } from '../lib/loopFade'
 
@@ -22,7 +22,19 @@ export default function BackgroundVideo({ tier, fileId }: { tier: PerfTier; file
   const [layers, setLayers] = useState<Layer[]>(() => [{ key: nextKey++, fileId }])
   /** the layer key currently being dissolved in, so a fade is never restarted */
   const fadingKey = useRef<number | null>(null)
-  const incomingRef = useRef<HTMLVideoElement | null>(null)
+  // Widened to any element: the incoming layer may be an <img> when the entry is
+  // a still. The dissolve only ever animates its opacity, so it does not care
+  // which — but a ref typed to <video> would force a second copy of the fade.
+  const incomingRef = useRef<HTMLElement | null>(null)
+  /**
+   * Assigns the incoming layer whatever element it is.
+   *
+   * A callback ref rather than the object ref directly: the incoming layer is a
+   * `<video>` for a clip and an `<img>` for a still, and React types an object
+   * ref to one element type. The dissolve only reads `opacity`, so widening here
+   * is honest — the alternative is a second copy of the fade for images.
+   */
+  const attachIncoming = useCallback((el: HTMLElement | null) => { incomingRef.current = el }, [])
 
   const top = layers[layers.length - 1]
 
@@ -92,10 +104,28 @@ export default function BackgroundVideo({ tier, fileId }: { tier: PerfTier; file
     <div className="bg-video" aria-hidden="true">
       {layers.map((layer, i) => {
         const incoming = i === layers.length - 1 && layers.length > 1
+        // A still has no clip to loop, so it is its own backdrop. It still takes
+        // part in the cross dissolve — the layer stack and the fade are about
+        // moving between entries, not about playback — so switching to or from a
+        // photo dissolves exactly like switching between two clips.
+        if (isStill(layer.fileId)) {
+          return (
+            <img
+              key={layer.key}
+              ref={incoming ? attachIncoming : undefined}
+              src={posterSrc(layer.fileId)}
+              alt=""
+              style={{
+                position: 'absolute', inset: 0, opacity: incoming ? 0 : 1,
+                width: '100%', height: '100%', objectFit: 'cover',
+              }}
+            />
+          )
+        }
         return (
           <video
             key={layer.key}
-            ref={incoming ? incomingRef : settled ? attachLoopHandoff : undefined}
+            ref={incoming ? attachIncoming : settled ? attachLoopHandoff : undefined}
             src={thumbSrc(layer.fileId)}
             poster={posterSrc(layer.fileId)}
             autoPlay

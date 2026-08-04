@@ -68,12 +68,11 @@ jobs:
           test -s raw/thumb.bin
 
       - name: Transcode
-        env:
-          # The poster's spec and, if one was supplied, the still to use instead
-          # of a frame. Both optional — empty means the pipeline default.
-          THUMB_SPEC: ${{ toJSON(github.event.client_payload.entry.thumb) }}
-          THUMB_IMAGE: ${{ github.event.client_payload.thumbAsset.url != '' && 'raw/thumb.bin' || '' }}
-        run: ./scripts/process-upload.sh raw/upload.bin "${{ steps.ids.outputs.id }}"
+        run: |
+          ./scripts/process-media-upload.sh raw/upload.bin "${{ steps.ids.outputs.id }}" \
+            "${{ github.event.client_payload.entry.kind }}" \
+            '${{ toJSON(github.event.client_payload.entry.thumb) }}' \
+            "${{ github.event.client_payload.thumbAsset.url != '' && 'raw/thumb.bin' || '' }}"
 
       - name: Write the entry and regenerate media metadata
         env:

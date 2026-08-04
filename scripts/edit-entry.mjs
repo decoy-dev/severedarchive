@@ -71,7 +71,11 @@ if (op === 'remove') {
 
   // The renditions go with it. This is the only destructive step in the
   // pipeline, and it is why the interface makes the name be typed back.
-  for (const suffix of ['_full.mp4', '_thumb.mp4', '_poster.jpg']) {
+  // Both ladders: an entry is a clip OR a still, and this must not need to know
+  // which. Leaving the other kind's files behind would strand renditions for an
+  // entry that no longer exists, and `gen-media-meta.mjs` would keep emitting
+  // metadata for it.
+  for (const suffix of ['_full.mp4', '_thumb.mp4', '_full.jpg', '_thumb.jpg', '_poster.jpg']) {
     await rm(`${MEDIA}/${id}${suffix}`, { force: true })
   }
   console.log(`edit-entry: removed ${id} (${isUploaded ? 'uploaded' : 'built-in'})`)

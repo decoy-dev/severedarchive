@@ -50,3 +50,61 @@ describe('desiredPlacement', () => {
     expect(desiredPlacement({ ...base, tier: 'lite' })).toEqual({ desired: [], focus: null })
   })
 })
+
+describe('stills are never placed', () => {
+  /**
+   * A still gets no controller node at all, and that single omission is the whole
+   * of photo support in the media layer.
+   *
+   * `mediaController` exists to keep a `<video>` playing across a reparent — the
+   * only reason React is forbidden from owning those elements. An image has no
+   * playback state, so it needs none of that; and a placement for a still would
+   * mean a `<video>` element pointed at a JPEG, which is a broken frame in every
+   * slot it lands in.
+   */
+  const isStill = (id: string) => id.startsWith('photo')
+
+  it('omits a selected still from the mobile primary slot', () => {
+    const out = desiredPlacement({
+      selectedId: 'photo1', windowIds: [], focusedWindowId: null,
+      isDesktop: false, tier: 'full', isStill,
+    })
+    expect(out.desired).toEqual([])
+  })
+
+  it('omits a still window while keeping the clips beside it', () => {
+    const out = desiredPlacement({
+      selectedId: 'file01', windowIds: ['file01', 'photo1', 'file02'],
+      focusedWindowId: 'file01', isDesktop: true, tier: 'full', isStill,
+    })
+    expect(out.desired.map((p) => p.fileId)).toEqual(['file01', 'file01', 'file02'])
+    expect(out.desired.some((p) => p.fileId === 'photo1')).toBe(false)
+  })
+
+  it('never names a still as the playback focus', () => {
+    // Naming it would have the director hold the focus slot against an element
+    // that does not exist, muting whatever is actually audible.
+    const out = desiredPlacement({
+      selectedId: 'file01', windowIds: ['file01', 'photo1'],
+      focusedWindowId: 'photo1', isDesktop: true, tier: 'full', isStill,
+    })
+    expect(out.focus).toBeNull()
+    expect(out.desired.map((p) => p.fileId)).toEqual(['file01', 'file01'])
+  })
+
+  it('places nothing at all when the one lite-tier decode would be a still', () => {
+    const out = desiredPlacement({
+      selectedId: 'photo1', windowIds: ['photo1'], focusedWindowId: 'photo1',
+      isDesktop: true, tier: 'lite', isStill,
+    })
+    expect(out).toEqual({ desired: [], focus: null })
+  })
+
+  it('is unchanged for an archive of clips only', () => {
+    const args = {
+      selectedId: 'file01', windowIds: ['file01', 'file02'], focusedWindowId: 'file02',
+      isDesktop: true, tier: 'full' as const,
+    }
+    expect(desiredPlacement({ ...args, isStill })).toEqual(desiredPlacement(args))
+  })
+})

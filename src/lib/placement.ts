@@ -24,8 +24,23 @@ export function desiredPlacement(input: {
   focusedWindowId: string | null
   isDesktop: boolean
   tier: PerfTier
+  /**
+   * Whether an id is a still rather than a clip.
+   *
+   * A still is never placed, and that single omission is the whole of photo
+   * support in the media layer. `mediaController` exists to keep a `<video>`
+   * PLAYING across a reparent — that is the only reason React is not allowed to
+   * own those elements. An image has no playback state to lose, so it needs none
+   * of that machinery, and giving it a controller node would mean a `<video>`
+   * pointed at a JPEG: a broken element in every slot.
+   *
+   * So a surface showing a still renders its own `<img>` and React owns it
+   * outright. Defaults to "nothing is a still", which is what every existing
+   * caller means.
+   */
+  isStill?: (id: string) => boolean
 }): { desired: Placement[]; focus: string | null } {
-  const { selectedId, windowIds, focusedWindowId, isDesktop, tier } = input
+  const { selectedId, windowIds, focusedWindowId, isDesktop, tier, isStill = () => false } = input
   const focus = isDesktop ? focusedWindowId : selectedId
 
   // Lite is one decode, and it belongs to the surface the viewer is actually
@@ -37,16 +52,19 @@ export function desiredPlacement(input: {
   // <video>, at every tier. Perf tier changes which encode and how many
   // decodes, never whether the content exists.
   if (tier === 'lite') {
-    if (focus === null) return { desired: [], focus: null }
+    if (focus === null || isStill(focus)) return { desired: [], focus: null }
     const slot = isDesktop ? (`window:${focus}` as const) : 'primary'
     return { desired: [{ slot, fileId: focus }], focus }
   }
 
   return {
     desired: [
-      { slot: 'primary', fileId: selectedId },
-      ...windowIds.map((id) => ({ slot: `window:${id}` as const, fileId: id })),
+      ...(isStill(selectedId) ? [] : [{ slot: 'primary' as const, fileId: selectedId }]),
+      ...windowIds.filter((id) => !isStill(id)).map((id) => ({ slot: `window:${id}` as const, fileId: id })),
     ],
-    focus,
+    // A still cannot be the playback focus — there is nothing to play, and naming
+    // it would have the director hold a focus slot against an element that does
+    // not exist, muting whatever is actually audible.
+    focus: focus !== null && isStill(focus) ? null : focus,
   }
 }

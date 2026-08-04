@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { aspectRatio, type ArchiveFile } from '../data/archive'
+import { aspectRatio, fullSrc, isStill, type ArchiveFile } from '../data/archive'
 import { DISSOLVE_CELL, DISSOLVE_MS, dissolveClipPath } from '../lib/dissolve'
 import { prefersReducedMotion } from '../lib/perfTier'
 import { windowWidthCss } from '../lib/windowManager'
@@ -116,7 +116,9 @@ export default function FileWindow({
             </button>
           )}
           <InfoPopover file={file} />
-          <VolumeControl value={volume} onChange={onVolume} />
+          {/* A still has no audio track, and no controller node to route a volume
+              to. The control would be a slider that does nothing. */}
+          {!isStill(file.id) && <VolumeControl value={volume} onChange={onVolume} />}
           {/* Closes on pointerdown, not click: the press is the commit, so
               nothing downstream — a drift, a re-render, a media reconcile —
               can swallow it. `onClick` is still here for the keyboard, which
@@ -149,8 +151,20 @@ export default function FileWindow({
       </a>
       {/* An empty, stable slot — never a `<video>` of its own. mediaController
           moves this file's host in here and takes it away again; React only ever
-          sees an empty div, which is the whole safety argument. */}
-      <div className="fw-body" data-window-slot={file.id} ref={bodyRef} style={{ aspectRatio: `${ar}` }} />
+          sees an empty div, which is the whole safety argument.
+
+          A STILL is the exception, and it is not a loophole in that argument: the
+          rule exists because a `<video>` loses its playback state when React
+          reparents it, and an image has no playback state. `desiredPlacement`
+          never places a still, so the controller has no node for this file and
+          this slot would otherwise stay empty. React owns the `<img>` outright.
+          `data-window-slot` is still here, so registration and every slot query
+          behave identically for both kinds. */}
+      <div className="fw-body" data-window-slot={file.id} ref={bodyRef} style={{ aspectRatio: `${ar}` }}>
+        {isStill(file.id) && (
+          <img className="fw-still" src={fullSrc(file.id)} alt={file.name} draggable={false} />
+        )}
+      </div>
       {/* Rendered from here rather than plumbed through Desktop: the panel is
           `position: fixed` and centres on the viewport, so it does not inherit
           this window's box, and the window already knows which file it is. */}

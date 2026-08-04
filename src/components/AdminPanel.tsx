@@ -206,13 +206,22 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
             <input
               ref={firstRef}
               type="file"
-              accept="video/*"
+              accept="video/*,image/*"
               onChange={(e) => {
                 const picked = e.target.files?.[0] ?? null
                 setFile(picked)
                 // A sensible name from the filename, still editable. The Worker
                 // normalises it again, so this only saves typing.
-                if (picked) setDraft((d) => ({ ...d, name: d.name || nameFromFile(picked.name) }))
+                if (picked) {
+                  setDraft((d) => ({
+                    ...d,
+                    name: d.name || nameFromFile(picked.name),
+                    // The kind follows the file, because the file decides which
+                    // ladder the pipeline runs. Still editable if the guess is
+                    // wrong, and the Worker validates it either way.
+                    kind: picked.type.startsWith('image/') ? 'photo' : 'video',
+                  }))
+                }
               }}
             />
           </label>

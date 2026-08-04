@@ -1,6 +1,6 @@
 import { createContext, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createScope, createDraggable, createSpring, animate } from 'animejs'
-import { aspectRatio, fileById } from '../data/archive'
+import { isStill, aspectRatio, fileById } from '../data/archive'
 import { openWindow, focusWindow, closeWindow, windowBox, type WinState } from '../lib/windowManager'
 import { prefersReducedMotion, type PerfTier } from '../lib/perfTier'
 import { isInteractiveTarget } from '../lib/keyboard'
@@ -62,6 +62,9 @@ const desiredFor = (
     focusedWindowId: topWindowId(windows),
     isDesktop,
     tier,
+    // A still is never placed: see the note on this parameter. The whole of photo
+    // support in the media layer is this one omission.
+    isStill,
   })
 
 export default function Desktop({

@@ -191,7 +191,15 @@ The `(i)` control (`InfoPopover.tsx`) sits in the window title bar and in each d
 - A thumbnail-only edit re-renders from the committed `_full.mp4` and **does not re-encode the clip**; `render-poster.sh` exists separately for exactly that. A supplied image is cover-fitted to the clip's aspect (`scale=…:increase` then `crop`) so it fills the same tile without bars.
 - An entry carries `thumb` only when it differs from the default. The edit script writes `thumb: undefined` rather than omitting the key, because these fields are *merged* — omitting it would leave an old crop in place and resetting to the default would silently not take.
 
-**Still to build:** stills as entries. The pipeline renders `_full.mp4` and `_thumb.mp4` from everything it ingests and the app expects both, so a photo uploaded as an entry would publish as broken video renditions. `kind: 'photo'` and its glyph exist for when that is built; until then **PHOTO is disabled in the upload form** and the file pickers accept `video/*` only — a form must not offer what the pipeline cannot deliver. It stays selectable on an entry that is already a photo, so editing one cannot silently change what it is. (`file09 SALT_INDEX` is flagged `photo` as an icon preview and is really a video; the editor can now correct it.) Images ARE accepted, as thumbnails.
+**Photos are first-class entries.** `scripts/process-photo.sh` writes a `.jpg` ladder (`_full` / `_thumb` / `_poster`) beside the video one, and `process-media-upload.sh` picks the ladder from the entry's kind — a branch in a script rather than in YAML, so it can be run locally. Rulings:
+
+- **A still is never placed** (`desiredPlacement`'s `isStill`), and that one omission is the whole of photo support in the media layer. `mediaController` exists to keep a `<video>` PLAYING across a reparent — the only reason React may not own those elements — and an image has no playback state to lose. A placement for a still would mean a `<video>` pointed at a JPEG: a broken frame in every slot. So a surface showing a still renders its own `<img>` and React owns it outright. A still is also never the playback focus, or the director holds the focus slot against an element that does not exist and mutes whatever is actually audible.
+- **`MEDIA_KIND` (probed) decides what is rendered, never the entry's `kind` (editorial).** `file09 SALT_INDEX` carried `kind: 'photo'` for weeks as a stand-in so the picture glyph had a subject, while being an mp4 — now corrected. `mediaKind.test.ts` fails on any disagreement between the two.
+- The true-frame ruling applies to stills identically, and the thumb box is **searched, not computed**. `scale=416:-2` on a 1440x960 still gives 416x278 — 1.4964 against 1.5000, a 0.24% drift and visible bars. The search finds 414x276, exactly 1.5. It shipped once stepping by 2 from an ODD start, so it only tried odd heights, missed the exact box and settled at 0.0989%: inside tolerance while being wrong, which is the worst kind of pass. `scripts/photo-ladder.test.ts` pins it.
+- The still's `_full` is capped on the **long edge** at 1440, so a portrait is not blown up to 1440 tall nor a landscape left at 4000 wide. `durationSec` is **0 by definition** for a still, not measured — ffprobe reports nonsense for a single frame.
+- A still gets no VOL control: there is no audio track and no controller node to route a volume to.
+
+**`gen-media-meta.mjs` discovers from `public/media`, NOT from `raw/`** — and this was a shipped blocker, not a preference. `raw/` is gitignored, so it does not exist in a CI checkout; during an ingest it holds `upload.bin` and never anything matching `raw/fileNN.mp4`. The generator found no ids, exited 1, and failed the run at the "regenerate media metadata" step before the commit. **Every upload would have failed**, and it would have looked like a transcode bug. Verified the rewrite emits byte-identical metadata for the existing twelve.
 
 **Deployed 2026-08-04** to `https://severedarchive-admin.chris-216.workers.dev` on the Cloudflare account `chris@hvddox.com`. The KV namespace (`a43a8b8af70d449699ab1ae763970a4a`) and `SESSION_SECRET` are set. Verified live: 401 unauthenticated, 401 on a forged cookie, 403 cross-origin, 404 unknown route, and 401 — not 502 — for a login attempt while the passcode secret is unset.
 
@@ -202,7 +210,7 @@ Note the login limit is **8 attempts per IP per hour** — a locked-out owner wa
 ## Workflows
 
 - Dev: `npm run dev` → http://localhost:5173/severedarchive/
-- Tests: `npm test` (269 vitest, 98 e2e). E2e: `npm run e2e` (Playwright, **ALWAYS headless**, projects desktop 1440 / tablet 768 / mobile 390).
+- Tests: `npm test` (288 vitest, 98 e2e). E2e: `npm run e2e` (Playwright, **ALWAYS headless**, projects desktop 1440 / tablet 768 / mobile 390).
 - Deploy: **push does NOT trigger Actions** (verified suppressed platform-side). Deploy with:
   `gh workflow run deploy.yml --ref main --repo decoy-dev/severedarchive`
   then verify the live build stamp matches HEAD.

@@ -80,10 +80,11 @@ jobs:
         if: steps.check.outputs.replace == 'yes'
         # To the SAME id, which overwrites the three renditions in place. That is
         # what makes "replace the file" not also mean "change every URL".
-        env:
-          THUMB_SPEC: ${{ toJSON(github.event.client_payload.entry.thumb) }}
-          THUMB_IMAGE: ${{ steps.check.outputs.thumb == 'yes' && 'raw/thumb.bin' || '' }}
-        run: ./scripts/process-upload.sh raw/upload.bin "${{ github.event.client_payload.id }}"
+        run: |
+          ./scripts/process-media-upload.sh raw/upload.bin "${{ github.event.client_payload.id }}" \
+            "${{ github.event.client_payload.entry.kind }}" \
+            '${{ toJSON(github.event.client_payload.entry.thumb) }}' \
+            "${{ steps.check.outputs.thumb == 'yes' && 'raw/thumb.bin' || '' }}"
 
       - name: Re-render the poster only
         # The cheap path, and the common one: the clip is untouched and the still
