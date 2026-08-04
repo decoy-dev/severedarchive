@@ -31,4 +31,4 @@ ALLOWED_ORIGIN = "https://decoy-dev.github.io"
 # then paste the id it prints here.
 [[kv_namespaces]]
 binding = "RATE_LIMIT"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "a43a8b8af70d449699ab1ae763970a4a"

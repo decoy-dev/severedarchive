@@ -56,6 +56,10 @@ describe('passcode', () => {
     // A misconfigured environment variable must read as "no", not as a crash
     // and not as a pass.
     expect(await verifyPasscode('x', '')).toBe(false)
+    // A Worker deploys fine with a secret still unset; that must read as "no",
+    // not as a 502 from a thrown TypeError.
+    expect(await verifyPasscode('x', undefined as unknown as string)).toBe(false)
+    expect(await verifyPasscode('x', null as unknown as string)).toBe(false)
     expect(await verifyPasscode('x', 'plaintext')).toBe(false)
     expect(await verifyPasscode('x', 'pbkdf2$notanumber$c2FsdA==$aGFzaA==')).toBe(false)
     expect(await verifyPasscode('x', 'pbkdf2$10$c2FsdA==$aGFzaA==')).toBe(false) // too few rounds

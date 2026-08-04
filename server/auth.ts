@@ -59,8 +59,16 @@ export async function hashPasscode(passcode: string, iterations = PBKDF2_ITERATI
   return `pbkdf2$${iterations}$${b64(salt.buffer)}$${hash}`
 }
 
-/** False for a malformed record rather than throwing: a bad env var is not a login. */
+/**
+ * False for a malformed or missing record rather than throwing: a bad env var
+ * is not a login, and an UNSET one must not be either. The unset case is not
+ * hypothetical — a Worker deploys perfectly well with a secret still missing,
+ * and `stored.split` on undefined would throw straight past this check into the
+ * handler's catch, which answers 502. A 502 on the login route reads as "the
+ * server is broken", not "you are not getting in".
+ */
 export async function verifyPasscode(passcode: string, stored: string): Promise<boolean> {
+  if (typeof stored !== 'string' || stored.length === 0) return false
   const parts = stored.split('$')
   if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false
   const iterations = Number(parts[1])

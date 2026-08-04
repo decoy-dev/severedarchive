@@ -163,7 +163,11 @@ Owner decisions: GitHub stays the store, auth must be genuinely private, **only 
 
 **Not wired up yet:** `scripts/write-entry.mjs` appends to `src/data/entries.json`, which the app does not read — `archive.ts` is still the source. The migration is the next slice, along with the admin UI, the `(i)` popover, date sorting and photo support.
 
-**Still needed from the owner:** a Cloudflare account, `wrangler kv namespace create RATE_LIMIT`, the three `wrangler secret put` values, and a fine-grained GitHub token (Contents + Actions write, this repo only).
+**Deployed 2026-08-04** to `https://severedarchive-admin.chris-216.workers.dev` on the Cloudflare account `chris@hvddox.com`. The KV namespace (`a43a8b8af70d449699ab1ae763970a4a`) and `SESSION_SECRET` are set. Verified live: 401 unauthenticated, 401 on a forged cookie, 403 cross-origin, 404 unknown route, and 401 — not 502 — for a login attempt while the passcode secret is unset.
+
+**Still needed from the owner:** `ADMIN_PASSCODE_HASH` (run `scripts/hash-passcode.mjs`) and `GITHUB_TOKEN` (fine-grained, Contents + Actions write, this repo only). Until both are set, `/api/session` correctly refuses everyone.
+
+Note the login limit is **8 attempts per IP per hour** — a locked-out owner waits out the window rather than being let in.
 
 ## Workflows
 
