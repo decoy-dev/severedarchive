@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { gotoGrid } from './helpers'
 
-test('lite tier renders poster images and drops the glass-strip blur', async ({ page }) => {
+test('lite tier renders poster images and drops the glass blur', async ({ page }) => {
   // reduced-motion must be emulated before the first page.goto so perfTier reads
   // lite on initial mount (perfTier is read once, via useState(readPerfTier)).
   await page.emulateMedia({ reducedMotion: 'reduce' })
@@ -19,9 +19,12 @@ test('lite tier renders poster images and drops the glass-strip blur', async ({ 
   await expect(page.locator('.bg-video img')).toBeVisible()
   await expect(page.locator('.bg-video video')).toHaveCount(0)
 
-  // glass-strip drops the backdrop-filter blur in favor of a solid vignette
+  // The margin drops its backdrop-filter blur for a solid vignette. It used to
+  // be four `.glass-strip` elements; it is one `.glass-frame` clipped to a
+  // picture-frame shape, because adjacent blurred surfaces always seam at their
+  // join whatever their geometry.
   const backdropFilter = await page
-    .locator('.glass-strip')
+    .locator('.glass-frame')
     .first()
     .evaluate((el) => getComputedStyle(el).backdropFilter)
   expect(backdropFilter).toBe('none')

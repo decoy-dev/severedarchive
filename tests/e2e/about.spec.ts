@@ -46,6 +46,50 @@ test.describe('about ascii object', () => {
     expect(await page.locator('.ascii-object [tabindex]:not([tabindex="-1"])').count()).toBe(0)
   })
 
+  test('the mark is centred between the copy and the panel edge', async ({ page }) => {
+    await ready(page)
+    await page.getByRole('tab', { name: 'ABOUT' }).click()
+    await expect(page.locator('.ascii-object')).toHaveAttribute('data-state', /^(live|lite|static)$/, { timeout: 15000 })
+    await page.waitForTimeout(600)
+
+    // The CENTROID of the lit characters, weighted by how many there are — which
+    // is the quantity that matters and the one four earlier attempts got wrong.
+    // The bounding box is pushed around by sparse outliers where the rim light
+    // catches an edge, far more than they push the eye.
+    //
+    // Averaged over samples, because the object sways ±0.52rad and any single
+    // frame sits up to ~40px off centre by design.
+    const offsets: number[] = []
+    for (let i = 0; i < 12; i++) {
+      offsets.push(await page.evaluate(() => {
+        const table = document.querySelector('.ascii-object table')!
+        const copy = document.querySelector('.about-copy')!.getBoundingClientRect()
+        const panel = document.querySelector('.about-panel')!.getBoundingClientRect()
+        const walk = document.createTreeWalker(table, NodeFilter.SHOW_TEXT)
+        const range = document.createRange()
+        let wx = 0, w = 0
+        for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+          const text = (n as Text).data
+          const a = text.search(/\S/)
+          if (a === -1) continue
+          const b = text.length - 1 - [...text].reverse().join('').search(/\S/)
+          const ink = text.slice(a, b + 1).replace(/\s/g, '').length
+          if (!ink) continue
+          range.setStart(n, a); range.setEnd(n, b + 1)
+          const r = range.getBoundingClientRect()
+          wx += (r.left + r.right) / 2 * ink
+          w += ink
+        }
+        return w ? wx / w - (copy.right + panel.right) / 2 : 0
+      }))
+      await page.waitForTimeout(220)
+    }
+    const mean = offsets.reduce((a, c) => a + c, 0) / offsets.length
+    // Generous against the sway, tight enough to catch a real bias: the versions
+    // this replaced sat 160px out.
+    expect(Math.abs(mean), `mean offset ${mean.toFixed(1)}px`).toBeLessThan(24)
+  })
+
   test('the page still does not scroll with the object mounted', async ({ page }) => {
     await ready(page)
     await page.getByRole('tab', { name: 'ABOUT' }).click()

@@ -29,13 +29,13 @@
   --fs-base: 18px;
   --fs-lg: 20px;
   --display: 'Archivo Black', var(--mono);  /* wordmark + BUFFER FULL only — never interface text */
-  /* Rounded to whole pixels. The four glass strips tile against the terminal's
-     box at exactly this value, so a fractional one leaves sub-pixel gaps
-     between them — a near-invisible seam outside the window's border, most
-     visible at the corners where two strips and the panel all meet. `round()`
-     makes the tiling exact at every viewport width rather than only at the
-     ones where 4.5vw happens to land on an integer. */
-  --frame: round(clamp(16px, 4.5vw, 56px), 1px);
+  /* Back to a plain clamp. This was wrapped in `round()` to stop the four glass
+     strips leaving sub-pixel gaps against the terminal's box — there is one
+     clipped layer now and nothing to tile, so the rounding bought nothing and
+     `round()` is not supported by every browser this has to run in. A
+     custom property that fails to parse takes every declaration using it with
+     it, which for this one is the terminal's own position and size. */
+  --frame: clamp(16px, 4.5vw, 56px);
   /* Where the terminal's top edge sits. Its own value on mobile, and the
      wordmark is positioned against it rather than against the frame. */
   --panel-top: var(--frame);
@@ -145,22 +145,38 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
    viewport. */
 .wordmark-stroke path { fill: none; stroke: rgba(238, 244, 248, 0.42); stroke-width: 4; }
 
-/* glass margin: four strips around the window */
-.glass-strip { position: absolute; z-index: 1; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); background: rgba(7, 9, 11, 0.35); }
-/* Tiled exactly against the terminal's box, with NO overlap.
+/* The glass margin: ONE layer with a hole in it, not four strips.
    
-   Overlapping them by a pixel to close the seam was worse: the terminal is
-   translucent glass, so everything painted beneath it shows through, and a
-   strip extended under it draws its own edge across the panel — a line under
-   the footer and another down the left, both inside the window. `--frame` is
-   rounded to whole pixels instead, which removes the fractional gaps that
-   caused the original hairline without putting anything underneath the glass. */
-.glass-strip.top    { top: 0; left: 0; right: 0; height: var(--frame); }
-.glass-strip.bottom { bottom: 0; left: 0; right: 0; height: var(--frame); }
-.glass-strip.left   { top: var(--frame); bottom: var(--frame); left: 0; width: var(--frame); }
-.glass-strip.right  { top: var(--frame); bottom: var(--frame); right: 0; width: var(--frame); }
+   Four strips is where the seam came from, and no amount of tiling fixed it.
+   Adjacent `backdrop-filter` surfaces each blur their own box and each
+   rasterises its own edge, so the join between two of them is visible whatever
+   their geometry — exact tiling left a hairline, and overlapping them by a pixel
+   put a strip under the translucent terminal where its edge showed through the
+   panel instead. There is no third arrangement of four boxes that works.
+   
+   So this is one box covering the viewport, clipped to a picture-frame shape:
+   the polygon traces the outside, cuts in along a zero-width slit, traces the
+   inside, and comes back out. `evenodd` makes the inner rectangle a hole. One
+   surface, one blur, no internal joins — and because the hole is exactly the
+   terminal's box, nothing is painted beneath the panel either, so the wordmark
+   still refracts through the glass rather than through two layers of it. */
+.glass-frame {
+  position: absolute; inset: 0; z-index: 1;
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  background: rgba(7, 9, 11, 0.35);
+  pointer-events: none;
+  clip-path: polygon(
+    evenodd,
+    0 0, 100% 0, 100% 100%, 0 100%, 0 0,
+    var(--frame) var(--frame),
+    var(--frame) calc(100% - var(--frame)),
+    calc(100% - var(--frame)) calc(100% - var(--frame)),
+    calc(100% - var(--frame)) var(--frame),
+    var(--frame) var(--frame)
+  );
+}
 /* lite tier: no live blur */
-[data-tier='lite'] .glass-strip { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(7, 9, 11, 0.82); }
+[data-tier='lite'] .glass-frame { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(7, 9, 11, 0.82); }
 
 /* Build stamp: bottom-right, above the glass strips but BELOW the desktop.
    It used to sit at z-index 6 against .desktop's 2, which put it above every

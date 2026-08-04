@@ -66,8 +66,8 @@ function AppShell() {
     <div className="stage" data-tier={tier} data-booted={booted ? 'true' : 'false'}>
       <BackgroundVideo tier={tier} fileId={selectedId} />
       <Wordmark />
-      <div className="glass-strip top" /><div className="glass-strip bottom" />
-      <div className="glass-strip left" /><div className="glass-strip right" />
+      {/* One layer, clipped to a frame — not four strips. See `.glass-frame`. */}
+      <div className="glass-frame" />
       {!booted ? (
         <BootSequence onDone={() => setBooted(true)} />
       ) : (
