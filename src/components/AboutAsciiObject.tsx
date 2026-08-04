@@ -235,41 +235,74 @@ export default function AboutAsciiObject({ tier }: { tier: PerfTier }) {
     }
 
     /**
-     * Fit the rendered glyph block to the box, and centre it.
+     * Fit the rendered glyph block to the box, and centre the MARK inside it.
      *
-     * AsciiEffect chooses its own column count and the result almost never
-     * divides the box evenly — measured at 1440px it lays out 561px of columns
-     * inside a 551px host. The excess was clipped off the right, which both cut
-     * the mark and pushed what remained a few characters left of centre, so the
-     * object read as off-centre in a column that is in fact centred exactly
-     * between the copy and the panel edge.
+     * Two separate problems, and the first fix only solved one of them.
      *
-     * Scaling by the overflow ratio is the fix that does not fight the effect
-     * for control of its own grid: ~2% on a field of text is invisible, and the
-     * alternative (hunting for a width that happens to divide evenly) would
-     * have to re-run on every resize and could fail to find one.
+     * 1. AsciiEffect picks its own column count and it almost never divides the
+     *    box evenly — measured at 1440px it lays out 561px of columns inside a
+     *    551px host, and the excess was clipped off the right. Scaling by the
+     *    overflow ratio fixes that without fighting the effect for control of
+     *    its own grid.
+     *
+     * 2. The block being centred does not make the MARK centred. The grid is
+     *    mostly spaces; the lit characters sit wherever the render puts them,
+     *    and measuring the block's rectangle says nothing about where they are.
+     *    That is why this looked wrong while every measurement said it was
+     *    perfect — the numbers were about the wrong thing. So the ink bounds are
+     *    read out of the text itself and the block is translated until they
+     *    centre on the host.
+     *
+     * Sampled at a neutral pose. The object yaws ±0.52rad, so its ink shifts as
+     * it turns; centring on whatever frame happened to be on screen would bake
+     * that frame's offset in permanently.
      */
     function fitEffect() {
       const dom = effect.domElement as HTMLElement
-      const table = dom.firstElementChild
-      if (!table || !host) return
-      // Cleared before measuring, or the second pass measures a block that is
-      // already scaled and concludes it fits — which is how this silently did
-      // nothing the first time.
+      const table = dom.firstElementChild as HTMLElement | null
+      if (!table || !host || !model) return
+
+      const pose = { ...motion }
+      motion.yaw = 0; motion.pitch = 0; motion.roll = 0; motion.depth = 0
       dom.style.transform = ''
+      dom.style.transformOrigin = '0 0'
+      render(performance.now(), true)
+
       const range = document.createRange()
       range.selectNodeContents(table)
-      const ink = range.getBoundingClientRect()
-      if (!ink.width || !size.width) return
-      const scale = Math.min(1, size.width / ink.width)
-      if (scale >= 1) return
-      // From the LEFT edge, not the centre. The glyph block starts at the div's
-      // left and is wider than it, so scaling about the centre pulls the left
-      // edge inward and leaves the same overshoot on the right — measured, it
-      // was still 5px out. From the left, the block lands exactly on the box:
-      // ink centre 1060 against an ideal 1060.
-      dom.style.transformOrigin = 'left center'
-      dom.style.transform = `scale(${scale.toFixed(4)})`
+      const block = range.getBoundingClientRect()
+      const hostRect = host.getBoundingClientRect()
+      if (!block.width || !block.height) { Object.assign(motion, pose); return }
+
+      const scale = Math.min(1, hostRect.width / block.width)
+
+      // Ink bounds, in cells, straight from the characters.
+      const lines = (table.textContent ?? '').split('\n')
+      const rowCount = lines.length
+      const colCount = Math.max(...lines.map((l) => l.length), 1)
+      let top = -1, bottom = -1, left = colCount, right = -1
+      lines.forEach((line, i) => {
+        const a = line.search(/\S/)
+        if (a === -1) return
+        const b = line.length - 1 - [...line].reverse().join('').search(/\S/)
+        if (top === -1) top = i
+        bottom = i
+        left = Math.min(left, a)
+        right = Math.max(right, b)
+      })
+      if (right < 0) { Object.assign(motion, pose); return }
+
+      const cellW = (block.width * scale) / colCount
+      const cellH = (block.height * scale) / rowCount
+      const inkCx = (left + right + 1) / 2 * cellW
+      const inkCy = (top + bottom + 1) / 2 * cellH
+      const tx = hostRect.width / 2 - inkCx
+      const ty = hostRect.height / 2 - inkCy
+
+      dom.style.transform = `translate(${tx.toFixed(2)}px, ${ty.toFixed(2)}px) scale(${scale.toFixed(4)})`
+
+      Object.assign(motion, pose)
+      render(performance.now(), true)
     }
 
     function resize() {
