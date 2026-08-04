@@ -46,7 +46,7 @@ test.describe('about ascii object', () => {
     expect(await page.locator('.ascii-object [tabindex]:not([tabindex="-1"])').count()).toBe(0)
   })
 
-  test('the mark is centred between the copy and the panel edge', async ({ page }) => {
+  test('the mark is centred between the copy and the panel edge', async ({ page, viewport }) => {
     await ready(page)
     await page.getByRole('tab', { name: 'ABOUT' }).click()
     await expect(page.locator('.ascii-object')).toHaveAttribute('data-state', /^(live|lite|static)$/, { timeout: 15000 })
@@ -59,35 +59,95 @@ test.describe('about ascii object', () => {
     //
     // Averaged over samples, because the object sways ±0.52rad and any single
     // frame sits up to ~40px off centre by design.
-    const offsets: number[] = []
+    // The band is measured from the copy's VISIBLE edge — the right edge of its
+    // widest block — not from its grid track.
+    //
+    // This test asserted the track edge and passed while the mark sat ~195px
+    // right of where it belonged, because the code being tested made the same
+    // mistake. `.panel-block` is `max-width: 560px`, so at 2000px wide the track
+    // ends at 1055px and the blocks end at 664px. Two measurements agreeing is
+    // not evidence when both read the same wrong number.
+    const band = await page.evaluate(() => {
+      const copy = document.querySelector('.about-copy')!
+      const panel = document.querySelector('.about-panel')!
+      const track = copy.getBoundingClientRect()
+      const p = panel.getBoundingClientRect()
+      const pad = parseFloat(getComputedStyle(panel).paddingRight) || 0
+      const blocks = Math.min(
+        Math.max(...[...copy.children].map((k) => k.getBoundingClientRect().right)),
+        track.right,
+      )
+      const host = document.querySelector('.ascii-object')!.getBoundingClientRect()
+      // Beside the copy, or below it? Below the split the panel is one column and
+      // the copy spans the full width, so its right edge IS the panel's — the
+      // band is then the object's own box. Same decision as `inkBand`.
+      const beside = blocks <= host.x + 1 && track.bottom > host.y + 1
+      return {
+        beside, blocks, trackRight: track.right, panelRight: p.right - pad,
+        hostLeft: host.x, hostRight: host.right,
+      }
+    })
+
+    // Whether the two candidate bands are even distinguishable here. They are
+    // only when the copy's blocks are narrower than their track, which needs the
+    // track to be wider than `.panel-block`'s 560px cap — true on a desktop
+    // viewport, not on a tablet, where the blocks fill the track and both
+    // measurements are the same number.
+    const distinguishable = band.beside && band.trackRight - band.blocks > 60
+    if (viewport!.width >= 1440) {
+      // At this width the discrepancy is what the test exists to catch, so its
+      // absence is a broken fixture rather than a passing case.
+      expect(distinguishable, 'the copy should be narrower than its track at this width').toBe(true)
+    }
+
+    // The CENTROID of the lit characters, weighted by how many there are — which
+    // is the quantity that matters and the one four earlier attempts got wrong.
+    // The bounding box is pushed around by sparse outliers where the rim light
+    // catches an edge, far more than they push the eye.
+    //
+    // Averaged over samples, because the object sways ±0.52rad and any single
+    // frame sits up to ~40px off centre by design.
+    const inkCentre = async () => page.evaluate(() => {
+      const table = document.querySelector('.ascii-object table')!
+      const walk = document.createTreeWalker(table, NodeFilter.SHOW_TEXT)
+      const range = document.createRange()
+      let wx = 0, w = 0
+      for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+        const text = (n as Text).data
+        const a = text.search(/\S/)
+        if (a === -1) continue
+        const b = text.length - 1 - [...text].reverse().join('').search(/\S/)
+        const ink = text.slice(a, b + 1).replace(/\s/g, '').length
+        if (!ink) continue
+        range.setStart(n, a); range.setEnd(n, b + 1)
+        const r = range.getBoundingClientRect()
+        wx += (r.left + r.right) / 2 * ink
+        w += ink
+      }
+      return w ? wx / w : 0
+    })
+
+    const centres: number[] = []
     for (let i = 0; i < 12; i++) {
-      offsets.push(await page.evaluate(() => {
-        const table = document.querySelector('.ascii-object table')!
-        const copy = document.querySelector('.about-copy')!.getBoundingClientRect()
-        const panel = document.querySelector('.about-panel')!.getBoundingClientRect()
-        const walk = document.createTreeWalker(table, NodeFilter.SHOW_TEXT)
-        const range = document.createRange()
-        let wx = 0, w = 0
-        for (let n = walk.nextNode(); n; n = walk.nextNode()) {
-          const text = (n as Text).data
-          const a = text.search(/\S/)
-          if (a === -1) continue
-          const b = text.length - 1 - [...text].reverse().join('').search(/\S/)
-          const ink = text.slice(a, b + 1).replace(/\s/g, '').length
-          if (!ink) continue
-          range.setStart(n, a); range.setEnd(n, b + 1)
-          const r = range.getBoundingClientRect()
-          wx += (r.left + r.right) / 2 * ink
-          w += ink
-        }
-        return w ? wx / w - (copy.right + panel.right) / 2 : 0
-      }))
+      centres.push(await inkCentre())
       await page.waitForTimeout(220)
     }
-    const mean = offsets.reduce((a, c) => a + c, 0) / offsets.length
+    const mean = centres.reduce((a, c) => a + c, 0) / centres.length
+
+    const centre = band.beside
+      ? (band.blocks + band.panelRight) / 2
+      : (band.hostLeft + band.hostRight) / 2
+    const visible = mean - centre
     // Generous against the sway, tight enough to catch a real bias: the versions
     // this replaced sat 160px out.
-    expect(Math.abs(mean), `mean offset ${mean.toFixed(1)}px`).toBeLessThan(24)
+    expect(Math.abs(visible), `mean offset from the visible band ${visible.toFixed(1)}px`).toBeLessThan(24)
+
+    if (distinguishable) {
+      // And explicitly NOT centred on the track — the failure this test missed
+      // for five rounds. If someone reinstates the old band, this says so.
+      const track = mean - (band.trackRight + band.panelRight) / 2
+      expect(Math.abs(track), `centred on the track edge again (${track.toFixed(1)}px)`).toBeGreaterThan(24)
+    }
   })
 
   test('the page still does not scroll with the object mounted', async ({ page }) => {

@@ -84,6 +84,41 @@ export function validateEntry(input: unknown, existingNames: readonly string[] =
 }
 
 /**
+ * The fields of an entry that already exists.
+ *
+ * The same rules as a new one, minus one: a name may collide with its OWN
+ * current name. Editing a tagline and pressing save must not be rejected for
+ * the name being taken by the thing being edited. So the caller's list is
+ * filtered by the id's own name before the uniqueness check runs.
+ */
+export function validateEntryEdit(
+  input: unknown,
+  currentName: string,
+  existingNames: readonly string[] = [],
+): ValidationResult {
+  const own = normaliseName(currentName)
+  return validateEntry(input, existingNames.filter((n) => normaliseName(n) !== own))
+}
+
+/**
+ * Whether a deletion may proceed.
+ *
+ * Removing an entry deletes committed renditions and cannot be undone from the
+ * interface, so the caller has to type the name back.
+ *
+ * Trimmed and case-folded, and NOTHING else. It is tempting to reuse
+ * `normaliseName` here, and a test caught why that is wrong: it maps spaces to
+ * underscores and drops punctuation, so `GLASS RITE!` confirmed the removal of
+ * `GLASS_RITE`. Case is not the thing being confirmed — the characters are, and
+ * a confirmation that accepts an approximation is not a confirmation.
+ */
+export function deletionConfirmed(typed: unknown, name: string): boolean {
+  if (typeof typed !== 'string') return false
+  const given = typed.trim().toUpperCase()
+  return given.length > 0 && given === name.trim().toUpperCase()
+}
+
+/**
  * Newest first, which is what the explorer shows. Ties break on name so the
  * order is total — two files uploaded the same day must not swap places between
  * builds.

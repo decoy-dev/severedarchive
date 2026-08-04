@@ -1,0 +1,114 @@
+name: Edit entry
+
+# Fired by the admin Worker when an existing entry is changed or removed. The
+# sibling of ingest.yml: same store, same transcoder, same rule that raws are
+# never committed. Two things differ — there may be no file at all, and a
+# removal deletes committed renditions.
+on:
+  repository_dispatch:
+    types: [edit-media]
+
+permissions:
+  contents: write
+
+concurrency:
+  # Shares ingest's group: both commit to main and to the same data files, so
+  # they must not run at once.
+  group: ingest
+  cancel-in-progress: false
+
+jobs:
+  edit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+
+      - name: Install ffmpeg
+        # Only a replacement needs it, but installing conditionally means two
+        # code paths for the sake of ~10s on a run that already transcodes.
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - run: npm ci
+
+      - name: Check the payload
+        id: check
+        env:
+          OP: ${{ github.event.client_payload.op }}
+          ID: ${{ github.event.client_payload.id }}
+          ASSET_URL: ${{ github.event.client_payload.asset.url }}
+        run: |
+          set -euo pipefail
+          case "$OP" in edit|remove) ;; *) echo "unknown op: $OP" >&2; exit 1;; esac
+          # The Worker validates this; re-checked because the value reaches a
+          # shell and a file path here.
+          printf '%s' "$ID" | grep -Eq '^[a-z0-9][a-z0-9_]{0,40}$' || { echo "bad id" >&2; exit 1; }
+          echo "replace=$([ -n "$ASSET_URL" ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+
+      - name: Download the staged raw
+        if: steps.check.outputs.replace == 'yes'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSET_URL: ${{ github.event.client_payload.asset.url }}
+        run: |
+          set -euo pipefail
+          mkdir -p raw
+          # raw/ is gitignored, so nothing here can be committed even by mistake.
+          curl -sSL -H "Authorization: Bearer $GH_TOKEN" \
+               -H "Accept: application/octet-stream" \
+               -o raw/upload.bin "$ASSET_URL"
+          test -s raw/upload.bin
+
+      - name: Transcode the replacement
+        if: steps.check.outputs.replace == 'yes'
+        # To the SAME id, which overwrites the three renditions in place. That is
+        # what makes "replace the file" not also mean "change every URL".
+        run: ./scripts/process-upload.sh raw/upload.bin "${{ github.event.client_payload.id }}"
+
+      - name: Apply the edit
+        env:
+          OP: ${{ github.event.client_payload.op }}
+          ID: ${{ github.event.client_payload.id }}
+          ENTRY: ${{ toJSON(github.event.client_payload.entry) }}
+        run: |
+          set -euo pipefail
+          node scripts/edit-entry.mjs
+          node scripts/gen-media-meta.mjs
+
+      - name: Verify the build still loads the archive
+        # The archive throws at module load on an entry with no metadata, so a
+        # removal that missed a file or a patch that broke the shape fails HERE
+        # rather than on the deployed site.
+        run: npm run build
+
+      - name: Commit
+        env:
+          OP: ${{ github.event.client_payload.op }}
+          ID: ${{ github.event.client_payload.id }}
+        run: |
+          set -euo pipefail
+          git config user.name  "severedarchive"
+          git config user.email "noreply@users.noreply.github.com"
+          # Explicit paths, never `git add -A`. `-A` on these two so a DELETED
+          # rendition is staged as a deletion rather than left behind.
+          git add -A public/media src/data
+          git status --porcelain
+          git commit -m "$OP $ID from admin"
+          git push
+
+      - name: Delete the staged raw
+        # `always()`: a failed transcode must not leave an orphan asset sitting
+        # in the staging release.
+        if: always() && steps.check.outputs.replace == 'yes'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSET_ID: ${{ github.event.client_payload.asset.id }}
+        run: |
+          gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$ASSET_ID" || true
+
+      - name: Deploy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run deploy.yml --ref main

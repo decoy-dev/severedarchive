@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { byNewest, isCalendarDate, normaliseName, validateEntry } from './entry'
+import { byNewest, isCalendarDate, normaliseName, validateEntry, validateEntryEdit, deletionConfirmed } from './entry'
 
 const good = {
   name: 'NEW_RENDER', kind: 'video', tagline: 'chrome study',
@@ -104,5 +104,48 @@ describe('byNewest', () => {
     const input = [{ name: 'A', date: '2024-01-01' }, { name: 'B', date: '2026-01-01' }]
     byNewest(input)
     expect(input.map((e) => e.name)).toEqual(['A', 'B'])
+  })
+})
+
+describe('validateEntryEdit', () => {
+  const fields = {
+    name: 'GLASS_RITE', kind: 'video', tagline: 'refraction pass',
+    description: '', date: '2025-06-01', postUrl: '',
+  }
+
+  it('lets an entry keep its own name', () => {
+    const result = validateEntryEdit(fields, 'GLASS_RITE', ['GLASS_RITE', 'CHROME_SEQ'])
+    expect(result.ok).toBe(true)
+  })
+
+  it('still refuses a rename onto another entry', () => {
+    const result = validateEntryEdit({ ...fields, name: 'CHROME_SEQ' }, 'GLASS_RITE', ['GLASS_RITE', 'CHROME_SEQ'])
+    expect(result.ok).toBe(false)
+  })
+
+  it('applies every other rule unchanged', () => {
+    const result = validateEntryEdit({ ...fields, date: 'yesterday' }, 'GLASS_RITE', ['GLASS_RITE'])
+    expect(result.ok).toBe(false)
+  })
+})
+
+describe('deletionConfirmed', () => {
+  it('accepts the name in any case', () => {
+    expect(deletionConfirmed('glass_rite', 'GLASS_RITE')).toBe(true)
+    expect(deletionConfirmed('  GLASS_RITE  ', 'GLASS_RITE')).toBe(true)
+  })
+
+  it('refuses an approximation of the name', () => {
+    // Not pedantry: `normaliseName` was used here first, and it maps spaces to
+    // underscores and strips punctuation, so this string confirmed a deletion.
+    expect(deletionConfirmed('GLASS RITE!', 'GLASS_RITE')).toBe(false)
+    expect(deletionConfirmed('GLASSRITE', 'GLASS_RITE')).toBe(false)
+  })
+
+  it('refuses empty and non-strings', () => {
+    expect(deletionConfirmed('', 'GLASS_RITE')).toBe(false)
+    expect(deletionConfirmed('   ', 'GLASS_RITE')).toBe(false)
+    expect(deletionConfirmed(undefined, 'GLASS_RITE')).toBe(false)
+    expect(deletionConfirmed(true, 'GLASS_RITE')).toBe(false)
   })
 })

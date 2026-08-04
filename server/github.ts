@@ -116,6 +116,24 @@ export async function dispatchIngest(
   })
 }
 
+/**
+ * The same hand-off for an edit or a removal.
+ *
+ * A separate event type rather than a flag on the ingest one, because the two
+ * runs do different work under different concurrency: an edit may have no file
+ * at all, and a removal deletes committed renditions. Sharing the workflow would
+ * mean a job that branches on payload shape before it knows if it has a file.
+ */
+export async function dispatchEdit(
+  cfg: GitHubConfig,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  await call(cfg, `/repos/${cfg.owner}/${cfg.repo}/dispatches`, {
+    method: 'POST',
+    body: JSON.stringify({ event_type: 'edit-media', client_payload: payload }),
+  })
+}
+
 export type CommittedFile = { content: string; sha: string }
 
 export async function readFile(cfg: GitHubConfig, path: string, ref = 'main'): Promise<CommittedFile | null> {

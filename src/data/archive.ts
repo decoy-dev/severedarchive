@@ -1,5 +1,6 @@
 import { MEDIA_META, type MediaMeta } from './mediaMeta.generated'
 import UPLOADED_ENTRIES from './entries.json'
+import ENTRY_OVERRIDES from './overrides.json'
 
 /**
  * What the explorer draws where the index number used to be. Everything in the
@@ -79,6 +80,38 @@ const ENTRIES: ArchiveEntry[] = [
  */
 const UPLOADED = UPLOADED_ENTRIES as ArchiveEntry[]
 
+/**
+ * Admin edits and removals, written by the edit run and committed.
+ *
+ * Why a separate file rather than editing the entries above: the twelve are
+ * source code, and a workflow that rewrites `archive.ts` is a workflow that can
+ * break the build with a bad quote. This is data, so the worst a bad edit can do
+ * is be wrong.
+ *
+ * `patch` is merged field-by-field over an entry with the same id, so an edit
+ * that only changes a tagline says only that — and, importantly, does not move
+ * an entry: the twelve keep their curated order unless a real date is set,
+ * which is the same rule as before. `removed` drops the entry entirely, and the
+ * edit run deletes its renditions in the same commit.
+ */
+const OVERRIDES = ENTRY_OVERRIDES as {
+  patch: Record<string, Partial<ArchiveEntry>>
+  removed: string[]
+}
+
+const REMOVED = new Set(OVERRIDES.removed)
+
+/**
+ * The patch applied. `id` is never taken from the patch: it names the files on
+ * disk, and letting an edit change it would point an entry at media that does
+ * not exist.
+ */
+const patched = (entry: ArchiveEntry): ArchiveEntry => {
+  const patch = OVERRIDES.patch[entry.id]
+  if (!patch) return entry
+  return { ...entry, ...patch, id: entry.id }
+}
+
 /** Newest first. Ties break on name so the order is total across builds. */
 const byDateDesc = (a: ArchiveEntry, b: ArchiveEntry): number =>
   a.date === b.date ? a.name.localeCompare(b.name) : (b.date ?? '').localeCompare(a.date ?? '')
@@ -88,7 +121,28 @@ const byDateDesc = (a: ArchiveEntry, b: ArchiveEntry): number =>
  * order. See `ArchiveEntry.date` for why the twelve are not swept into the
  * sort.
  */
-const ALL_ENTRIES: ArchiveEntry[] = [...UPLOADED].sort(byDateDesc).concat(ENTRIES)
+// Removals and patches are applied FIRST, before anything is sorted or looks up
+// generated metadata.
+//
+// Before sorting, because a patch may SET a date, and the promise in
+// `ArchiveEntry.date` is that giving one of the twelve a real date makes it join
+// the sort. Patching after the order was decided quietly broke that: the entry
+// got its date and stayed where it was.
+//
+// Before the metadata lookup, because a removed entry's renditions are gone from
+// disk, so its generated metadata is gone too, and the throw below would fire on
+// an entry nobody is meant to see any more.
+const RESOLVED: ArchiveEntry[] = [...UPLOADED, ...ENTRIES]
+  .filter((e) => !REMOVED.has(e.id))
+  .map(patched)
+
+// Dated entries newest-first on top; undated ones below in their curated order.
+// Two passes rather than one comparator, because "no date" is not a date that
+// sorts last — it means "leave this where the author put it".
+const ALL_ENTRIES: ArchiveEntry[] = [
+  ...RESOLVED.filter((e) => e.date).sort(byDateDesc),
+  ...RESOLVED.filter((e) => !e.date),
+]
 
 export const ARCHIVE: ArchiveFile[] = ALL_ENTRIES.map((e) => {
   const meta = MEDIA_META[e.id]
@@ -126,8 +180,17 @@ export const formatEntryDate = (f: ArchiveFile): string => {
   return month ? `${d} ${month} ${y}` : f.year
 }
 
-// Which file leads the stack (and seeds the backdrop) on load.
-export const DEFAULT_FRONT_ID = 'file03'
+/**
+ * Which file leads the stack (and seeds the backdrop) on load.
+ *
+ * A curated choice, but not an unconditional one: an admin removal can delete
+ * the entry it names, and a selection pointing at a file that is not in the
+ * archive leaves the backdrop with nothing to play. Falls back to whatever now
+ * leads the list.
+ */
+const PREFERRED_FRONT_ID = 'file03'
+export const DEFAULT_FRONT_ID =
+  ARCHIVE.some((f) => f.id === PREFERRED_FRONT_ID) ? PREFERRED_FRONT_ID : (ARCHIVE[0]?.id ?? PREFERRED_FRONT_ID)
 
 export const media = (f: string) => import.meta.env.BASE_URL + 'media/' + f
 export const thumbSrc = (id: string) => media(`${id}_thumb.mp4`)

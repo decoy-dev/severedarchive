@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ADMIN_API, useAdminSession } from '../lib/adminSession'
 import AdminPanel from './AdminPanel'
 
 /**
@@ -15,8 +16,6 @@ import AdminPanel from './AdminPanel'
  * with an httpOnly, SameSite=Strict cookie, so nothing here ever handles the
  * token and no script on the page can read it.
  */
-const API = import.meta.env.VITE_ADMIN_API ?? 'https://severedarchive-admin.chris-216.workers.dev'
-
 type State = 'closed' | 'asking' | 'checking' | 'ok' | 'denied' | 'limited' | 'offline'
 
 const MESSAGE: Record<Exclude<State, 'closed' | 'asking' | 'checking' | 'ok'>, string> = {
@@ -27,6 +26,10 @@ const MESSAGE: Record<Exclude<State, 'closed' | 'asking' | 'checking' | 'ok'>, s
 
 export default function AdminLogin() {
   const [state, setState] = useState<State>('closed')
+  // Announced upwards, so the file windows can offer their EDIT control. The
+  // cookie is still the only thing the backend trusts; this is the interface
+  // knowing a login happened.
+  const { authed, signIn, signOut } = useAdminSession()
   const [passcode, setPasscode] = useState('')
   const inputRef = useRef<HTMLInputElement | null>(null)
 
@@ -52,7 +55,7 @@ export default function AdminLogin() {
     e.preventDefault()
     setState('checking')
     try {
-      const res = await fetch(`${API}/api/session`, {
+      const res = await fetch(`${ADMIN_API}/api/session`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
@@ -60,7 +63,7 @@ export default function AdminLogin() {
       })
       // The passcode is gone from memory whatever the answer was.
       setPasscode('')
-      if (res.ok) setState('ok')
+      if (res.ok) { signIn(); setState('ok') }
       else if (res.status === 429) setState('limited')
       else setState('denied')
     } catch {
@@ -74,10 +77,36 @@ export default function AdminLogin() {
   if (state === 'ok') {
     // Authenticating has to lead somewhere. It used to stop at a message, which
     // is a door that reports being unlocked and then does nothing.
+    // Closing the panel does NOT sign out: the admin tools in the window bars
+    // are the point of staying signed in, and the passcode should not have to be
+    // retyped to edit a second file.
     return <AdminPanel onClose={() => setState('closed')} />
   }
 
+  const endSession = () => {
+    // Best effort: the cookie is httpOnly, so only the Worker can clear it, and
+    // whether that request lands does not change the fact that this tab is
+    // signed out. It matters anyway — otherwise the session sits valid for the
+    // rest of its hour on a browser whose owner has just said they are done.
+    void fetch(`${ADMIN_API}/api/session`, { method: 'DELETE', credentials: 'include' }).catch(() => {})
+    signOut()
+    setState('closed')
+  }
+
   if (state === 'closed') {
+    // Once signed in the footer keeps a way back to the panel and a way out.
+    // Reopening must not ask for the passcode again: the session is what the
+    // backend checks, and the EDIT controls in the window bars are already live.
+    if (authed) {
+      return (
+        <span className="admin-open-row">
+          <button className="admin-open" onClick={() => setState('ok')} aria-label="Open publish panel">
+            ◈ PUBLISH
+          </button>
+          <button className="admin-signout" onClick={endSession}>SIGN OUT</button>
+        </span>
+      )
+    }
     return (
       <button className="admin-open" onClick={() => setState('asking')} aria-label="Admin login">
         ◈ ADMIN LOGIN

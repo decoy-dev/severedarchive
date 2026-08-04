@@ -1,8 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { aspectRatio, type ArchiveFile } from '../data/archive'
 import { DISSOLVE_CELL, DISSOLVE_MS, dissolveClipPath } from '../lib/dissolve'
 import { prefersReducedMotion } from '../lib/perfTier'
 import { windowWidthCss } from '../lib/windowManager'
+import { useAdminSession } from '../lib/adminSession'
+import EntryEditPanel from './EntryEditPanel'
 import InfoPopover from './InfoPopover'
 import VolumeControl from './VolumeControl'
 
@@ -28,6 +30,14 @@ export default function FileWindow({
   // `document.querySelector`, which answers with whichever preview happens to
   // exist rather than the file that was clicked.
   const ar = aspectRatio(file)
+
+  // The owner's tools, and only the owner's: EDIT appears in the bar of the
+  // window you are looking at once a passcode has been accepted this session.
+  // The button is cosmetic security — every endpoint behind it checks the
+  // session cookie independently — so hiding it is about not showing controls
+  // that would only 401, not about keeping anyone out.
+  const { authed } = useAdminSession()
+  const [editing, setEditing] = useState(false)
 
   // The dissolve. A `clip-path` with a hole per gone cell, so the squares are
   // genuinely removed from the window and the desktop shows through them. An
@@ -92,6 +102,19 @@ export default function FileWindow({
             numbers files any more — a file is its name. */}
         <span className="fw-title" data-drag-handle>{file.name}.{file.ext}</span>
         <span className="fw-controls">
+          {authed && (
+            /* A sibling of the ✕, not nested in anything: the title bar's
+               controls are all direct children of this row, and a button inside
+               a button is the mistake that broke the dashboard's (i). */
+            <button
+              className="fw-edit"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => setEditing(true)}
+              aria-label={`Edit ${file.name}.${file.ext}`}
+            >
+              EDIT
+            </button>
+          )}
           <InfoPopover file={file} />
           <VolumeControl value={volume} onChange={onVolume} />
           {/* Closes on pointerdown, not click: the press is the commit, so
@@ -128,6 +151,10 @@ export default function FileWindow({
           moves this file's host in here and takes it away again; React only ever
           sees an empty div, which is the whole safety argument. */}
       <div className="fw-body" data-window-slot={file.id} ref={bodyRef} style={{ aspectRatio: `${ar}` }} />
+      {/* Rendered from here rather than plumbed through Desktop: the panel is
+          `position: fixed` and centres on the viewport, so it does not inherit
+          this window's box, and the window already knows which file it is. */}
+      {editing && <EntryEditPanel file={file} onClose={() => setEditing(false)} />}
     </div>
   )
 }

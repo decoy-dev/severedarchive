@@ -1,6 +1,6 @@
 import { signSession, verifyPasscode, verifySession } from './auth'
-import { validateEntry } from './entry'
-import { dispatchIngest, stageRaw, readFile, writeFile, type GitHubConfig } from './github'
+import { deletionConfirmed, validateEntry, validateEntryEdit } from './entry'
+import { dispatchEdit, dispatchIngest, stageRaw, readFile, writeFile, type GitHubConfig } from './github'
 import { clientKey, countAttempt, type CounterStore } from './ratelimit'
 
 /**
@@ -43,6 +43,13 @@ const UPLOAD_WINDOW_S = 60 * 60
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024
 
 const SESSION_COOKIE = 'sa_admin'
+
+/**
+ * What an entry id may look like. Anchored and narrow because the id reaches a
+ * shell in the edit workflow and names files on disk: no dots, no slashes, so a
+ * `../` or a glob cannot be smuggled through as an id.
+ */
+const ENTRY_ID_RE = /^[a-z0-9][a-z0-9_]{0,40}$/
 
 /** The allow-list, parsed. Empty entries dropped so a trailing comma is harmless. */
 const allowedOrigins = (env: Env): string[] =>
@@ -122,6 +129,21 @@ async function handleSession(req: Request, env: Env): Promise<Response> {
   }, req)
 }
 
+/**
+ * Signing out: clear the cookie.
+ *
+ * Not authenticated, and it does not need to be — the only thing it can do is
+ * unset a cookie on the caller's own browser. Rate-limiting it would mean an
+ * attacker could stop the owner from signing out.
+ */
+function handleSignOut(req: Request, env: Env): Response {
+  return json({ ok: true }, 200, env, {
+    // Same attributes as when it was set, or the browser treats it as a
+    // different cookie and leaves the real one in place.
+    'set-cookie': `${SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0`,
+  }, req)
+}
+
 async function handleUpload(req: Request, env: Env): Promise<Response> {
   if (!(await requireSession(req, env))) return json({ error: 'unauthorized' }, 401, env, {}, req)
 
@@ -161,6 +183,84 @@ async function handleUpload(req: Request, env: Env): Promise<Response> {
   return json({ ok: true, staged: asset.name, entry: fields.value }, 202, env, {}, req)
 }
 
+/**
+ * Editing an entry that already exists: its fields, and optionally its file.
+ *
+ * The id is the identity and never changes here. It is what every rendition on
+ * disk is named after (`<id>_full.mp4`), so renaming the *display* name is a
+ * field edit and renaming the id would be a migration — a replacement file is
+ * therefore transcoded to the SAME id and simply overwrites what is there.
+ */
+async function handleEntryEdit(req: Request, env: Env, id: string): Promise<Response> {
+  if (!(await requireSession(req, env))) return json({ error: 'unauthorized' }, 401, env, {}, req)
+  if (!ENTRY_ID_RE.test(id)) return json({ error: 'bad id' }, 400, env, {}, req)
+
+  // Rate-limited on the upload counter when it carries a file, because that is
+  // the expensive path — an edit with a replacement is an ingest by another name.
+  const form = await req.formData().catch(() => null)
+  if (!form) return json({ error: 'form data required' }, 400, env, {}, req)
+
+  const file = form.get('file')
+  const hasFile = file instanceof File && file.size > 0
+  if (hasFile) {
+    if (file.size > MAX_UPLOAD_BYTES) return json({ error: 'file is too large' }, 413, env, {}, req)
+    const limit = await countAttempt(env.RATE_LIMIT, `upload:${clientKey(req.headers)}`, {
+      limit: UPLOAD_LIMIT, windowS: UPLOAD_WINDOW_S,
+    })
+    if (!limit.allowed) {
+      return json({ error: 'too many uploads' }, 429, env, { 'retry-after': String(limit.retryAfter) }, req)
+    }
+  }
+
+  const fields = validateEntryEdit({
+    name: form.get('name'),
+    kind: form.get('kind'),
+    tagline: form.get('tagline'),
+    description: form.get('description'),
+    date: form.get('date'),
+    postUrl: form.get('postUrl'),
+  }, String(form.get('currentName') ?? ''), JSON.parse(String(form.get('existingNames') ?? '[]')))
+  if (!fields.ok) return json({ error: 'invalid entry', details: fields.errors }, 422, env, {}, req)
+
+  let asset: { id: number; url: string } | null = null
+  if (hasFile) {
+    const staged = await stageRaw(
+      ghConfig(env),
+      `${Date.now()}-${id}-replace.upload`,
+      await file.arrayBuffer(),
+      file.type || 'application/octet-stream',
+    )
+    asset = { id: staged.id, url: staged.url }
+  }
+
+  await dispatchEdit(ghConfig(env), { op: 'edit', id, entry: fields.value, asset })
+  // 202 whether or not there is a file: either way the change is committed by a
+  // workflow run and is not live when this returns.
+  return json({ ok: true, id, replaced: hasFile, entry: fields.value }, 202, env, {}, req)
+}
+
+/**
+ * Removing an entry: the row and its renditions.
+ *
+ * Guarded twice over. The caller has to type the name back — see
+ * `deletionConfirmed` — and the workflow deletes only files matching the id it
+ * was given. Nothing here can remove more than one entry per request.
+ */
+async function handleEntryDelete(req: Request, env: Env, id: string): Promise<Response> {
+  if (!(await requireSession(req, env))) return json({ error: 'unauthorized' }, 401, env, {}, req)
+  if (!ENTRY_ID_RE.test(id)) return json({ error: 'bad id' }, 400, env, {}, req)
+
+  const body = (await req.json().catch(() => null)) as { confirm?: unknown; name?: unknown } | null
+  const name = typeof body?.name === 'string' ? body.name : ''
+  if (!name) return json({ error: 'name is required' }, 400, env, {}, req)
+  if (!deletionConfirmed(body?.confirm, name)) {
+    return json({ error: 'confirmation does not match', details: ['type the name to confirm'] }, 422, env, {}, req)
+  }
+
+  await dispatchEdit(ghConfig(env), { op: 'remove', id, entry: { name } })
+  return json({ ok: true, id, removed: name }, 202, env, {}, req)
+}
+
 /** ABOUT copy and LINKS rows. One committed JSON file, no media, no transcode. */
 async function handleContent(req: Request, env: Env): Promise<Response> {
   if (!(await requireSession(req, env))) return json({ error: 'unauthorized' }, 401, env, {}, req)
@@ -193,7 +293,7 @@ export function corsPreflight(env: Env, req: Request): Response {
     headers: {
       'access-control-allow-origin': originFor(req, env),
       'access-control-allow-credentials': 'true',
-      'access-control-allow-methods': 'GET,POST,OPTIONS',
+      'access-control-allow-methods': 'GET,POST,DELETE,OPTIONS',
       'access-control-allow-headers': 'content-type',
       'access-control-max-age': '86400',
     },
@@ -216,8 +316,18 @@ export default {
 
     try {
       if (url.pathname === '/api/session' && req.method === 'POST') return await handleSession(req, env)
+      if (url.pathname === '/api/session' && req.method === 'DELETE') return handleSignOut(req, env)
       if (url.pathname === '/api/upload' && req.method === 'POST') return await handleUpload(req, env)
       if (url.pathname === '/api/content') return await handleContent(req, env)
+      // `/api/entry/<id>` — POST edits (with an optional replacement file),
+      // DELETE removes. The id is matched, not split off blindly, so a path with
+      // extra segments is a 404 rather than an id containing a slash.
+      const entry = /^\/api\/entry\/([^/]+)$/.exec(url.pathname)
+      if (entry) {
+        const id = decodeURIComponent(entry[1])
+        if (req.method === 'POST') return await handleEntryEdit(req, env, id)
+        if (req.method === 'DELETE') return await handleEntryDelete(req, env, id)
+      }
       return json({ error: 'not found' }, 404, env, {}, req)
     } catch (err) {
       // Logged, never returned. The caller gets a bare 502 — an upstream

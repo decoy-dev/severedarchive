@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { createDraggable } from 'animejs'
 import { ARCHIVE } from '../data/archive'
-import { SITE_CONTENT, UPLOAD_LIMITS, formatBytes } from '../data/content'
+import { SITE_CONTENT } from '../data/content'
+import { ADMIN_API } from '../lib/adminSession'
+import EntryFields, { UploadLimitsHint, emptyDraft, nameFromFile, type EntryDraft } from './EntryFields'
 
 /**
  * What the passcode was for: publishing.
@@ -15,29 +18,16 @@ import { SITE_CONTENT, UPLOAD_LIMITS, formatBytes } from '../data/content'
  * transcode it, and that takes minutes. Saying "published" would be a lie for
  * most of that window, so it says what actually happened.
  */
-const API = import.meta.env.VITE_ADMIN_API ?? 'https://severedarchive-admin.chris-216.workers.dev'
-
-/** The device's date, as the date field's default — the owner can backdate it. */
-const today = (): string => {
-  const d = new Date()
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-}
-
 type Status = { kind: 'idle' | 'busy' | 'ok' | 'error'; message?: string }
 
 export default function AdminPanel({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<'upload' | 'content'>('upload')
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
 
-  // Upload fields.
+  // Upload fields. One draft object, shared with the edit panel via
+  // `EntryFields`, so a field cannot exist in one form and not the other.
   const [file, setFile] = useState<File | null>(null)
-  const [name, setName] = useState('')
-  const [kind, setKind] = useState<'video' | 'photo'>('video')
-  const [tagline, setTagline] = useState('')
-  const [description, setDescription] = useState('')
-  const [date, setDate] = useState(today)
-  const [postUrl, setPostUrl] = useState('')
+  const [draft, setDraft] = useState<EntryDraft>(emptyDraft)
 
   // Content editing.
   const [content, setContent] = useState('')
@@ -80,7 +70,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     if (tab !== 'content' || sha !== null || content) return
     setStatus({ kind: 'busy', message: 'READING content.json' })
-    fetch(`${API}/api/content`, { credentials: 'include' })
+    fetch(`${ADMIN_API}/api/content`, { credentials: 'include' })
       .then((r) => r.json())
       .then((body) => {
         // Seeded from what the site is currently showing when the file does not
@@ -99,24 +89,26 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
     setStatus({ kind: 'busy', message: 'STAGING UPLOAD' })
     const form = new FormData()
     form.set('file', file)
-    form.set('name', name)
-    form.set('kind', kind)
-    form.set('tagline', tagline)
-    form.set('description', description)
-    form.set('date', date)
-    form.set('postUrl', postUrl)
+    form.set('name', draft.name)
+    form.set('kind', draft.kind)
+    form.set('tagline', draft.tagline)
+    form.set('description', draft.description)
+    form.set('date', draft.date)
+    form.set('postUrl', draft.postUrl)
     // So the Worker can reject a duplicate name against what is actually live,
     // rather than only against what it happens to know.
     form.set('existingNames', JSON.stringify(ARCHIVE.map((f) => f.name)))
     try {
-      const res = await fetch(`${API}/api/upload`, { method: 'POST', credentials: 'include', body: form })
+      const res = await fetch(`${ADMIN_API}/api/upload`, { method: 'POST', credentials: 'include', body: form })
       const body = await res.json().catch(() => ({}))
       if (res.status === 202) {
         setStatus({
           kind: 'ok',
           message: 'STAGED. TRANSCODE AND DEPLOY RUNNING — A FEW MINUTES.',
         })
-        setFile(null); setName(''); setTagline(''); setDescription(''); setPostUrl('')
+        // Reset to a fresh draft, keeping the date: a run of uploads from one
+        // shoot all carry the same one.
+        setFile(null); setDraft((d) => ({ ...emptyDraft(), date: d.date }))
       } else if (res.status === 422) {
         setStatus({ kind: 'error', message: (body.details ?? ['INVALID ENTRY']).join(' · ').toUpperCase() })
       } else if (res.status === 401) {
@@ -132,7 +124,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   const save = async () => {
     setStatus({ kind: 'busy', message: 'COMMITTING content.json' })
     try {
-      const res = await fetch(`${API}/api/content`, {
+      const res = await fetch(`${ADMIN_API}/api/content`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
@@ -147,7 +139,23 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
     }
   }
 
-  return (
+  /**
+   * Both admin panels are portalled to `document.body`.
+   *
+   * They are `position: fixed` with a high z-index, which reads as "above
+   * everything" and is not: z-index only orders siblings within a stacking
+   * context, and these were rendered inside one — the publish panel inside the
+   * terminal, the editor inside the file window it edits. So they painted under
+   * other chrome, and `elementFromPoint` over the panel's own header answered with
+   * the desktop. The visible symptom was that neither panel could be dragged: the
+   * pointerdown never reached the drag handle. A file window is worse still, since
+   * it takes a `clip-path` while it dissolves, and a clip applies to fixed
+   * descendants too.
+   *
+   * A portal keeps them in the React tree that owns their state — the window still
+   * knows which file it is — while taking them out of that context in the DOM.
+   */
+  return createPortal(
     <div className="admin-panel glass" ref={panelRef} role="dialog" aria-label="Admin">
       <header className="admin-head" data-admin-drag>
         <span className="admin-title">PUBLISH</span>
@@ -173,39 +181,18 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                 setFile(picked)
                 // A sensible name from the filename, still editable. The Worker
                 // normalises it again, so this only saves typing.
-                if (picked && !name) {
-                  setName(picked.name.replace(/\.[^.]+$/, '').toUpperCase().replace(/[^A-Z0-9]+/g, '_'))
+                if (picked) {
+                  setDraft((d) => ({
+                    ...d,
+                    name: d.name || nameFromFile(picked.name),
+                    kind: picked.type.startsWith('image/') ? 'photo' : d.kind,
+                  }))
                 }
-                if (picked?.type.startsWith('image/')) setKind('photo')
               }}
             />
           </label>
-          <label className="admin-field"><span>NAME</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="CHROME_SEQ" />
-          </label>
-          <label className="admin-field"><span>KIND</span>
-            <select value={kind} onChange={(e) => setKind(e.target.value as 'video' | 'photo')}>
-              <option value="video">VIDEO</option>
-              <option value="photo">PHOTO</option>
-            </select>
-          </label>
-          <label className="admin-field"><span>DATE</span>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </label>
-          <label className="admin-field"><span>TAGLINE</span>
-            <input value={tagline} onChange={(e) => setTagline(e.target.value)} placeholder="liquid metal study" />
-          </label>
-          <label className="admin-field"><span>POST URL</span>
-            <input value={postUrl} onChange={(e) => setPostUrl(e.target.value)} placeholder="https://instagram.com/p/…" />
-          </label>
-          <label className="admin-field admin-field-wide"><span>DESCRIPTION</span>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
-          </label>
-          <p className="admin-hint">
-            VIDEO {UPLOAD_LIMITS.video.join(' / ')} · PHOTO {UPLOAD_LIMITS.photo.join(' / ')}
-            {' · UP TO '}{formatBytes(UPLOAD_LIMITS.maxBytes)}
-            {file ? ` · SELECTED ${formatBytes(file.size)}` : ''}
-          </p>
+          <EntryFields draft={draft} onChange={setDraft} />
+          <UploadLimitsHint file={file} />
           <button className="admin-submit" type="submit" disabled={!file || status.kind === 'busy'}>
             {status.kind === 'busy' ? '···' : 'UPLOAD'}
           </button>
@@ -227,6 +214,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
       {status.message && (
         <p className="admin-status" data-kind={status.kind} role="status">&gt; {status.message}</p>
       )}
-    </div>
+    </div>,
+    document.body,
   )
 }

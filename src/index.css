@@ -1063,6 +1063,50 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .admin-status[data-kind='ok'] { color: var(--acid); }
 .admin-status[data-kind='error'] { color: var(--bright); }
 .admin-status[data-kind='busy'] { color: var(--dim); }
+/* The file being edited, named in the panel's header beside the mode. */
+.admin-subject { font-size: var(--fs-xs); letter-spacing: 0.06em; margin-right: auto; }
+.admin-note {
+  font-size: var(--fs-xs); letter-spacing: 0.05em; color: var(--dim); font-style: normal;
+}
+.admin-open-row { display: inline-flex; align-items: center; gap: 10px; }
+.admin-signout {
+  font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--dim);
+  border: 1px solid transparent; padding: 2px 6px;
+}
+.admin-signout:hover, .admin-signout:focus-visible { color: var(--text); border-color: var(--hair); outline: none; }
+
+/* Removal. Set apart below the form and under its own rule, because it is the
+   one action in this interface that destroys something: it deletes committed
+   renditions and the site has no undo for it. The accent green is reserved for
+   things you want people to press, so this does not get it. */
+.admin-danger {
+  flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--hair);
+  position: relative; z-index: 2;
+}
+.admin-remove {
+  padding: 7px 16px; font-size: var(--fs-xs); letter-spacing: 0.1em;
+  color: var(--dim); border: 1px solid var(--hair);
+}
+.admin-remove:hover:not(:disabled), .admin-remove:focus-visible:not(:disabled) {
+  color: #ff6b5e; border-color: #ff6b5e; outline: none;
+}
+.admin-remove:disabled { color: rgba(255, 255, 255, 0.2); border-color: var(--hair); cursor: default; }
+.admin-confirm { display: grid; gap: 10px; }
+.admin-confirm-row { display: flex; align-items: center; gap: 12px; }
+.admin-cancel {
+  font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--dim); padding: 7px 10px;
+}
+.admin-cancel:hover, .admin-cancel:focus-visible { color: var(--text); outline: none; }
+
+/* EDIT, in a file window's title bar. Same 40px-tall target as the ✕ for the
+   same reason — the bar is a drag handle, and a control on a drag handle has to
+   be big enough that an imprecise press still lands on it. */
+.fw-edit {
+  font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--dim);
+  height: 40px; padding: 0 8px;
+  display: inline-flex; align-items: center;
+}
+.fw-edit:hover, .fw-edit:focus-visible { color: var(--acid); background: rgba(182, 255, 46, 0.08); outline: none; }
 
 /* The dissolve clips the window rather than drawing on it — see
    `dissolveClipPath`. The whole panel comes apart: chrome, glass fill, media and

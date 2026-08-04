@@ -11,6 +11,7 @@ import Desktop from './components/Desktop'
 import { readPerfTier, prefersReducedMotion } from './lib/perfTier'
 import { ArchiveSelectionProvider, useArchiveSelection } from './lib/selection'
 import { WindowRegistryProvider } from './lib/windowRegistry'
+import { AdminSessionProvider } from './lib/adminSession'
 
 const TAB_ORDER: TabId[] = ['archive', 'about', 'links']
 
@@ -22,7 +23,12 @@ export default function App() {
       {/* Above Desktop so what is open can be handed up to it rather than
           reached down for — the explorer must not import DesktopContext. */}
       <WindowRegistryProvider>
-        <AppShell />
+        {/* Above Desktop as well: the login lives in the terminal's footer and
+            the EDIT control lives in each file window's bar, and neither may
+            reach into the other. */}
+        <AdminSessionProvider>
+          <AppShell />
+        </AdminSessionProvider>
       </WindowRegistryProvider>
     </ArchiveSelectionProvider>
   )
