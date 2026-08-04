@@ -349,12 +349,22 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .ascii-object {
   position: relative; min-width: 0; height: 100%; min-height: 0;
   color: var(--acid); background: transparent;
-  contain: strict; pointer-events: none;
+  /* `layout style`, NOT `strict`. Strict includes PAINT containment, which
+     clips to this box — and the mark is translated to centre itself in the gap
+     between the copy and the panel edge, which is wider than this column. When
+     the copy is narrow that translate is ~160px and the box has ~15px of slack,
+     so paint containment silently clamped it and the mark stayed off to the
+     right no matter what the fit computed. Size containment goes with it: the
+     height comes from the grid, and `strict` was also asserting this element has
+     no intrinsic size, which nothing depends on. */
+  contain: layout style; pointer-events: none;
 }
 .ascii-object > div {
   position: absolute !important; inset: 0;
   width: 100% !important; height: 100% !important;
-  overflow: hidden;
+  /* Visible for the same reason: the glyph block is translated out of this box
+     on purpose when the gap it has to centre in is wider than the column. */
+  overflow: visible;
   color: inherit !important; background: transparent !important;
   text-shadow: 0 0 7px rgba(182, 255, 46, 0.22);
 }
