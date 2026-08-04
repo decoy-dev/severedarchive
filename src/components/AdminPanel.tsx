@@ -4,7 +4,9 @@ import { createDraggable } from 'animejs'
 import { ARCHIVE } from '../data/archive'
 import { SITE_CONTENT } from '../data/content'
 import { ADMIN_API } from '../lib/adminSession'
+import { serialiseThumb } from '../lib/thumbCrop'
 import EntryFields, { UploadLimitsHint, emptyDraft, nameFromFile, type EntryDraft } from './EntryFields'
+import ThumbnailEditor from './ThumbnailEditor'
 
 /**
  * What the passcode was for: publishing.
@@ -28,6 +30,33 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   // `EntryFields`, so a field cannot exist in one form and not the other.
   const [file, setFile] = useState<File | null>(null)
   const [draft, setDraft] = useState<EntryDraft>(emptyDraft)
+  const [thumbImage, setThumbImage] = useState<File | null>(null)
+  /**
+   * The picked file, as something the preview can scrub.
+   *
+   * A blob URL of the upload itself — the clip has not been transcoded yet, so
+   * there is nothing on the server to seek. The browser decodes the original,
+   * which is the same frames the pipeline will grab from.
+   */
+  const [localUrl, setLocalUrl] = useState<string | null>(null)
+  const [localMeta, setLocalMeta] = useState<{ aspect: number; duration: number } | null>(null)
+
+  useEffect(() => {
+    if (!file) { setLocalUrl(null); setLocalMeta(null); return }
+    const url = URL.createObjectURL(file)
+    setLocalUrl(url)
+    // Probed rather than assumed: the crop box must be the clip's own shape, and
+    // the scrubber's range must be the clip's own length.
+    const probe = document.createElement('video')
+    probe.preload = 'metadata'
+    probe.onloadedmetadata = () => setLocalMeta({
+      aspect: probe.videoWidth && probe.videoHeight ? probe.videoWidth / probe.videoHeight : 16 / 9,
+      // The pipeline trims to 12s, so a frame past that will not exist.
+      duration: Math.min(12, probe.duration || 12),
+    })
+    probe.src = url
+    return () => { URL.revokeObjectURL(url); probe.src = '' }
+  }, [file])
 
   // Content editing.
   const [content, setContent] = useState('')
@@ -95,6 +124,8 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
     form.set('description', draft.description)
     form.set('date', draft.date)
     form.set('postUrl', draft.postUrl)
+    form.set('thumb', serialiseThumb(draft.thumb))
+    if (thumbImage) form.set('thumbImage', thumbImage)
     // So the Worker can reject a duplicate name against what is actually live,
     // rather than only against what it happens to know.
     form.set('existingNames', JSON.stringify(ARCHIVE.map((f) => f.name)))
@@ -108,7 +139,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
         })
         // Reset to a fresh draft, keeping the date: a run of uploads from one
         // shoot all carry the same one.
-        setFile(null); setDraft((d) => ({ ...emptyDraft(), date: d.date }))
+        setFile(null); setThumbImage(null); setDraft((d) => ({ ...emptyDraft(), date: d.date }))
       } else if (res.status === 422) {
         setStatus({ kind: 'error', message: (body.details ?? ['INVALID ENTRY']).join(' · ').toUpperCase() })
       } else if (res.status === 401) {
@@ -192,6 +223,16 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
             />
           </label>
           <EntryFields draft={draft} onChange={setDraft} />
+          <ThumbnailEditor
+            spec={draft.thumb}
+            onChange={(thumb) => setDraft((d) => ({ ...d, thumb }))}
+            videoSrc={draft.kind === 'video' ? localUrl ?? undefined : undefined}
+            posterSrc={draft.kind === 'photo' ? localUrl ?? undefined : undefined}
+            aspect={localMeta?.aspect ?? 16 / 9}
+            durationSec={localMeta?.duration ?? 12}
+            customImage={thumbImage}
+            onCustomImage={setThumbImage}
+          />
           <UploadLimitsHint file={file} />
           <button className="admin-submit" type="submit" disabled={!file || status.kind === 'busy'}>
             {status.kind === 'busy' ? '···' : 'UPLOAD'}

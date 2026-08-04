@@ -144,6 +144,24 @@ function handleSignOut(req: Request, env: Env): Response {
   }, req)
 }
 
+/**
+ * Stages a supplied thumbnail image, if there is one.
+ *
+ * Separate from the raw so a thumbnail-only edit stages one small file and no
+ * clip — which is what makes changing a poster cheap rather than a re-encode.
+ */
+async function stageThumb(
+  env: Env,
+  file: FormDataEntryValue | null | undefined,
+  name: string,
+): Promise<{ id: number; url: string } | null> {
+  if (!(file instanceof File) || file.size === 0) return null
+  const staged = await stageRaw(
+    ghConfig(env), `${name}.upload`, await file.arrayBuffer(), file.type || 'application/octet-stream',
+  )
+  return { id: staged.id, url: staged.url }
+}
+
 async function handleUpload(req: Request, env: Env): Promise<Response> {
   if (!(await requireSession(req, env))) return json({ error: 'unauthorized' }, 401, env, {}, req)
 
@@ -166,8 +184,17 @@ async function handleUpload(req: Request, env: Env): Promise<Response> {
     description: form?.get('description'),
     date: form?.get('date'),
     postUrl: form?.get('postUrl'),
+    thumb: form?.get('thumb'),
   }, JSON.parse(String(form?.get('existingNames') ?? '[]')))
   if (!fields.ok) return json({ error: 'invalid entry', details: fields.errors }, 422, env, {}, req)
+
+  // An optional still to use instead of a frame of the clip. Staged the same way
+  // as the raw — a release asset, never the git tree — and subject to the same
+  // size cap, which is far larger than any still needs.
+  const thumbImage = form?.get('thumbImage')
+  if (thumbImage instanceof File && thumbImage.size > MAX_UPLOAD_BYTES) {
+    return json({ error: 'thumbnail is too large' }, 413, env, {}, req)
+  }
 
   // The raw is staged as a release asset — outside the git tree, so it is never
   // committed and never enters history. The ingest run deletes it.
@@ -179,7 +206,13 @@ async function handleUpload(req: Request, env: Env): Promise<Response> {
     file.type || 'application/octet-stream',
   )
 
-  await dispatchIngest(ghConfig(env), { asset: { id: asset.id, url: asset.url }, entry: fields.value })
+  const thumbAsset = await stageThumb(env, thumbImage, `${stem}-thumb`)
+
+  await dispatchIngest(ghConfig(env), {
+    asset: { id: asset.id, url: asset.url },
+    thumbAsset,
+    entry: fields.value,
+  })
   return json({ ok: true, staged: asset.name, entry: fields.value }, 202, env, {}, req)
 }
 
@@ -202,6 +235,10 @@ async function handleEntryEdit(req: Request, env: Env, id: string): Promise<Resp
 
   const file = form.get('file')
   const hasFile = file instanceof File && file.size > 0
+  const thumbImage = form.get('thumbImage')
+  if (thumbImage instanceof File && thumbImage.size > MAX_UPLOAD_BYTES) {
+    return json({ error: 'thumbnail is too large' }, 413, env, {}, req)
+  }
   if (hasFile) {
     if (file.size > MAX_UPLOAD_BYTES) return json({ error: 'file is too large' }, 413, env, {}, req)
     const limit = await countAttempt(env.RATE_LIMIT, `upload:${clientKey(req.headers)}`, {
@@ -219,6 +256,7 @@ async function handleEntryEdit(req: Request, env: Env, id: string): Promise<Resp
     description: form.get('description'),
     date: form.get('date'),
     postUrl: form.get('postUrl'),
+    thumb: form.get('thumb'),
   }, String(form.get('currentName') ?? ''), JSON.parse(String(form.get('existingNames') ?? '[]')))
   if (!fields.ok) return json({ error: 'invalid entry', details: fields.errors }, 422, env, {}, req)
 
@@ -233,10 +271,14 @@ async function handleEntryEdit(req: Request, env: Env, id: string): Promise<Resp
     asset = { id: staged.id, url: staged.url }
   }
 
-  await dispatchEdit(ghConfig(env), { op: 'edit', id, entry: fields.value, asset })
+  const thumbAsset = await stageThumb(env, thumbImage, `${Date.now()}-${id}-thumb`)
+
+  await dispatchEdit(ghConfig(env), { op: 'edit', id, entry: fields.value, asset, thumbAsset })
   // 202 whether or not there is a file: either way the change is committed by a
   // workflow run and is not live when this returns.
-  return json({ ok: true, id, replaced: hasFile, entry: fields.value }, 202, env, {}, req)
+  return json({
+    ok: true, id, replaced: hasFile, thumbnail: thumbAsset !== null, entry: fields.value,
+  }, 202, env, {}, req)
 }
 
 /**

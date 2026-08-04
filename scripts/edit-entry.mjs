@@ -38,6 +38,14 @@ if (!/^[a-z0-9][a-z0-9_]{0,40}$/.test(id)) {
   process.exit(1)
 }
 
+/**
+ * Whether a thumbnail spec is the pipeline default: one second in, uncropped, a
+ * frame of the clip. Those entries carry no `thumb` at all.
+ */
+const isDefaultThumb = (t) =>
+  !t || ((t.time ?? 1) === 1 && (t.zoom ?? 1) === 1 && (t.cx ?? 0.5) === 0.5
+    && (t.cy ?? 0.5) === 0.5 && t.custom !== true)
+
 const readJson = async (path, fallback) =>
   existsSync(path) ? JSON.parse(await readFile(path, 'utf8')) : fallback
 
@@ -79,6 +87,15 @@ if (op === 'remove') {
     date: entry.date,
     year: String(entry.date).slice(0, 4),
     postUrl: entry.postUrl || 'https://instagram.com/severedarchive',
+    // Persisted so the editor reopens on the settings that produced the current
+    // poster, and so the same still can be re-rendered reproducibly.
+    //
+    // Set explicitly to `undefined` rather than omitted from the object: these
+    // fields are MERGED over what is already stored, so omitting the key leaves
+    // a previous crop in place and resetting a thumbnail to the default would
+    // silently not take. JSON.stringify drops an undefined value, so the stored
+    // entry ends up with no `thumb` at all, which is what the default means.
+    thumb: isDefaultThumb(entry.thumb) ? undefined : entry.thumb,
   }
   if (isUploaded) {
     uploaded[index] = { ...uploaded[index], ...fields, id }

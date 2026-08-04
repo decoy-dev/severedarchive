@@ -39,6 +39,7 @@ jobs:
           OP: ${{ github.event.client_payload.op }}
           ID: ${{ github.event.client_payload.id }}
           ASSET_URL: ${{ github.event.client_payload.asset.url }}
+          THUMB_URL: ${{ github.event.client_payload.thumbAsset.url }}
         run: |
           set -euo pipefail
           case "$OP" in edit|remove) ;; *) echo "unknown op: $OP" >&2; exit 1;; esac
@@ -46,6 +47,7 @@ jobs:
           # shell and a file path here.
           printf '%s' "$ID" | grep -Eq '^[a-z0-9][a-z0-9_]{0,40}$' || { echo "bad id" >&2; exit 1; }
           echo "replace=$([ -n "$ASSET_URL" ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+          echo "thumb=$([ -n "$THUMB_URL" ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
 
       - name: Download the staged raw
         if: steps.check.outputs.replace == 'yes'
@@ -61,11 +63,41 @@ jobs:
                -o raw/upload.bin "$ASSET_URL"
           test -s raw/upload.bin
 
+      - name: Download a supplied thumbnail
+        if: steps.check.outputs.thumb == 'yes'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSET_URL: ${{ github.event.client_payload.thumbAsset.url }}
+        run: |
+          set -euo pipefail
+          mkdir -p raw
+          curl -sSL -H "Authorization: Bearer $GH_TOKEN" \
+               -H "Accept: application/octet-stream" \
+               -o raw/thumb.bin "$ASSET_URL"
+          test -s raw/thumb.bin
+
       - name: Transcode the replacement
         if: steps.check.outputs.replace == 'yes'
         # To the SAME id, which overwrites the three renditions in place. That is
         # what makes "replace the file" not also mean "change every URL".
+        env:
+          THUMB_SPEC: ${{ toJSON(github.event.client_payload.entry.thumb) }}
+          THUMB_IMAGE: ${{ steps.check.outputs.thumb == 'yes' && 'raw/thumb.bin' || '' }}
         run: ./scripts/process-upload.sh raw/upload.bin "${{ github.event.client_payload.id }}"
+
+      - name: Re-render the poster only
+        # The cheap path, and the common one: the clip is untouched and the still
+        # is regenerated from the committed `_full.mp4`. Changing which frame is
+        # the poster must not cost a re-encode of the work.
+        if: steps.check.outputs.replace == 'no' && github.event.client_payload.op == 'edit'
+        env:
+          THUMB_SPEC: ${{ toJSON(github.event.client_payload.entry.thumb) }}
+        run: |
+          set -euo pipefail
+          id="${{ github.event.client_payload.id }}"
+          test -f "public/media/${id}_full.mp4"
+          ./scripts/render-poster.sh "$id" "public/media/${id}_full.mp4" "$THUMB_SPEC" \
+            "${{ steps.check.outputs.thumb == 'yes' && 'raw/thumb.bin' || '' }}"
 
       - name: Apply the edit
         env:
@@ -101,12 +133,18 @@ jobs:
       - name: Delete the staged raw
         # `always()`: a failed transcode must not leave an orphan asset sitting
         # in the staging release.
-        if: always() && steps.check.outputs.replace == 'yes'
+        if: always() && (steps.check.outputs.replace == 'yes' || steps.check.outputs.thumb == 'yes')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ASSET_ID: ${{ github.event.client_payload.asset.id }}
+          THUMB_ASSET_ID: ${{ github.event.client_payload.thumbAsset.id }}
         run: |
-          gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$ASSET_ID" || true
+          if [ -n "$ASSET_ID" ]; then
+            gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$ASSET_ID" || true
+          fi
+          if [ -n "$THUMB_ASSET_ID" ]; then
+            gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$THUMB_ASSET_ID" || true
+          fi
 
       - name: Deploy
         env:

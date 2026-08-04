@@ -8,6 +8,27 @@
  */
 export type MediaKind = 'video' | 'photo'
 
+/**
+ * The poster still's spec. Mirrors `src/lib/thumbCrop.ts`, restated here because
+ * the Worker must not import from the app — but the RULES are the same, and the
+ * ranges are the ones that module's arithmetic is defined over.
+ */
+export type ThumbInput = {
+  /** Seconds into the clip. */
+  time: number
+  /** 1 is the whole frame; MAX_THUMB_ZOOM is as far in as it goes. */
+  zoom: number
+  /** Focal point across the frame, 0..1 — a CSS transform-origin fraction. */
+  cx: number
+  cy: number
+  /** True when the still is an uploaded image rather than a frame. */
+  custom: boolean
+}
+
+export const MAX_THUMB_ZOOM = 4
+/** The clip length the pipeline trims to, so a grab past it yields no frame. */
+export const MAX_THUMB_TIME = 12
+
 export type ArchiveEntryInput = {
   name: string
   kind: MediaKind
@@ -16,6 +37,7 @@ export type ArchiveEntryInput = {
   /** ISO `YYYY-MM-DD`. Pre-filled with the uploading device's date, editable. */
   date: string
   postUrl: string
+  thumb: ThumbInput
 }
 
 export type ValidationResult =
@@ -38,6 +60,53 @@ export function isCalendarDate(value: string): boolean {
   // the 2nd of March.
   const date = new Date(Date.UTC(y, m - 1, d))
   return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d
+}
+
+/**
+ * The thumbnail spec, parsed and bounded.
+ *
+ * Rejects rather than repairs, unlike the app-side `normaliseThumb`: this is the
+ * boundary, and silently correcting an out-of-range zoom into something the
+ * owner did not ask for is worse than telling them. A MISSING spec is not an
+ * error — it means the pipeline default — so only a present-and-wrong one fails.
+ */
+export function validateThumb(raw: unknown, errors: string[]): ThumbInput {
+  const fallback: ThumbInput = { time: 1, zoom: 1, cx: 0.5, cy: 0.5, custom: false }
+  if (raw === undefined || raw === null || raw === '') return fallback
+
+  let parsed: unknown = raw
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      errors.push('thumb must be valid JSON')
+      return fallback
+    }
+  }
+  if (typeof parsed !== 'object' || parsed === null) {
+    errors.push('thumb must be an object')
+    return fallback
+  }
+
+  const obj = parsed as Record<string, unknown>
+  const range = (key: keyof ThumbInput, lo: number, hi: number, dflt: number): number => {
+    const value = obj[key]
+    if (value === undefined || value === null) return dflt
+    const n = typeof value === 'number' ? value : Number(value)
+    if (!Number.isFinite(n) || n < lo || n > hi) {
+      errors.push(`thumb.${key} must be a number between ${lo} and ${hi}`)
+      return dflt
+    }
+    return n
+  }
+
+  return {
+    time: range('time', 0, MAX_THUMB_TIME, 1),
+    zoom: range('zoom', 1, MAX_THUMB_ZOOM, 1),
+    cx: range('cx', 0, 1, 0.5),
+    cy: range('cy', 0, 1, 0.5),
+    custom: obj.custom === true || obj.custom === 'true',
+  }
 }
 
 export function validateEntry(input: unknown, existingNames: readonly string[] = []): ValidationResult {
@@ -79,8 +148,10 @@ export function validateEntry(input: unknown, existingNames: readonly string[] =
     }
   }
 
+  const thumb = validateThumb(raw.thumb, errors)
+
   if (errors.length) return { ok: false, errors }
-  return { ok: true, value: { name, kind: kind!, tagline, description, date, postUrl } }
+  return { ok: true, value: { name, kind: kind!, tagline, description, date, postUrl, thumb } }
 }
 
 /**

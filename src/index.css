@@ -1098,6 +1098,67 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 }
 .admin-cancel:hover, .admin-cancel:focus-visible { color: var(--text); outline: none; }
 
+/* The thumbnail editor: the frame on the left, its controls on the right.
+   Stacks below 520px of panel, which is narrower than the panel ever gets — the
+   rule is there so the shape does not depend on that staying true. */
+.thumb-editor { display: grid; gap: 8px; }
+.admin-field-head { font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--dim); }
+.thumb-stage { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 560px) { .thumb-stage { grid-template-columns: minmax(0, 1fr); } }
+/* The box is the CLIP's aspect, set inline, and `overflow: hidden` is what makes
+   it a crop: the media inside is scaled about the focal point and the box shows
+   the part that survives. Exactly what the ffmpeg crop will keep. */
+.thumb-frame {
+  position: relative; overflow: hidden;
+  border: 1px solid var(--hair-bright); background: #000;
+  touch-action: none;
+}
+.thumb-frame[data-grabbable='true'] { cursor: grab; }
+.thumb-frame[data-dragging='true'] { cursor: grabbing; border-color: var(--acid); }
+.thumb-media {
+  display: block; width: 100%; height: 100%; object-fit: cover;
+  /* transform and transform-origin are set inline from `previewStyle` — the same
+     numbers the pipeline's crop is computed from. */
+  will-change: transform;
+}
+.thumb-empty {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--dim); text-align: center; padding: 12px;
+}
+/* The focal point, so there is something to say what is being held in place. */
+.thumb-focus {
+  position: absolute; width: 15px; height: 15px; translate: -50% -50%;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--acid), var(--acid)) center / 100% 1px no-repeat,
+    linear-gradient(var(--acid), var(--acid)) center / 1px 100% no-repeat;
+  opacity: 0.85;
+}
+.thumb-controls { display: grid; gap: 10px; }
+.thumb-slider { display: grid; gap: 4px; }
+.thumb-slider > span { font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--dim); }
+.thumb-slider input[type='range'] { width: 100%; accent-color: var(--acid); }
+.thumb-slider input[type='range']:disabled { opacity: 0.35; }
+.thumb-readout { font-size: var(--fs-xs); letter-spacing: 0.05em; color: var(--dim); }
+.thumb-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* A label wrapping a hidden input, not a button: a button cannot open a file
+   picker, and a nested control inside a label is the mistake that broke the
+   dashboard's (i). */
+.thumb-pick {
+  font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--text);
+  border: 1px solid var(--hair-bright); padding: 6px 12px; cursor: pointer;
+}
+.thumb-pick:hover, .thumb-pick:focus-within { color: var(--acid); border-color: var(--acid); }
+.thumb-pick input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.thumb-reset {
+  font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--dim); padding: 6px 10px;
+  border: 1px solid transparent;
+}
+.thumb-reset:hover:not(:disabled), .thumb-reset:focus-visible:not(:disabled) {
+  color: var(--text); border-color: var(--hair); outline: none;
+}
+.thumb-reset:disabled { color: rgba(255, 255, 255, 0.18); cursor: default; }
+
 /* EDIT, in a file window's title bar. Same 40px-tall target as the ✕ for the
    same reason — the bar is a drag handle, and a control on a drag handle has to
    be big enough that an imprecise press still lands on it. */

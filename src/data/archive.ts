@@ -1,6 +1,7 @@
 import { MEDIA_META, type MediaMeta } from './mediaMeta.generated'
 import UPLOADED_ENTRIES from './entries.json'
 import ENTRY_OVERRIDES from './overrides.json'
+import type { ThumbSpec } from '../lib/thumbCrop'
 
 /**
  * What the explorer draws where the index number used to be. Everything in the
@@ -35,6 +36,13 @@ type ArchiveEntry = {
    * means. Give one a real date through the admin UI and it joins the sort.
    */
   date?: string
+  /**
+   * How the poster still is made: which frame, and how it is cropped. Absent on
+   * everything that has not been thumbnail-edited, which means the pipeline's
+   * default — one second in, uncropped. The crop applies to the STILL only; see
+   * `src/lib/thumbCrop.ts` for why the clip itself is never reframed.
+   */
+  thumb?: ThumbSpec
   /**
    * The post this clip came from. Every entry currently points at the profile —
    * the per-post permalinks are not known here and must be filled in by the

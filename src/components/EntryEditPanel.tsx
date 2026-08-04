@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { createDraggable } from 'animejs'
-import { ARCHIVE, type ArchiveFile } from '../data/archive'
+import { ARCHIVE, fullSrc, posterSrc, aspectRatio, type ArchiveFile } from '../data/archive'
+import { normaliseThumb, serialiseThumb } from '../lib/thumbCrop'
+import ThumbnailEditor from './ThumbnailEditor'
 import { ADMIN_API } from '../lib/adminSession'
 import EntryFields, { UploadLimitsHint, nameFromFile, type EntryDraft } from './EntryFields'
 
@@ -31,11 +33,16 @@ const draftFrom = (file: ArchiveFile): EntryDraft => ({
   // visibly a placeholder to correct, not a claim about when it was made.
   date: file.date ?? `${file.year}-01-01`,
   postUrl: file.postUrl,
+  // The settings that produced the current still, so the editor opens on what is
+  // live rather than on the default. Clamped to the clip, since a spec written
+  // before the file was replaced may name a moment the new clip does not reach.
+  thumb: normaliseThumb(file.thumb, file.durationSec),
 })
 
 export default function EntryEditPanel({ file, onClose }: { file: ArchiveFile; onClose: () => void }) {
   const [draft, setDraft] = useState<EntryDraft>(() => draftFrom(file))
   const [replacement, setReplacement] = useState<File | null>(null)
+  const [thumbImage, setThumbImage] = useState<File | null>(null)
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const [confirming, setConfirming] = useState(false)
   const [confirm, setConfirm] = useState('')
@@ -77,6 +84,8 @@ export default function EntryEditPanel({ file, onClose }: { file: ArchiveFile; o
     form.set('description', draft.description)
     form.set('date', draft.date)
     form.set('postUrl', draft.postUrl)
+    form.set('thumb', serialiseThumb(draft.thumb))
+    if (thumbImage) form.set('thumbImage', thumbImage)
     // So the Worker can tell "renamed onto another entry" from "unchanged".
     form.set('currentName', file.name)
     form.set('existingNames', JSON.stringify(ARCHIVE.map((f) => f.name)))
@@ -94,6 +103,7 @@ export default function EntryEditPanel({ file, onClose }: { file: ArchiveFile; o
             : 'SAVED. DEPLOY RUNNING — A MINUTE OR TWO.',
         })
         setReplacement(null)
+        setThumbImage(null)
       } else if (res.status === 422) {
         setStatus({ kind: 'error', message: (body.details ?? ['INVALID ENTRY']).join(' · ').toUpperCase() })
       } else if (res.status === 401) {
@@ -162,6 +172,19 @@ export default function EntryEditPanel({ file, onClose }: { file: ArchiveFile; o
           draft={draft}
           onChange={setDraft}
           nameHint="DISPLAY NAME ONLY — THE FILE'S ID AND URLS DO NOT CHANGE"
+        />
+        <ThumbnailEditor
+          spec={draft.thumb}
+          onChange={(thumb) => setDraft((d) => ({ ...d, thumb }))}
+          // The committed clip is what the crop is measured against, and it is
+          // already on disk — so the preview scrubs the real thing rather than
+          // asking for the file back.
+          videoSrc={file.kind === 'video' ? fullSrc(file.id) : undefined}
+          posterSrc={posterSrc(file.id)}
+          aspect={aspectRatio(file)}
+          durationSec={file.durationSec}
+          customImage={thumbImage}
+          onCustomImage={setThumbImage}
         />
         <label className="admin-field admin-field-wide"><span>REPLACE FILE</span>
           <input

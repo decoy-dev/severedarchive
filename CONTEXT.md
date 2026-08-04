@@ -175,7 +175,23 @@ Owner decisions: GitHub stays the store, auth must be genuinely private, **only 
 
 The `(i)` control (`InfoPopover.tsx`) sits in the window title bar and in each dashboard card's control column, and shows the description and date. Legacy entries fall back to their tagline and show the year alone rather than a fabricated day. On the dashboard it is a **sibling** of the card, never a child — the card is itself a button, and a button inside a button is invalid markup React reports at runtime (it did).
 
-**Still to build:** the admin UI (upload form, ABOUT and LINKS editors) and photo support in the explorer.
+**Editing existing entries** (`EntryEditPanel.tsx`, `POST`/`DELETE /api/entry/:id`, `.github/workflows/edit.yml`, `scripts/edit-entry.mjs`). Signing in puts EDIT in each focused window's title bar. Rulings worth keeping:
+
+- Edits to the twelve originals land in **`src/data/overrides.json`** and are merged over the entry at load, rather than a workflow rewriting `archive.ts` — data a bad edit can only make wrong, not source a stray quote can break. `removed` drops an entry entirely and the run deletes its three renditions in the same commit.
+- Patches apply **before** the sort and before the metadata lookup. Before the sort because a patch may set a `date` and the promise above is that this makes an entry join it; before the lookup because a removed entry's generated metadata is gone with its files and `ARCHIVE` throws on a missing one.
+- **The id never changes.** It names every rendition on disk, so a rename is a display-name change and a replacement file is transcoded to the *same* id, overwriting in place.
+- Removal needs the name typed back, compared **trimmed and case-folded and nothing else**. Reusing `normaliseName` here accepted `GLASS RITE!` as confirmation of `GLASS_RITE` — it maps spaces to underscores and strips punctuation. A test caught it.
+- **Both admin panels are portalled to `document.body`.** They are `position: fixed` with a high z-index, which is not the same as being above everything: z-index orders siblings within a stacking context, and these were rendered inside one (the publish panel in the terminal, the editor in the file window). Neither could be dragged, because the pointerdown never reached the handle. A window is worse still — it takes a `clip-path` while it dissolves, and a clip applies to fixed descendants.
+
+**The thumbnail editor** (`ThumbnailEditor.tsx`, `src/lib/thumbCrop.ts`, `scripts/render-poster.sh`) — which frame the still comes from, how it is cropped, or a supplied image instead. Available on upload and on any existing entry.
+
+- The crop is on the **still only**. An unfocused window plays `_thumb.mp4` in a box laid out from `_full.mp4`, so those two must share an aspect to 0.1% (the true-frame ruling) — cropping the thumb video would letterbox every unfocused window. Owner's choice, 2026-08-04: the clip's own framing is never touched.
+- So the crop is a **zoom and a focal point**, not a free rectangle: the poster drops into a tile shaped by the clip and has to keep that shape. `cx`/`cy` are 0..1 and mean exactly what a CSS `transform-origin` percentage means — the editor previews by scaling the real video about that origin and ffmpeg cuts the rectangle derived from the same numbers. `x = cx * (width - w)` on both sides.
+- **`scripts/crop-parity.test.ts` is what makes "what you drag is what you get" a fact** rather than a claim: it runs the real script and holds its crop to `cropPixels`. It found a 1px disagreement — the script measured the offset against the even-snapped crop size and `cropPixels` against the fractional rect. The script was right.
+- A thumbnail-only edit re-renders from the committed `_full.mp4` and **does not re-encode the clip**; `render-poster.sh` exists separately for exactly that. A supplied image is cover-fitted to the clip's aspect (`scale=…:increase` then `crop`) so it fills the same tile without bars.
+- An entry carries `thumb` only when it differs from the default. The edit script writes `thumb: undefined` rather than omitting the key, because these fields are *merged* — omitting it would leave an old crop in place and resetting to the default would silently not take.
+
+**Still to build:** photo support in the explorer (the `kind` field and glyph exist, but a photo upload would still go down the video pipeline).
 
 **Deployed 2026-08-04** to `https://severedarchive-admin.chris-216.workers.dev` on the Cloudflare account `chris@hvddox.com`. The KV namespace (`a43a8b8af70d449699ab1ae763970a4a`) and `SESSION_SECRET` are set. Verified live: 401 unauthenticated, 401 on a forged cookie, 403 cross-origin, 404 unknown route, and 401 — not 502 — for a login attempt while the passcode secret is unset.
 
@@ -186,7 +202,7 @@ Note the login limit is **8 attempts per IP per hour** — a locked-out owner wa
 ## Workflows
 
 - Dev: `npm run dev` → http://localhost:5173/severedarchive/
-- Tests: `npm test` (114 vitest). E2e: `npm run e2e` (Playwright, **ALWAYS headless**, projects desktop 1440 / tablet 768 / mobile 390).
+- Tests: `npm test` (269 vitest, 98 e2e). E2e: `npm run e2e` (Playwright, **ALWAYS headless**, projects desktop 1440 / tablet 768 / mobile 390).
 - Deploy: **push does NOT trigger Actions** (verified suppressed platform-side). Deploy with:
   `gh workflow run deploy.yml --ref main --repo decoy-dev/severedarchive`
   then verify the live build stamp matches HEAD.

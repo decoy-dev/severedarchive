@@ -15,7 +15,17 @@ test.describe('admin tools', () => {
   test.skip(({ viewport }) => viewport!.width < 861, 'the admin footer is desktop-only')
 
   /** What the browser sent, so the tests can assert on the request, not just the UI. */
-  type Seen = { method: string; url: string; fields: Record<string, string>; hasFile: boolean }
+  type Seen = {
+    method: string; url: string; fields: Record<string, string>
+    hasFile: boolean; hasThumbImage?: boolean
+  }
+
+  /** A 10x10 PNG, small enough to inline and real enough for the browser to decode. */
+  const PNG = Buffer.from(
+    '89504e470d0a1a0a0000000d494844520000000a0000000a08060000008d32cfbd' +
+    '0000001849444154789c63fccf801f30fe0762206a01006f4f04f70000000049454e44ae426082',
+    'hex',
+  )
 
   const stubBackend = async (page: Page, seen: Seen[]) => {
     await page.route('**/api/session', async (route: Route) => {
@@ -46,7 +56,11 @@ test.describe('admin tools', () => {
         const m = /name="([^"]+)"(?:; filename="[^"]*")?\r?\n(?:[^\r\n]*\r?\n)*\r?\n([\s\S]*?)\r?\n?$/.exec(part)
         if (m) fields[m[1]] = m[2]
       }
-      seen.push({ method: 'POST', url: req.url(), fields, hasFile: body.includes('name="file"') })
+      seen.push({
+        method: 'POST', url: req.url(), fields,
+        hasFile: body.includes('name="file"'),
+        hasThumbImage: body.includes('name="thumbImage"'),
+      })
       return route.fulfill({ status: 202, body: JSON.stringify({ ok: true, replaced: body.includes('name="file"') }) })
     })
   }
@@ -161,6 +175,99 @@ test.describe('admin tools', () => {
     await panel.locator('.admin-submit').click()
     await expect(panel.locator('.admin-status')).toContainText('TRANSCODE')
     expect(seen.find((s) => s.method === 'POST')!.hasFile).toBe(true)
+  })
+
+  test('the thumbnail editor scrubs the real clip and crops what it previews', async ({ page }) => {
+    const seen: Seen[] = []
+    await boot(page, seen)
+    await openWindow(page)
+    await signIn(page)
+    await page.locator('.fw-edit').first().click()
+    const panel = page.locator('.admin-panel')
+    const editor = panel.locator('.thumb-editor')
+
+    // The preview is the committed clip, not a still of it: that is what makes
+    // the scrubber a preview rather than a slider with a number beside it.
+    await expect(editor.locator('.thumb-frame video')).toHaveCount(1)
+    await editor.locator('.thumb-slider input').first().fill('7.5')
+    await expect.poll(async () =>
+      Number(await editor.locator('.thumb-frame video').evaluate((v: HTMLVideoElement) => v.currentTime)),
+    ).toBeGreaterThan(7)
+
+    // Zoom is applied as the transform the pipeline's crop is derived from.
+    await editor.locator('.thumb-slider input').nth(1).fill('2.4')
+    await expect(editor.locator('.thumb-media')).toHaveAttribute('style', /scale\(2\.4\)/)
+
+    // Dragging moves the focal point, and the transform-origin follows it — the
+    // two must agree, because the origin is what the committed crop is computed
+    // from.
+    const frame = (await editor.locator('.thumb-frame').boundingBox())!
+    await page.mouse.move(frame.x + frame.width / 2, frame.y + frame.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(frame.x + frame.width / 2 - 80, frame.y + frame.height / 2 - 50, { steps: 10 })
+    await page.mouse.up()
+    const style = await editor.locator('.thumb-media').getAttribute('style')
+    const origin = /transform-origin: ([\d.]+)% ([\d.]+)%/.exec(style ?? '')
+    expect(origin, `no transform-origin in ${style}`).not.toBeNull()
+    expect(Number(origin![1])).toBeGreaterThan(50)
+    await expect(editor.locator('.thumb-readout')).toContainText(`FOCUS ${Math.round(Number(origin![1]))}%`)
+
+    // And it is what gets sent.
+    await panel.locator('.admin-submit').click()
+    await expect(panel.locator('.admin-status')).toContainText('SAVED')
+    const thumb = JSON.parse(seen.find((s) => s.method === 'POST')!.fields.thumb)
+    expect(thumb.zoom).toBeCloseTo(2.4, 2)
+    expect(thumb.time).toBeCloseTo(7.5, 2)
+    expect(thumb.cx).toBeGreaterThan(0.5)
+    expect(thumb.custom).toBe(false)
+  })
+
+  test('dragging does nothing until there is something to crop', async ({ page }) => {
+    const seen: Seen[] = []
+    await boot(page, seen)
+    await openWindow(page)
+    await signIn(page)
+    await page.locator('.fw-edit').first().click()
+    const editor = page.locator('.admin-panel .thumb-editor')
+
+    // At zoom 1 the whole frame is the crop, so there is no slack to pan into.
+    // Dragging must be inert rather than fighting a clamp.
+    await expect(editor.locator('.thumb-readout')).toContainText('ZOOM IN TO REPOSITION')
+    const frame = (await editor.locator('.thumb-frame').boundingBox())!
+    await page.mouse.move(frame.x + frame.width / 2, frame.y + frame.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(frame.x + 10, frame.y + 10, { steps: 6 })
+    await page.mouse.up()
+    await expect(editor.locator('.thumb-readout')).toContainText('FOCUS 50% · 50%')
+  })
+
+  test('a supplied still replaces the frame grab, and reset undoes it', async ({ page }) => {
+    const seen: Seen[] = []
+    await boot(page, seen)
+    await openWindow(page)
+    await signIn(page)
+    await page.locator('.fw-edit').first().click()
+    const panel = page.locator('.admin-panel')
+    const editor = panel.locator('.thumb-editor')
+
+    await editor.locator('.thumb-pick input').setInputFiles({
+      name: 'still.png', mimeType: 'image/png', buffer: PNG,
+    })
+    // The preview becomes the image, and scrubbing frames stops meaning anything.
+    await expect(editor.locator('.thumb-frame img')).toHaveCount(1)
+    await expect(editor.locator('.thumb-slider input').first()).toBeDisabled()
+    await expect(editor.locator('.admin-note')).toContainText('COVER-FITTED')
+
+    await panel.locator('.admin-submit').click()
+    await expect(panel.locator('.admin-status')).toContainText('SAVED')
+    const post = seen.find((s) => s.method === 'POST')!
+    expect(JSON.parse(post.fields.thumb).custom).toBe(true)
+    expect(post.fields.thumbImage !== undefined || post.hasThumbImage).toBeTruthy()
+
+    // Reset goes back to a frame of the clip, and clears the picked image with it.
+    await editor.locator('.thumb-reset').click()
+    await expect(editor.locator('.thumb-frame video')).toHaveCount(1)
+    await expect(editor.locator('.thumb-reset')).toBeDisabled()
   })
 
   test('removal cannot be pressed until the name is typed exactly', async ({ page }) => {

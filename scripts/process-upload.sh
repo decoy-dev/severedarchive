@@ -58,6 +58,9 @@ awk -v e="$TERR" 'BEGIN { exit (e < 0.1) ? 0 : 1 }' \
 ffmpeg -y -v error -i "$RAW" -t 12 -vf "scale=${TW}:${TH},fps=24,format=yuv420p" \
   -c:v libx264 -crf 32 -preset slow -movflags +faststart -an "public/media/${id}_thumb.mp4"
 
-ffmpeg -y -v error -ss 1 -i "$RAW" -frames:v 1 -vf "scale=-2:480" -q:v 4 "public/media/${id}_poster.jpg"
+# The poster is its own script: which frame it comes from, how it is cropped and
+# whether it is a frame at all are editable after the fact, and changing them must
+# not re-encode the work. THUMB_SPEC and THUMB_IMAGE are set by the workflow.
+./scripts/render-poster.sh "$id" "$RAW" "${THUMB_SPEC:-}" "${THUMB_IMAGE:-}"
 
 printf '%s: full + thumb %sx%s (%s%% from full) + poster\n' "$id" "$TW" "$TH" "$TERR"

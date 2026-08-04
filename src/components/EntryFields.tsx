@@ -1,4 +1,5 @@
 import { UPLOAD_LIMITS, formatBytes } from '../data/content'
+import { DEFAULT_THUMB, type ThumbSpec } from '../lib/thumbCrop'
 
 /**
  * The fields an archive entry has, as one form fragment.
@@ -17,6 +18,8 @@ export type EntryDraft = {
   /** ISO `YYYY-MM-DD`. */
   date: string
   postUrl: string
+  /** How the poster still is made. See `src/lib/thumbCrop.ts`. */
+  thumb: ThumbSpec
 }
 
 /** The device's date — the default for a new entry, editable to backdate it. */
@@ -28,6 +31,7 @@ export const todayISO = (): string => {
 
 export const emptyDraft = (): EntryDraft => ({
   name: '', kind: 'video', tagline: '', description: '', date: todayISO(), postUrl: '',
+  thumb: { ...DEFAULT_THUMB },
 })
 
 /** A filename turned into a plausible entry name. The Worker normalises it again. */

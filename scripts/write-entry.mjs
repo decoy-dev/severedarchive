@@ -25,6 +25,14 @@ if (!id || !entry.name) {
   process.exit(1)
 }
 
+/**
+ * Whether a thumbnail spec is the pipeline default: one second in, uncropped, a
+ * frame of the clip. Those entries carry no `thumb` at all.
+ */
+const isDefaultThumb = (t) =>
+  !t || ((t.time ?? 1) === 1 && (t.zoom ?? 1) === 1 && (t.cx ?? 0.5) === 0.5
+    && (t.cy ?? 0.5) === 0.5 && t.custom !== true)
+
 const existing = existsSync(PATH) ? JSON.parse(await readFile(PATH, 'utf8')) : []
 
 if (existing.some((e) => e.id === id || e.name === entry.name)) {
@@ -45,6 +53,10 @@ existing.push({
   date: entry.date,
   year: String(entry.date).slice(0, 4),
   postUrl: entry.postUrl || 'https://instagram.com/severedarchive',
+  // Persisted so the editor reopens on the settings that produced this poster,
+  // and so the same still can be re-rendered reproducibly. `undefined` rather
+  // than omitted, so it is dropped by JSON.stringify either way.
+  thumb: isDefaultThumb(entry.thumb) ? undefined : entry.thumb,
 })
 
 // Newest first, ties broken on name — the same total order the explorer uses,
