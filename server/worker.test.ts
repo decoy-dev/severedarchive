@@ -1,0 +1,173 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import worker, { type Env } from './worker'
+import { hashPasscode } from './auth'
+import type { CounterStore } from './ratelimit'
+
+const ORIGIN = 'https://decoy-dev.github.io'
+const PASSCODE = 'open sesame please'
+
+function store(): CounterStore {
+  const map = new Map<string, string>()
+  return {
+    async get(k) { return map.get(k) ?? null },
+    async put(k, v) { map.set(k, v) },
+  }
+}
+
+async function makeEnv(): Promise<Env> {
+  return {
+    ADMIN_PASSCODE_HASH: await hashPasscode(PASSCODE, 1000),
+    SESSION_SECRET: 'session-secret',
+    GITHUB_TOKEN: 'ghp_secret_token_value',
+    GITHUB_OWNER: 'decoy-dev',
+    GITHUB_REPO: 'severedarchive',
+    ALLOWED_ORIGIN: ORIGIN,
+    RATE_LIMIT: store(),
+  }
+}
+
+const post = (path: string, body: unknown, init: RequestInit = {}) =>
+  new Request(`https://api.example${path}`, {
+    method: 'POST',
+    headers: { origin: ORIGIN, 'content-type': 'application/json', ...init.headers },
+    body: JSON.stringify(body),
+    ...init,
+  })
+
+const cookieFrom = (res: Response): string => {
+  const set = res.headers.get('set-cookie') ?? ''
+  return set.split(';')[0]
+}
+
+describe('POST /api/session', () => {
+  let env: Env
+  beforeEach(async () => { env = await makeEnv() })
+
+  it('issues an httpOnly, Secure, SameSite=Strict cookie for the right passcode', async () => {
+    const res = await worker.fetch(post('/api/session', { passcode: PASSCODE }), env)
+    expect(res.status).toBe(200)
+    const set = res.headers.get('set-cookie')!
+    expect(set).toMatch(/HttpOnly/)
+    expect(set).toMatch(/Secure/)
+    expect(set).toMatch(/SameSite=Strict/)
+  })
+
+  it('rejects the wrong passcode, and says nothing else', async () => {
+    const res = await worker.fetch(post('/api/session', { passcode: 'wrong' }), env)
+    expect(res.status).toBe(401)
+    expect(res.headers.get('set-cookie')).toBeNull()
+    expect(await res.json()).toEqual({ error: 'unauthorized' })
+  })
+
+  it('answers a missing passcode exactly as it answers a wrong one', async () => {
+    // Otherwise the endpoint tells an attacker which half they got right.
+    const missing = await worker.fetch(post('/api/session', {}), env)
+    const wrong = await worker.fetch(post('/api/session', { passcode: 'nope' }), env)
+    expect(missing.status).toBe(wrong.status)
+    expect(await missing.json()).toEqual(await wrong.json())
+  })
+
+  it('never returns a secret in any response', async () => {
+    for (const body of [{ passcode: PASSCODE }, { passcode: 'wrong' }, {}]) {
+      const res = await worker.fetch(post('/api/session', body), env)
+      const text = await res.text() + (res.headers.get('set-cookie') ?? '')
+      expect(text).not.toContain(env.GITHUB_TOKEN)
+      expect(text).not.toContain(env.ADMIN_PASSCODE_HASH)
+      expect(text).not.toContain(env.SESSION_SECRET)
+      expect(text).not.toContain(PASSCODE)
+    }
+  })
+
+  it('rate limits brute force', async () => {
+    for (let i = 0; i < 8; i++) await worker.fetch(post('/api/session', { passcode: 'wrong' }), env)
+    const res = await worker.fetch(post('/api/session', { passcode: 'wrong' }), env)
+    expect(res.status).toBe(429)
+    expect(res.headers.get('retry-after')).toBeTruthy()
+  })
+
+  it('counts a correct passcode against the limit too, so the cap is real', async () => {
+    for (let i = 0; i < 9; i++) await worker.fetch(post('/api/session', { passcode: 'wrong' }), env)
+    const res = await worker.fetch(post('/api/session', { passcode: PASSCODE }), env)
+    expect(res.status).toBe(429)
+  })
+})
+
+describe('authorisation', () => {
+  let env: Env
+  beforeEach(async () => { env = await makeEnv() })
+
+  it('refuses upload and content without a session', async () => {
+    const upload = await worker.fetch(new Request('https://api.example/api/upload', {
+      method: 'POST', headers: { origin: ORIGIN },
+    }), env)
+    expect(upload.status).toBe(401)
+    const content = await worker.fetch(new Request('https://api.example/api/content'), env)
+    expect(content.status).toBe(401)
+  })
+
+  it('refuses a forged session cookie', async () => {
+    const res = await worker.fetch(new Request('https://api.example/api/content', {
+      headers: { cookie: 'sa_admin=eyJzdWIiOiJvd25lciJ9.deadbeef' },
+    }), env)
+    expect(res.status).toBe(401)
+  })
+
+  it('refuses a cross-origin mutation', async () => {
+    const login = await worker.fetch(post('/api/session', { passcode: PASSCODE }), env)
+    const res = await worker.fetch(post('/api/content', { content: '{}' }, {
+      headers: { origin: 'https://evil.example', cookie: cookieFrom(login) },
+    }), env)
+    expect(res.status).toBe(403)
+  })
+})
+
+describe('POST /api/upload', () => {
+  let env: Env
+  let cookie: string
+
+  beforeEach(async () => {
+    env = await makeEnv()
+    const login = await worker.fetch(post('/api/session', { passcode: PASSCODE }), env)
+    cookie = cookieFrom(login)
+  })
+
+  const upload = (fields: Record<string, string>, file?: File) => {
+    const form = new FormData()
+    for (const [k, v] of Object.entries(fields)) form.set(k, v)
+    if (file) form.set('file', file)
+    return new Request('https://api.example/api/upload', {
+      method: 'POST', headers: { origin: ORIGIN, cookie }, body: form,
+    })
+  }
+
+  const validFields = {
+    name: 'NEW_RENDER', kind: 'video', tagline: 'chrome study',
+    description: 'note', date: '2026-08-04', postUrl: 'https://instagram.com/p/x',
+  }
+
+  it('requires a file', async () => {
+    const res = await worker.fetch(upload(validFields), env)
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects an invalid entry before touching GitHub', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch')
+    const res = await worker.fetch(
+      upload({ ...validFields, date: 'yesterday' }, new File(['x'], 'a.mp4')), env,
+    )
+    expect(res.status).toBe(422)
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('does not leak an upstream failure', async () => {
+    // A GitHub error can name the repo and the token's scopes.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('token ghp_secret_token_value lacks scope', { status: 403, statusText: 'Forbidden' }),
+    )
+    const res = await worker.fetch(upload(validFields, new File(['x'], 'a.mp4')), env)
+    expect(res.status).toBe(502)
+    expect(await res.text()).not.toContain('ghp_secret')
+    vi.restoreAllMocks()
+  })
+})

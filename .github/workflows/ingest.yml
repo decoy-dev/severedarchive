@@ -1,0 +1,94 @@
+name: Ingest upload
+
+# Fired by the admin Worker, never by a push. The Worker stages the raw file as
+# an asset on a draft release — outside the git tree — and sends the entry's
+# fields here. This job is the transcoder: it is what makes "server-side
+# transcode with no server to maintain" true.
+on:
+  repository_dispatch:
+    types: [ingest-media]
+
+permissions:
+  contents: write
+
+concurrency:
+  # Two ingests committing to main at once would race on the data file.
+  group: ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - run: npm ci
+
+      - name: Derive the file id
+        id: ids
+        env:
+          NAME: ${{ github.event.client_payload.entry.name }}
+        run: |
+          set -euo pipefail
+          # Lower-cased name is the id; the numbered fileNN scheme is gone along
+          # with the index, and the name is unique by validation.
+          id="$(printf '%s' "$NAME" | tr '[:upper:]' '[:lower:]')"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+      - name: Download the staged raw
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSET_URL: ${{ github.event.client_payload.asset.url }}
+        run: |
+          set -euo pipefail
+          mkdir -p raw
+          # raw/ is gitignored, so nothing here can be committed even by mistake.
+          curl -sSL -H "Authorization: Bearer $GH_TOKEN" \
+               -H "Accept: application/octet-stream" \
+               -o raw/upload.bin "$ASSET_URL"
+          test -s raw/upload.bin
+
+      - name: Transcode
+        run: ./scripts/process-upload.sh raw/upload.bin "${{ steps.ids.outputs.id }}"
+
+      - name: Write the entry and regenerate media metadata
+        env:
+          ENTRY: ${{ toJSON(github.event.client_payload.entry) }}
+          ID: ${{ steps.ids.outputs.id }}
+        run: |
+          set -euo pipefail
+          node scripts/write-entry.mjs
+          node scripts/gen-media-meta.mjs
+
+      - name: Commit the renditions only
+        run: |
+          set -euo pipefail
+          git config user.name  "severedarchive"
+          git config user.email "noreply@users.noreply.github.com"
+          # Explicit paths, never `git add -A`: raw/ is gitignored but the
+          # constraint is important enough to state twice.
+          git add public/media src/data
+          git status --porcelain
+          git commit -m "Add ${{ steps.ids.outputs.id }} from admin upload"
+          git push
+
+      - name: Delete the staged raw
+        # `always()`: a failed transcode must not leave an orphan asset sitting
+        # in the staging release. The retry re-uploads.
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSET_ID: ${{ github.event.client_payload.asset.id }}
+        run: |
+          gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$ASSET_ID" || true
+
+      - name: Deploy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run deploy.yml --ref main
