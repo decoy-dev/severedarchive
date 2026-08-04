@@ -41,6 +41,14 @@ export const UPLOAD_LIMITS = {
   /** Matches `MAX_UPLOAD_BYTES` in `server/worker.ts`. */
   maxBytes: 512 * 1024 * 1024,
   video: ['MP4', 'MOV', 'WEBM', 'M4V'],
+  /**
+   * Stills, for use as a THUMBNAIL. Not as an entry of their own: the ingest
+   * pipeline produces `_full.mp4` and `_thumb.mp4` from every upload and the
+   * app expects both, so a still uploaded as an entry would come out as broken
+   * video renditions. The `kind: 'photo'` field and its glyph exist for when
+   * that pipeline is built; until then the form must not offer what it cannot
+   * deliver, which is why PHOTO is disabled for new uploads.
+   */
   photo: ['JPG', 'PNG', 'WEBP'],
 } as const
 

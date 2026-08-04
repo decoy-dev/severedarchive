@@ -206,19 +206,13 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
             <input
               ref={firstRef}
               type="file"
-              accept="video/*,image/*"
+              accept="video/*"
               onChange={(e) => {
                 const picked = e.target.files?.[0] ?? null
                 setFile(picked)
                 // A sensible name from the filename, still editable. The Worker
                 // normalises it again, so this only saves typing.
-                if (picked) {
-                  setDraft((d) => ({
-                    ...d,
-                    name: d.name || nameFromFile(picked.name),
-                    kind: picked.type.startsWith('image/') ? 'photo' : d.kind,
-                  }))
-                }
+                if (picked) setDraft((d) => ({ ...d, name: d.name || nameFromFile(picked.name) }))
               }}
             />
           </label>

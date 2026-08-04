@@ -42,20 +42,29 @@ export const nameFromFile = (filename: string): string =>
 export function UploadLimitsHint({ file }: { file: File | null }) {
   return (
     <p className="admin-hint">
-      VIDEO {UPLOAD_LIMITS.video.join(' / ')} · PHOTO {UPLOAD_LIMITS.photo.join(' / ')}
-      {' · UP TO '}{formatBytes(UPLOAD_LIMITS.maxBytes)}
+      CLIP {UPLOAD_LIMITS.video.join(' / ')}
+      {' · THUMBNAIL IMAGE '}{UPLOAD_LIMITS.photo.join(' / ')}
+      {' · UP TO '}{formatBytes(UPLOAD_LIMITS.maxBytes)}{' EACH'}
       {file ? ` · SELECTED ${formatBytes(file.size)}` : ''}
     </p>
   )
 }
 
 export default function EntryFields({
-  draft, onChange, nameHint,
+  draft, onChange, nameHint, allowPhoto = draft.kind === 'photo',
 }: {
   draft: EntryDraft
   onChange: (next: EntryDraft) => void
   /** Shown under NAME where the name cannot be used to identify files. */
   nameHint?: string
+  /**
+   * Whether PHOTO may be chosen. Off for a new upload, because the pipeline
+   * renders `_full.mp4` and `_thumb.mp4` from everything it ingests and the app
+   * expects both — a still would publish as broken video. Defaults to allowed for
+   * an entry that is ALREADY a photo, so editing one does not silently change
+   * what it is. See `UPLOAD_LIMITS.photo`.
+   */
+  allowPhoto?: boolean
 }) {
   const set = <K extends keyof EntryDraft>(key: K, value: EntryDraft[K]) =>
     onChange({ ...draft, [key]: value })
@@ -69,8 +78,9 @@ export default function EntryFields({
       <label className="admin-field"><span>KIND</span>
         <select value={draft.kind} onChange={(e) => set('kind', e.target.value as 'video' | 'photo')}>
           <option value="video">VIDEO</option>
-          <option value="photo">PHOTO</option>
+          <option value="photo" disabled={!allowPhoto}>PHOTO</option>
         </select>
+        {!allowPhoto && <em className="admin-note">STILLS AS ENTRIES ARE NOT WIRED UP YET — USE THE THUMBNAIL PICKER FOR IMAGES</em>}
       </label>
       <label className="admin-field"><span>DATE</span>
         <input type="date" value={draft.date} onChange={(e) => set('date', e.target.value)} />

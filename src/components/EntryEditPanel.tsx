@@ -189,14 +189,13 @@ export default function EntryEditPanel({ file, onClose }: { file: ArchiveFile; o
         <label className="admin-field admin-field-wide"><span>REPLACE FILE</span>
           <input
             type="file"
-            accept="video/*,image/*"
+            accept="video/*"
             onChange={(e) => {
               const picked = e.target.files?.[0] ?? null
               setReplacement(picked)
               // Offered, not imposed: the name is an existing entry's and
               // changing it is a decision, so this only fills an empty field.
               if (picked && !draft.name) setDraft({ ...draft, name: nameFromFile(picked.name) })
-              if (picked?.type.startsWith('image/')) setDraft((d) => ({ ...d, kind: 'photo' }))
             }}
           />
           <em className="admin-note">
