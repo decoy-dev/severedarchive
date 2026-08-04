@@ -285,7 +285,14 @@ export default function AboutAsciiObject({ tier }: { tier: PerfTier }) {
         range.selectNodeContents(table)
         const block = range.getBoundingClientRect()
         if (!block.width || !block.height) return null
-        const lines = (table.textContent ?? '').split('\n')
+        // `innerText`, NOT `textContent`. AsciiEffect renders each row as its
+        // own node with no newline characters between them, so `textContent`
+        // returns the whole grid as ONE line — 1 line against innerText's 54.
+        // Every index then indexes into a flattened string, the ink bounds come
+        // out as the midpoint of the whole grid, and the correction quietly
+        // re-centres the block it was supposed to be correcting. That is the
+        // bug behind three rounds of "the measurements say it is centred".
+        const lines = ((table as HTMLElement).innerText ?? '').split('\n')
         const rowCount = lines.length
         const colCount = Math.max(...lines.map((l) => l.length), 1)
         let top = -1, bottom = -1, left = colCount, right = -1

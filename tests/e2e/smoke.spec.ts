@@ -61,20 +61,24 @@ test('the wordmark reads in full, inside the viewport', async ({ page }) => {
 })
 
 /**
- * The wordmark is cut in half by the panel's top edge, at every width. It is
- * positioned against that edge rather than against the frame, so this holds on
- * mobile too — where the frame is 10px and the panel starts at 38px.
+ * The panel cuts the wordmark, and the cut is at its middle wherever there is
+ * room for that — but never at the cost of pulling the mark above where the old
+ * text one sat (0.97vw). On a phone the halfway rule wins; on desktop the floor
+ * does, because halfway would put the letters against the viewport edge. The
+ * exact-half case is asserted in `mobile.spec.ts`, where it applies.
  */
-test('the panel crosses the wordmark at its middle', async ({ page }) => {
+test('the panel cuts the wordmark, and never lifts it past its floor', async ({ page }) => {
   await page.goto('./')
   await expect(page.locator('.stage')).toHaveAttribute('data-booted', 'true', { timeout: 6000 })
-  const [mark, panel] = await Promise.all([
+  const [mark, panel, floor] = await Promise.all([
     page.locator('.wordmark').boundingBox(),
     page.locator('.terminal-window').boundingBox(),
+    page.evaluate(() => window.innerWidth * 0.0097),
   ])
+  // Cut, not cleared and not buried: the panel's edge falls inside the mark.
   const cut = (panel!.y - mark!.y) / mark!.height
-  // Tolerance to match the resolution: the mark is 26px tall at 390px, so a
-  // single pixel of rounding is nearly 4% of it.
-  expect(cut).toBeGreaterThan(0.43)
-  expect(cut).toBeLessThan(0.57)
+  expect(cut).toBeGreaterThan(0.3)
+  expect(cut).toBeLessThan(0.7)
+  // And the floor holds — sub-pixel tolerance only.
+  expect(mark!.y).toBeGreaterThanOrEqual(floor - 1)
 })

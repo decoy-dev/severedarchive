@@ -59,11 +59,12 @@ const LINKS: Link[] = [
           <rect x="2" y="4" width="20" height="16" rx="2" />
           <path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7" />
         </g>
-        <g className="ico-open">
+        {/* Lifted 2 units, because Lucide's open envelope is that much taller
+            than its closed one (bottom edge at y22 against y20) and the icon
+            must not appear to grow downward as it opens. */}
+        <g className="ico-open" transform="translate(0,-2)">
           <path d="M21.2 8.4c.5.38.8.97.8 1.6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10a2 2 0 0 1 .8-1.6l8-6a2 2 0 0 1 2.4 0l8 6Z" />
           <path d="m22 10-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 10" />
-          {/* The letter, rising out of the opened envelope. */}
-          <path className="ico-letter" d="M7 8.5 L17 8.5 L17 15 L7 15 Z" />
         </g>
       </>
     ),
