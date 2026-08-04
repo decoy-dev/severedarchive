@@ -6,7 +6,8 @@ Last updated: 2026-08-03, after the owner's revision pass. All six slices are do
 
 Single-screen portfolio site for severedarchive (motion/visual artist: Blender renders set to music, metalheart/chromeheart, neo-2000s). A **desktop**: video files open in draggable, closable windows over a fullscreen video backdrop, with a huge overprint wordmark behind everything. Zero scrolling on any device.
 
-- **Live:** https://decoy-dev.github.io/severedarchive/ — serves `main`, but only when the deploy workflow is run by hand (`gh workflow run deploy.yml --ref main`). **Confirm the live build stamp before assuming any work is deployed.** CONTEXT has been wrong about this before.
+- **Live:** https://decoy-dev.github.io/severedarchive/ — serves `main`, and **a push deploys it** (see Workflows; the older claim that it does not was wrong). **Confirm the live build stamp before assuming any work is deployed** — `.build-tag` carries the short SHA. CONTEXT has been wrong about this in both directions, so check rather than trust either sentence.
+- **Pushing** needs the other account: `gh auth switch --user decoy-dev`, push, then `gh auth switch --user ch-readycloud` to put it back. Forgetting the switch back leaves the wrong identity active for everything else on the machine.
 - **Repo:** decoy-dev/severedarchive. `main` and `desktop-windows` now point at the same commit — the branch was merged after Slice C, so "28 commits ahead" is no longer true.
 - **Local:** the tree this was last worked in. `raw/` (107MB of source video) is gitignored, was never pushed, and exists only on the machine that encoded it.
 
