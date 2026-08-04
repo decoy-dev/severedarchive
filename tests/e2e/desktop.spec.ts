@@ -178,10 +178,13 @@ test.describe('desktop windows', () => {
     await expect(win).toHaveCount(1)
 
     await page.locator('.fw-close').click()
-    // Deferred, not faked: the window is still mounted, painting its dissolve,
-    // and the media inside it has not been reconciled away yet.
-    await expect(page.locator('[data-file-window][data-dissolving]')).toHaveCount(1)
-    await expect(page.locator('.fw-burn')).toBeAttached()
+    // Deferred, not faked: the window is still mounted, being clipped apart, and
+    // the media inside it has not been reconciled away yet. The clip is what
+    // makes the whole panel come apart rather than an overlay filling it in —
+    // CSS has no `destination-out` blend mode to punch through with.
+    const closing = page.locator('[data-file-window][data-dissolving]')
+    await expect(closing).toHaveCount(1)
+    await expect(closing).toHaveCSS('clip-path', /^path\(evenodd,/)
     // Nothing in a closing window is pressable.
     await expect(page.locator('[data-file-window][data-dissolving]')).toHaveCSS('pointer-events', 'none')
     // And then it goes.

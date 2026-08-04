@@ -11,7 +11,7 @@
  */
 
 /** Cell edge in CSS pixels. Coarse enough to read as pixels at window scale. */
-export const DISSOLVE_CELL = 12
+export const DISSOLVE_CELL = 18
 
 /** How long the whole thing takes. Short — it is a close, not a cutscene. */
 export const DISSOLVE_MS = 420
@@ -44,4 +44,41 @@ export function sweepAt(col: number, row: number, cols: number, rows: number): n
   const x = cols > 1 ? col / (cols - 1) : 0
   const y = rows > 1 ? row / (rows - 1) : 0
   return (x + y) / 2
+}
+
+/**
+ * The surviving region as a `clip-path` path: the window's rectangle with a hole
+ * where every gone cell was.
+ *
+ * A clip is the only thing that actually REMOVES those squares. Drawing over
+ * them — with any colour, at any blend mode — leaves a rectangle standing that
+ * fills in as it goes, which reads as the opposite of coming apart. CSS has no
+ * `destination-out` for `mix-blend-mode` (that is a canvas compositing
+ * operator, not a blend mode), so an overlay cannot punch through either. With
+ * `evenodd`, an outer rectangle plus inner rectangles gives holes.
+ */
+export function dissolveClipPath(
+  progress: number,
+  width: number,
+  height: number,
+  noise: Float32Array | readonly number[],
+): string {
+  const cols = Math.max(1, Math.ceil(width / DISSOLVE_CELL))
+  const rows = Math.max(1, Math.ceil(height / DISSOLVE_CELL))
+  const parts: string[] = [`M0 0H${width}V${height}H0Z`]
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const n = noise[row * cols + col] ?? 0
+      if (!cellGone(progress, n, sweepAt(col, row, cols, rows))) continue
+      const x = col * DISSOLVE_CELL
+      const y = row * DISSOLVE_CELL
+      // Clamped to the box, or the last row and column punch past the window and
+      // the clip stops matching its own outer rectangle.
+      const w = Math.min(DISSOLVE_CELL, width - x)
+      const h = Math.min(DISSOLVE_CELL, height - y)
+      if (w <= 0 || h <= 0) continue
+      parts.push(`M${x} ${y}h${w}v${h}h${-w}Z`)
+    }
+  }
+  return `path(evenodd, "${parts.join('')}")`
 }

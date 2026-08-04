@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { aspectRatio, type ArchiveFile } from '../data/archive'
-import { cellGone, sweepAt, DISSOLVE_CELL, DISSOLVE_MS } from '../lib/dissolve'
+import { DISSOLVE_CELL, DISSOLVE_MS, dissolveClipPath } from '../lib/dissolve'
 import { prefersReducedMotion } from '../lib/perfTier'
 import { windowWidthCss } from '../lib/windowManager'
 import InfoPopover from './InfoPopover'
@@ -29,27 +29,22 @@ export default function FileWindow({
   // exist rather than the file that was clicked.
   const ar = aspectRatio(file)
 
-  // The dissolve. Painted over the whole window — chrome included, because a
-  // frame left standing around disintegrating media reads as a bug rather than
-  // as the window going. Void-coloured blocks rather than erasure: the media
-  // node underneath belongs to the controller and is still being reconciled out
-  // from under this, so nothing here may touch it.
-  const burnRef = useRef<HTMLCanvasElement | null>(null)
+  // The dissolve. A `clip-path` with a hole per gone cell, so the squares are
+  // genuinely removed from the window and the desktop shows through them. An
+  // overlay cannot do this: drawing over the cells leaves the panel standing as
+  // a rectangle that fills in, and CSS has no `destination-out` blend mode to
+  // punch through with.
+  const rootRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
-    const canvas = burnRef.current
-    if (!dissolving || !canvas) return
-    const host = canvas.parentElement
-    const ctx = canvas.getContext('2d')
-    if (!host || !ctx) return
+    const root = rootRef.current
+    if (!dissolving || !root) return
     if (prefersReducedMotion()) return
 
-    const w = host.offsetWidth
-    const h = host.offsetHeight
+    const w = root.offsetWidth
+    const h = root.offsetHeight
     const cols = Math.max(1, Math.ceil(w / DISSOLVE_CELL))
     const rows = Math.max(1, Math.ceil(h / DISSOLVE_CELL))
-    canvas.width = w
-    canvas.height = h
-    // One fixed value per cell, so cells do not flicker back in between frames.
+    // One fixed value per cell, so a cell cannot come back once it has gone.
     const noise = new Float32Array(cols * rows)
     for (let i = 0; i < noise.length; i++) noise[i] = Math.random()
 
@@ -57,18 +52,14 @@ export default function FileWindow({
     const start = performance.now()
     const tick = (now: number) => {
       const progress = Math.min(1, (now - start) / DISSOLVE_MS)
-      ctx.clearRect(0, 0, w, h)
-      ctx.fillStyle = '#07090b'
-      for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
-          if (!cellGone(progress, noise[row * cols + col], sweepAt(col, row, cols, rows))) continue
-          ctx.fillRect(col * DISSOLVE_CELL, row * DISSOLVE_CELL, DISSOLVE_CELL, DISSOLVE_CELL)
-        }
-      }
+      root.style.clipPath = dissolveClipPath(progress, w, h, noise)
       if (progress < 1) raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
+    return () => {
+      cancelAnimationFrame(raf)
+      root.style.clipPath = ''
+    }
   }, [dissolving])
 
   return (
@@ -76,7 +67,7 @@ export default function FileWindow({
       className="file-window glass"
       data-file-window={file.id}
       data-focused={focused ? 'true' : 'false'}
-      ref={registerEl}
+      ref={(el) => { rootRef.current = el; registerEl(el) }}
       style={{
         left: x, top: y, zIndex: 10 + z,
         // True-frame: the ratio is on the BODY, and the root's height falls out
@@ -87,7 +78,6 @@ export default function FileWindow({
       onPointerDown={onFocus}
       data-dissolving={dissolving ? 'true' : undefined}
     >
-      {dissolving && <canvas className="fw-burn" ref={burnRef} aria-hidden="true" />}
       <header className="fw-titlebar">
         {/* The drag handle is the TITLE, not the whole bar. It was the bar, and
             the controls live inside it, so pressing ✕ or VOL started a drag:

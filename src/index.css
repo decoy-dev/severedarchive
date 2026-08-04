@@ -147,18 +147,18 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 /* glass margin: four strips around the window */
 .glass-strip { position: absolute; z-index: 1; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); background: rgba(7, 9, 11, 0.35); }
-/* Each strip runs 1px PAST where the terminal begins, so the four of them and
-   the panel cannot leave a hairline of unblurred stage between them. The extra
-   pixel is underneath the terminal (z-index 1 against its 3) and therefore
-   never seen. Rounding `--frame` removed the fractional case; this removes the
-   rest, including the rounding the browser does when it rasterises each strip's
-   own edge — two adjacent backdrop-filter surfaces do not share a seam if they
-   overlap. The corners overlap too, which is why the fill is subtle enough that
-   doubling it there is not visible. */
-.glass-strip.top    { top: 0; left: 0; right: 0; height: calc(var(--frame) + 1px); }
-.glass-strip.bottom { bottom: 0; left: 0; right: 0; height: calc(var(--frame) + 1px); }
-.glass-strip.left   { top: 0; bottom: 0; left: 0; width: calc(var(--frame) + 1px); }
-.glass-strip.right  { top: 0; bottom: 0; right: 0; width: calc(var(--frame) + 1px); }
+/* Tiled exactly against the terminal's box, with NO overlap.
+   
+   Overlapping them by a pixel to close the seam was worse: the terminal is
+   translucent glass, so everything painted beneath it shows through, and a
+   strip extended under it draws its own edge across the panel — a line under
+   the footer and another down the left, both inside the window. `--frame` is
+   rounded to whole pixels instead, which removes the fractional gaps that
+   caused the original hairline without putting anything underneath the glass. */
+.glass-strip.top    { top: 0; left: 0; right: 0; height: var(--frame); }
+.glass-strip.bottom { bottom: 0; left: 0; right: 0; height: var(--frame); }
+.glass-strip.left   { top: var(--frame); bottom: var(--frame); left: 0; width: var(--frame); }
+.glass-strip.right  { top: var(--frame); bottom: var(--frame); right: 0; width: var(--frame); }
 /* lite tier: no live blur */
 [data-tier='lite'] .glass-strip { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(7, 9, 11, 0.82); }
 
@@ -959,16 +959,75 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
    a thing anyone does. */
 @media (max-width: 640px) { .tw-footer-left { display: none; } }
 
-/* The dissolve, painted over the whole window as it closes. Above every part of
-   the chrome: a frame left standing around disintegrating media reads as a bug
-   rather than as the window going. Pointer-events off so the last frames cannot
-   be clicked. */
-.fw-burn {
-  position: absolute; inset: 0; z-index: 9;
-  pointer-events: none;
-  image-rendering: pixelated;
+/* The admin panel. Centred over the stage rather than inside the terminal: it is
+   a different mode, not another tab, and it must not have to fit a panel sized
+   for the archive. */
+.admin-panel {
+  position: fixed; z-index: 60;
+  /* Nearly opaque, unlike the rest of the glass. The archive showing through a
+     form you are typing into is noise, not depth — this is a mode, and it should
+     read as one. */
+  background: rgba(9, 12, 15, 0.96);
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: min(760px, calc(100vw - 2 * var(--frame)));
+  max-height: calc(100dvh - 2 * var(--frame));
+  display: flex; flex-direction: column;
+  overflow: hidden;
 }
-/* Nothing in a closing window is pressable. */
+.admin-head {
+  display: flex; align-items: center; gap: 16px;
+  padding: 0 14px; height: 46px; flex: 0 0 auto;
+  border-bottom: 1px solid var(--hair-bright);
+  position: relative; z-index: 2;
+}
+.admin-title { font-size: var(--fs-sm); letter-spacing: 0.08em; color: var(--bright); }
+.admin-tabs { display: flex; gap: 0; margin-left: auto; }
+.admin-tabs button {
+  padding: 6px 12px; font-size: var(--fs-xs); letter-spacing: 0.06em;
+  color: var(--dim); border: 1px solid var(--hair); margin-left: -1px;
+}
+.admin-tabs button.is-active { color: var(--acid); border-color: var(--hair-bright); background: rgba(182, 255, 46, 0.05); }
+.admin-tabs button:hover:not(.is-active) { color: var(--text); }
+.admin-close { width: 34px; height: 34px; color: var(--dim); }
+.admin-close:hover, .admin-close:focus-visible { color: var(--acid); outline: none; }
+.admin-body {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
+  padding: 16px; overflow-y: auto; min-height: 0;
+  position: relative; z-index: 2;
+}
+.admin-body-content { grid-template-columns: minmax(0, 1fr); }
+.admin-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.admin-field-wide { grid-column: 1 / -1; }
+.admin-field > span { font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--dim); }
+.admin-field input, .admin-field select, .admin-field textarea, .admin-json {
+  font: inherit; font-size: var(--fs-xs); letter-spacing: 0.04em;
+  color: var(--bright); background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--hair-bright); padding: 6px 8px; min-width: 0;
+}
+.admin-field input:focus-visible, .admin-field select:focus-visible,
+.admin-field textarea:focus-visible, .admin-json:focus-visible { outline: none; border-color: var(--acid); }
+.admin-json { grid-column: 1 / -1; min-height: 300px; resize: vertical; line-height: 1.5; }
+.admin-submit {
+  grid-column: 1 / -1; justify-self: start;
+  padding: 8px 20px; font-size: var(--fs-xs); letter-spacing: 0.1em;
+  color: var(--text); border: 1px solid var(--hair-bright);
+}
+.admin-submit:hover:not(:disabled), .admin-submit:focus-visible:not(:disabled) {
+  color: var(--acid); border-color: var(--acid); outline: none;
+}
+.admin-submit:disabled { color: var(--dim); cursor: default; }
+.admin-status {
+  flex: 0 0 auto; padding: 10px 16px; font-size: var(--fs-xs); letter-spacing: 0.05em;
+  border-top: 1px solid var(--hair); position: relative; z-index: 2;
+}
+.admin-status[data-kind='ok'] { color: var(--acid); }
+.admin-status[data-kind='error'] { color: var(--bright); }
+.admin-status[data-kind='busy'] { color: var(--dim); }
+
+/* The dissolve clips the window rather than drawing on it — see
+   `dissolveClipPath`. The whole panel comes apart: chrome, glass fill, media and
+   all, with the desktop showing through the holes. Nothing in a closing window
+   is pressable while it goes. */
 .file-window[data-dissolving] { pointer-events: none; }
 
 /* The (i) control and its panel. Used in the window title bar and on dashboard

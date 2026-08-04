@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
+import AdminPanel from './AdminPanel'
 
 /**
- * The way in to the admin backend: a passcode, checked by the Worker.
+ * The way in to the admin backend: a passcode, checked by the Worker, and then
+ * the panel it unlocks.
  *
- * Deliberately small and deliberately dumb. It knows how to ask and how to
- * report; it holds no secret, decides nothing, and cannot tell a wrong passcode
- * from an unconfigured deployment — the Worker answers 401 to both on purpose.
- * The upload form and the ABOUT/LINKS editors are the next slice; this is the
- * door they will sit behind.
+ * This part is deliberately small and deliberately dumb. It knows how to ask
+ * and how to report; it holds no secret, decides nothing, and cannot tell a
+ * wrong passcode from an unconfigured deployment — the Worker answers 401 to
+ * both on purpose. Authenticating opens `AdminPanel`, which is where publishing
+ * actually happens.
  *
  * `credentials: 'include'` is what makes the session work: the Worker replies
  * with an httpOnly, SameSite=Strict cookie, so nothing here ever handles the
@@ -17,8 +19,7 @@ const API = import.meta.env.VITE_ADMIN_API ?? 'https://severedarchive-admin.chri
 
 type State = 'closed' | 'asking' | 'checking' | 'ok' | 'denied' | 'limited' | 'offline'
 
-const MESSAGE: Record<Exclude<State, 'closed' | 'asking' | 'checking'>, string> = {
-  ok: '> SESSION AUTHENTICATED.',
+const MESSAGE: Record<Exclude<State, 'closed' | 'asking' | 'checking' | 'ok'>, string> = {
   denied: '> REJECTED.',
   limited: '> TOO MANY ATTEMPTS. WAIT OUT THE HOUR.',
   offline: '> BACKEND UNREACHABLE.',
@@ -70,10 +71,16 @@ export default function AdminLogin() {
     }
   }
 
+  if (state === 'ok') {
+    // Authenticating has to lead somewhere. It used to stop at a message, which
+    // is a door that reports being unlocked and then does nothing.
+    return <AdminPanel onClose={() => setState('closed')} />
+  }
+
   if (state === 'closed') {
     return (
       <button className="admin-open" onClick={() => setState('asking')} aria-label="Admin login">
-        ◈ LOGIN
+        ◈ ADMIN LOGIN
       </button>
     )
   }
@@ -102,9 +109,7 @@ export default function AdminLogin() {
   return (
     <span className="admin-result" data-result={state} role="status">
       {MESSAGE[state]}
-      <button className="admin-again" onClick={() => setState(state === 'ok' ? 'closed' : 'asking')}>
-        {state === 'ok' ? 'CLOSE' : 'RETRY'}
-      </button>
+      <button className="admin-again" onClick={() => setState('asking')}>RETRY</button>
     </span>
   )
 }

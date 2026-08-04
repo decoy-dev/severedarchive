@@ -289,32 +289,38 @@ export default function AboutAsciiObject({ tier }: { tier: PerfTier }) {
         for (let node = walk.nextNode(); node; node = walk.nextNode()) rows.push(node as Text)
         if (!rows.length) return null
 
+        // The CENTROID of the lit characters, weighted by how many there are —
+        // not the centre of their bounding box.
+        //
+        // The bounding box is what three attempts centred, and it is the wrong
+        // quantity: the mark has sparse outliers (a few characters where the rim
+        // light catches an edge) that push a box out much further than they push
+        // the eye. Centring the box therefore leaves the mass off to one side,
+        // which is exactly what "still right aligned" was describing while every
+        // measurement of the box read zero.
         const range = document.createRange()
-        let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity
+        let weightedX = 0, weightedY = 0, weight = 0
         for (const row of rows) {
           const text = row.data
           const a = text.search(/\S/)
           if (a === -1) continue
           const b = text.length - 1 - [...text].reverse().join('').search(/\S/)
+          const ink = text.slice(a, b + 1).replace(/\s/g, '').length
+          if (!ink) continue
           range.setStart(row, a)
           range.setEnd(row, b + 1)
           const r = range.getBoundingClientRect()
           if (!r.width && !r.height) continue
-          left = Math.min(left, r.left)
-          right = Math.max(right, r.right)
-          top = Math.min(top, r.top)
-          bottom = Math.max(bottom, r.bottom)
+          weightedX += (r.left + r.right) / 2 * ink
+          weightedY += (r.top + r.bottom) / 2 * ink
+          weight += ink
         }
-        if (!Number.isFinite(left) || right <= left) return null
+        if (!weight) return null
 
         // The block's own box, for the scale decision only.
         range.selectNodeContents(table)
         const block = range.getBoundingClientRect()
-        return {
-          cx: (left + right) / 2,
-          cy: (top + bottom) / 2,
-          width: block.width,
-        }
+        return { cx: weightedX / weight, cy: weightedY / weight, width: block.width }
       }
 
       // Scale first, measured with no transform applied so the block's natural
