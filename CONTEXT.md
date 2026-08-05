@@ -28,7 +28,14 @@ All six slices are complete and deployed. The owner's 2026-08-03 revision pass (
 
 ### Session of 2026-08-04
 
-Live at `BLD e3adcd5`. Worker at version `3ca4c2ac`. **Nothing from 2026-08-04's second and third passes is committed or deployed** — 314 vitest, 103 e2e, clean lint locally.
+Live at `BLD e3adcd5`. Worker at version `3ca4c2ac`. Everything through the third pass is committed and live (`80afeea`, `b6fe1e6`, `1804724`); 314 vitest, 103 e2e, clean lint.
+
+**The admin pipeline is proven end-to-end as of 2026-08-05** — a real browser edit travelled session → Worker → GitHub → Edit entry run → deploy, and the rendered poster on the live site hash-matches the commit. Three walls fell in one evening, each hiding the next:
+1. The session cookie was `SameSite=Strict` across sites (github.io → workers.dev) — never sent, every authed call 401. Now `None`; the Worker's exact-origin check carries CSRF.
+2. The Worker's `GITHUB_TOKEN` had never worked — zero dispatches in repo history, no staging release. Replaced with a fine-grained PAT (owner **decoy-dev**, repo severedarchive only, **Contents: Read and write** — that one permission covers releases, dispatches and contents). **It EXPIRES**: when admin saves start answering 502/`github 403` again, mint a new one and `npx wrangler secret put GITHUB_TOKEN` (interactive terminal — piping nothing stores an EMPTY secret and wrangler still says Success).
+3. `edit.yml`/`ingest.yml` lacked `actions: write`, so their final `gh workflow run deploy.yml` 403'd — edits committed and never deployed.
+
+Debugging idiom that worked: `npx wrangler tail severedarchive-admin --format pretty` while the owner retries — the Worker logs the real exception; the browser deliberately only sees `upstream failure`.
 
 **Browser automation on this machine must be headless.** The owner has asked twice. Playwright's MCP already carries `--headless`; the offender was chrome-devtools-mcp, whose plugin definition launches headed. A headless one is pinned in the working directory's `.mcp.json`. Consequence for perf work: GPU rasterisation differs headless, and rAF is capped at 30fps, so compositor-bound numbers cannot be measured here — say so rather than reporting a figure.
 
