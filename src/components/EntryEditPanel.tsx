@@ -5,7 +5,7 @@ import { ARCHIVE, fullSrc, posterSrc, aspectRatio, type ArchiveFile } from '../d
 import { normaliseThumb, serialiseThumb } from '../lib/thumbCrop'
 import ThumbnailEditor from './ThumbnailEditor'
 import { ADMIN_API } from '../lib/adminSession'
-import EntryFields, { UploadLimitsHint, nameFromFile, type EntryDraft } from './EntryFields'
+import EntryFields, { FilePicker, UploadLimitsHint, nameFromFile, type EntryDraft } from './EntryFields'
 
 /**
  * What an authenticated admin gets on an entry that already exists: its fields,
@@ -152,22 +152,51 @@ export default function EntryEditPanel({ file, onClose }: { file: ArchiveFile; o
    * terminal, the editor inside the file window it edits. So they painted under
    * other chrome, and `elementFromPoint` over the panel's own header answered with
    * the desktop. The visible symptom was that neither panel could be dragged: the
-   * pointerdown never reached the drag handle. A file window is worse still, since
-   * it takes a `clip-path` while it dissolves, and a clip applies to fixed
-   * descendants too.
+   * pointerdown never reached the drag handle. A file window is worse still: it
+   * takes a `transform` and an `opacity` of its own as it recedes on close, and a
+   * transformed ancestor becomes the containing block for its fixed descendants —
+   * so the panel would position against the window instead of the viewport, and
+   * shrink away with it.
    *
    * A portal keeps them in the React tree that owns their state — the window still
    * knows which file it is — while taking them out of that context in the DOM.
    */
   return createPortal(
     <div className="admin-panel glass" ref={panelRef} role="dialog" aria-label={`Edit ${file.name}`}>
-      <header className="admin-head" data-admin-drag>
-        <span className="admin-title">EDIT</span>
-        <span className="admin-subject tw-dim">{file.name}.{file.ext}</span>
+      {/* One wrapper as the handle, not the bar: the bar contains the ✕, and a
+          drag trigger that contains a control eats drifting clicks on it via
+          pointer capture — the file-window ruling, applied here too. The wrapper
+          is title + subject + the slack between them and the ✕. */}
+      <header className="admin-head">
+        <span className="admin-grab" data-admin-drag>
+          <span className="admin-title">EDIT</span>
+          <span className="admin-subject tw-dim">{file.name}.{file.ext}</span>
+        </span>
         <button className="admin-close" onClick={onClose} aria-label="Close editor">✕</button>
       </header>
 
       <form className="admin-body" onSubmit={save}>
+        {/* First, not last (owner's call): replacing the file is the biggest
+            thing this panel can do, and it decides what the fields below mean —
+            a new clip resets the thumbnail conversation entirely. */}
+        <label className="admin-field admin-field-wide"><span>REPLACE FILE</span>
+          <FilePicker
+            file={replacement}
+            accept="video/*,image/*"
+            emptyLabel="LEAVE EMPTY TO KEEP THE CURRENT FILE"
+            onPick={(picked) => {
+              setReplacement(picked)
+              // Offered, not imposed: the name is an existing entry's and
+              // changing it is a decision, so this only fills an empty field.
+              if (picked && !draft.name) setDraft({ ...draft, name: nameFromFile(picked.name) })
+              // A replacement of a different kind switches the ladder, and
+              // `process-media-upload.sh` clears the old one so the two cannot
+              // both sit on disk.
+              if (picked) setDraft((d) => ({ ...d, kind: picked.type.startsWith('image/') ? 'photo' : 'video' }))
+            }}
+          />
+          {replacement && <em className="admin-note">THE CURRENT RENDITIONS WILL BE OVERWRITTEN</em>}
+        </label>
         <EntryFields
           draft={draft}
           onChange={setDraft}
@@ -186,27 +215,7 @@ export default function EntryEditPanel({ file, onClose }: { file: ArchiveFile; o
           customImage={thumbImage}
           onCustomImage={setThumbImage}
         />
-        <label className="admin-field admin-field-wide"><span>REPLACE FILE</span>
-          <input
-            type="file"
-            accept="video/*,image/*"
-            onChange={(e) => {
-              const picked = e.target.files?.[0] ?? null
-              setReplacement(picked)
-              // Offered, not imposed: the name is an existing entry's and
-              // changing it is a decision, so this only fills an empty field.
-              if (picked && !draft.name) setDraft({ ...draft, name: nameFromFile(picked.name) })
-              // A replacement of a different kind switches the ladder, and
-              // `process-media-upload.sh` clears the old one so the two cannot
-              // both sit on disk.
-              if (picked) setDraft((d) => ({ ...d, kind: picked.type.startsWith('image/') ? 'photo' : 'video' }))
-            }}
-          />
-          <em className="admin-note">
-            {replacement ? 'THE CURRENT RENDITIONS WILL BE OVERWRITTEN' : 'LEAVE EMPTY TO KEEP THE CURRENT FILE'}
-          </em>
-        </label>
-        <UploadLimitsHint file={replacement} />
+                <UploadLimitsHint file={replacement} />
         <button className="admin-submit" type="submit" disabled={status.kind === 'busy'}>
           {status.kind === 'busy' ? '···' : 'SAVE'}
         </button>

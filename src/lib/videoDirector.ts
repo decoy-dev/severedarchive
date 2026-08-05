@@ -12,6 +12,27 @@ export class VideoDirector {
     this.maxPlaying = maxPlaying
   }
 
+  /**
+   * Change how many may play at once, mid-session.
+   *
+   * The cap exists to bound decode work, and how much work is affordable is not
+   * constant: with a window filling the browser window, the other two windows and
+   * the explorer preview are behind an opaque picture and a blurred scrim, and
+   * every frame they decode is spent on pixels nobody can see.
+   *
+   * Lowering the cap PAUSES the surplus — it does not release it. That distinction
+   * is the whole reason this is the right lever: a released file drops its `src`
+   * and its playhead (see `releaseFile`), so coming back means a black body and a
+   * restart from zero, while a paused one holds its frame and resumes where it
+   * was. Nothing about the layout or the placement changes.
+   */
+  setMaxPlaying(maxPlaying: number) {
+    const next = Math.max(1, Math.floor(maxPlaying))
+    if (next === this.maxPlaying) return
+    this.maxPlaying = next
+    this.apply()
+  }
+
   register(id: string, el: Playable) {
     if (!this.els.has(id)) this.order.push(id)
     this.els.set(id, el)

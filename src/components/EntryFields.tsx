@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { UPLOAD_LIMITS, formatBytes } from '../data/content'
 import { DEFAULT_THUMB, type ThumbSpec } from '../lib/thumbCrop'
 
@@ -17,6 +18,13 @@ export type EntryDraft = {
   description: string
   /** ISO `YYYY-MM-DD`. */
   date: string
+  /**
+   * Kept in the draft with NO field in either panel: nothing displays it since
+   * the window's VIEW ON INSTAGRAM plate was removed, but the Worker validates
+   * it and every existing entry carries one — the edit form must round-trip the
+   * stored value, not blank it. Dropping it from this type would do the latter
+   * silently.
+   */
   postUrl: string
   /** How the poster still is made. See `src/lib/thumbCrop.ts`. */
   thumb: ThumbSpec
@@ -87,12 +95,50 @@ export default function EntryFields({
       <label className="admin-field"><span>TAGLINE</span>
         <input value={draft.tagline} onChange={(e) => set('tagline', e.target.value)} placeholder="liquid metal study" />
       </label>
-      <label className="admin-field"><span>POST URL</span>
-        <input value={draft.postUrl} onChange={(e) => set('postUrl', e.target.value)} placeholder="https://instagram.com/p/…" />
-      </label>
       <label className="admin-field admin-field-wide"><span>DESCRIPTION</span>
         <textarea value={draft.description} onChange={(e) => set('description', e.target.value)} rows={3} />
       </label>
     </>
+  )
+}
+
+/**
+ * The file picker both panels use, in place of a bare `<input type="file">`.
+ *
+ * The native control renders as the browser's own "Choose File — No file
+ * chosen" widget, which ignores every token this interface is set in. The input
+ * is still here and still does the work — it is visually hidden, labelled by
+ * the styled row, and keeps keyboard focus and the OS dialog — so nothing about
+ * the mechanics changes, only what is drawn.
+ */
+export function FilePicker({
+  file, accept, emptyLabel, onPick, inputRef,
+}: {
+  file: File | null
+  accept: string
+  /** What the empty state says — "SELECT A FILE" upload-side, softer edit-side. */
+  emptyLabel: string
+  onPick: (file: File | null) => void
+  inputRef?: React.Ref<HTMLInputElement>
+}) {
+  const id = useId()
+  return (
+    <span className="file-picker">
+      <input
+        id={id}
+        ref={inputRef}
+        className="file-picker-input"
+        type="file"
+        accept={accept}
+        onChange={(e) => onPick(e.target.files?.[0] ?? null)}
+      />
+      <label htmlFor={id} className="file-picker-row">
+        <span className="file-picker-cta">BROWSE…</span>
+        <span className="file-picker-name" data-empty={file ? undefined : 'true'}>
+          {file ? file.name : emptyLabel}
+        </span>
+        {file && <span className="file-picker-size">{formatBytes(file.size)}</span>}
+      </label>
+    </span>
   )
 }

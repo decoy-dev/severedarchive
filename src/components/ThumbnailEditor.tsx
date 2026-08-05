@@ -116,7 +116,17 @@ export default function ThumbnailEditor({
             <img className="thumb-media" src={source} alt="" style={style} />
           ) : videoSrc ? (
             <video
-              ref={videoRef}
+              // The ref also PROBES: an element whose metadata is already there
+              // reports it in `readyState`, event or no event. Since this panel
+              // went behind `lazy()`, the mount can land after a cached source
+              // has finished loading and `loadedmetadata` has already fired —
+              // waiting only for the event left `ready` false forever and the
+              // scrubber dead. Same judgement the media controller applies:
+              // trust the element's actual state, never a witnessed event.
+              ref={(el) => {
+                videoRef.current = el
+                if (el && el.readyState >= 1) setReady(true)
+              }}
               className="thumb-media"
               src={videoSrc}
               muted

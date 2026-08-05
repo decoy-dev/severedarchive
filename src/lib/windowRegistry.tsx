@@ -18,6 +18,14 @@ export type OpenWindowInfo = {
 export type WindowView = {
   /** Open windows, top of the z-stack first. */
   windows: readonly OpenWindowInfo[]
+  /**
+   * The window filling the browser window, or null.
+   *
+   * Published for the same reason the list is: the BACKDROP has to know. It is not
+   * registered with the media controller, so nothing else can quiet it, and while
+   * a window is enlarged the backdrop is decoding a clip behind an opaque picture.
+   */
+  enlargedId: string | null
   /** Raise a window that is already open. No-op for an id that is not. */
   focus: (id: string) => void
   close: (id: string) => void
@@ -31,7 +39,7 @@ export type WindowView = {
 }
 
 const noop = () => {}
-const EMPTY: WindowView = { windows: [], focus: noop, close: noop, node: () => null }
+const EMPTY: WindowView = { windows: [], enlargedId: null, focus: noop, close: noop, node: () => null }
 
 /**
  * What is open, published UP by Desktop and read by surfaces below it.

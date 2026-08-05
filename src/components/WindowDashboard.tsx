@@ -219,6 +219,82 @@ export default function WindowDashboard({
     })
   }, [phase])
 
+  /**
+   * Cards that have just left the window list, kept rendered for their exit
+   * beat. The registry drops a closed window immediately; without this the card
+   * vanishes on the same frame, which reads as the readout losing data rather
+   * than reporting a close. A ghost renders from its captured info (the file
+   * facts are static; the telemetry freezes at its last written values, which
+   * is exactly what a readout of a closing window should do) and is inert.
+   */
+  const [ghosts, setGhosts] = useState<Array<{ info: OpenWindowInfo; at: number }>>([])
+  const prevWindows = useRef<readonly OpenWindowInfo[]>([])
+  /** Ids whose enter beat has played, so a re-render never replays it. */
+  const entered = useRef(new Set<string>())
+  const exiting = useRef(new Set<string>())
+
+  useEffect(() => {
+    if (phase !== 'ready') { prevWindows.current = windows; return }
+    const cur = new Set(windows.map((w) => w.id))
+    const departed = prevWindows.current
+      .map((info, at) => ({ info, at }))
+      .filter(({ info }) => !cur.has(info.id))
+    prevWindows.current = windows
+    for (const d of departed) entered.current.delete(d.info.id)
+    if (departed.length && !prefersReducedMotion()) {
+      setGhosts((g) => [...g.filter((x) => !departed.some((d) => d.info.id === x.info.id)), ...departed])
+    }
+  }, [windows, phase])
+
+  // The exit: the card gives its space back. `flex-grow` is the honest property
+  // here — the cards divide the box between them (`flex: 1 1 0`), so a height
+  // animation would be ignored by the layout that actually sizes them. Growing
+  // to zero hands the row's share to its neighbours smoothly, and the fade
+  // rides on top.
+  useEffect(() => {
+    for (const g of ghosts) {
+      if (exiting.current.has(g.info.id)) continue
+      exiting.current.add(g.info.id)
+      const el = listRef.current?.querySelector(`[data-dash-row="${g.info.id}"]`)
+      const drop = () => {
+        exiting.current.delete(g.info.id)
+        setGhosts((cur) => cur.filter((x) => x.info.id !== g.info.id))
+      }
+      if (!el) { drop(); continue }
+      animate(el, {
+        flexGrow: [1, 0],
+        opacity: [1, 0],
+        duration: 260,
+        ease: 'inQuad',
+        onComplete: drop,
+      })
+    }
+  }, [ghosts])
+
+  // The enter, for windows opened after the intro: the row takes its share of
+  // the box as it fades in, in the intro's own vocabulary. The intro stagger
+  // owns the first batch (`introRef`), so the two never double-animate a card.
+  useEffect(() => {
+    if (phase !== 'ready' || !listRef.current) return
+    const fresh = windows.filter((w) => !entered.current.has(w.id))
+    for (const w of windows) entered.current.add(w.id)
+    if (!introRef.current || prefersReducedMotion()) return
+    for (const w of fresh) {
+      const el = listRef.current.querySelector(`[data-dash-row="${w.id}"]`)
+      if (!el) continue
+      animate(el, {
+        flexGrow: [0, 1],
+        opacity: [0, 1],
+        translateY: [8, 0],
+        duration: 300,
+        ease: 'outQuad',
+        // Inline flex-grow handed back to the stylesheet, or a later resize of
+        // the list would divide space against a stale animated value.
+        onComplete: () => { (el as HTMLElement).style.flexGrow = ''; (el as HTMLElement).style.opacity = '' },
+      })
+    }
+  }, [windows, phase])
+
   if (phase === 'init' || phase === 'down') {
     const down = phase === 'down'
     const lines = down ? DOWN_LINES : INIT_LINES
@@ -247,11 +323,28 @@ export default function WindowDashboard({
       </p>
 
       <ul className="dash-list" ref={listRef}>
-        {windows.map((w) => {
+        {(() => {
+          // Ghosts are spliced back in at the position they held, so the list
+          // does not reorder in the same beat as the fade. A live row always
+          // wins over its own ghost (a window reopened mid-fade).
+          const rows: Array<{ w: OpenWindowInfo; ghost: boolean }> =
+            windows.map((w) => ({ w, ghost: false }))
+          for (const g of ghosts) {
+            if (rows.some((r) => r.w.id === g.info.id)) continue
+            rows.splice(Math.min(g.at, rows.length), 0, { w: g.info, ghost: true })
+          }
+          return rows
+        })().map(({ w, ghost }) => {
           const file = fileById(w.id)
           if (!file) return null
           return (
-            <li key={w.id} className={w.focused ? 'dash-row is-focused' : 'dash-row'} data-dash-row={w.id}>
+            <li
+              key={w.id}
+              className={w.focused && !ghost ? 'dash-row is-focused' : 'dash-row'}
+              data-dash-row={w.id}
+              data-dash-leaving={ghost ? 'true' : undefined}
+              aria-hidden={ghost || undefined}
+            >
               {/* Both controls lead the card rather than trailing it, and that
                   is geometry rather than style: the cascade starts at x 240 and
                   this box starts at x 104, so the card's left edge is the one

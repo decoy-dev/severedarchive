@@ -5,7 +5,8 @@ import { ARCHIVE } from '../data/archive'
 import { SITE_CONTENT } from '../data/content'
 import { ADMIN_API } from '../lib/adminSession'
 import { serialiseThumb } from '../lib/thumbCrop'
-import EntryFields, { UploadLimitsHint, emptyDraft, nameFromFile, type EntryDraft } from './EntryFields'
+import ContentEditor from './ContentEditor'
+import EntryFields, { FilePicker, UploadLimitsHint, emptyDraft, nameFromFile, type EntryDraft } from './EntryFields'
 import ThumbnailEditor from './ThumbnailEditor'
 
 /**
@@ -23,7 +24,12 @@ import ThumbnailEditor from './ThumbnailEditor'
 type Status = { kind: 'idle' | 'busy' | 'ok' | 'error'; message?: string }
 
 export default function AdminPanel({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<'upload' | 'content'>('upload')
+  // ABOUT and LINKS are separate tabs at the owner's request — they are edited on
+  // different occasions, and a combined page made each visit scroll past the
+  // other's fields. Both still edit the ONE `content.json`: the string and its
+  // sha are shared state here, so a change made under ABOUT is still in the
+  // payload when LINKS commits, and the two tabs can never race each other.
+  const [tab, setTab] = useState<'upload' | 'about' | 'links'>('upload')
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
 
   // Upload fields. One draft object, shared with the edit panel via
@@ -75,9 +81,15 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
     const drag = createDraggable(panel, {
       trigger: panel.querySelector('[data-admin-drag]') as HTMLElement,
       container: document.body,
-      // Negative, so it can be pushed most of the way off screen — the point of
-      // dragging it is to see what it covers.
-      containerPadding: -260,
+      // Negative on three sides, so it can be pushed most of the way off screen —
+      // the point of dragging it is to see what it covers. The TOP is zero, and
+      // that is load-bearing: the drag handle is the panel's own header, so a
+      // panel dragged above the viewport takes the only thing that can bring it
+      // back with it, and the session is soft-locked until a reload. Off the
+      // bottom or the sides the header is the last part to leave and stays
+      // grabbable at any offset this padding allows. Order: [top, right, bottom,
+      // left].
+      containerPadding: [0, -260, -260, -260],
     })
     return () => { drag.revert() }
   }, [])
@@ -97,7 +109,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   // Loaded on demand rather than at mount: it is a GitHub round trip, and most
   // sessions are an upload.
   useEffect(() => {
-    if (tab !== 'content' || sha !== null || content) return
+    if (tab === 'upload' || sha !== null || content) return
     setStatus({ kind: 'busy', message: 'READING content.json' })
     fetch(`${ADMIN_API}/api/content`, { credentials: 'include' })
       .then((r) => r.json())
@@ -179,20 +191,30 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
    * terminal, the editor inside the file window it edits. So they painted under
    * other chrome, and `elementFromPoint` over the panel's own header answered with
    * the desktop. The visible symptom was that neither panel could be dragged: the
-   * pointerdown never reached the drag handle. A file window is worse still, since
-   * it takes a `clip-path` while it dissolves, and a clip applies to fixed
-   * descendants too.
+   * pointerdown never reached the drag handle. A file window is worse still: it
+   * takes a `transform` and an `opacity` of its own as it recedes on close, and a
+   * transformed ancestor becomes the containing block for its fixed descendants —
+   * so the panel would position against the window instead of the viewport, and
+   * shrink away with it.
    *
    * A portal keeps them in the React tree that owns their state — the window still
    * knows which file it is — while taking them out of that context in the DOM.
    */
   return createPortal(
     <div className="admin-panel glass" ref={panelRef} role="dialog" aria-label="Admin">
-      <header className="admin-head" data-admin-drag>
-        <span className="admin-title">PUBLISH</span>
+      {/* The drag handle is the TITLE, not the whole bar — the same ruling as the
+          file window's title bar, for the same bug: the bar contains the tabs and
+          the ✕, anime takes pointer capture on the trigger, and a press that
+          drifts 2–3px delivers its click to the capture target instead of the
+          button. Tabs "randomly" needing several clicks was exactly this. The
+          title stretches to fill the bar's free space, so the grabbable area is
+          still everything that is not a control. */}
+      <header className="admin-head">
+        <span className="admin-title" data-admin-drag>PUBLISH</span>
         <nav className="admin-tabs">
           <button className={tab === 'upload' ? 'is-active' : ''} onClick={() => setTab('upload')}>UPLOAD</button>
-          <button className={tab === 'content' ? 'is-active' : ''} onClick={() => setTab('content')}>ABOUT / LINKS</button>
+          <button className={tab === 'about' ? 'is-active' : ''} onClick={() => setTab('about')}>ABOUT</button>
+          <button className={tab === 'links' ? 'is-active' : ''} onClick={() => setTab('links')}>LINKS</button>
         </nav>
         <button className="admin-close" onClick={onClose} aria-label="Close admin">✕</button>
       </header>
@@ -203,12 +225,12 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
             <span>FILE</span>
             {/* Stated rather than left to be discovered by a rejection. The size
                 comes from the same constant the Worker enforces. */}
-            <input
-              ref={firstRef}
-              type="file"
+            <FilePicker
+              file={file}
               accept="video/*,image/*"
-              onChange={(e) => {
-                const picked = e.target.files?.[0] ?? null
+              emptyLabel="SELECT A CLIP OR STILL"
+              inputRef={firstRef}
+              onPick={(picked) => {
                 setFile(picked)
                 // A sensible name from the filename, still editable. The Worker
                 // normalises it again, so this only saves typing.
@@ -243,12 +265,10 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
         </form>
       ) : (
         <div className="admin-body admin-body-content">
-          <textarea
-            className="admin-json"
-            value={content}
-            spellCheck={false}
-            onChange={(e) => setContent(e.target.value)}
-          />
+          {/* Fields over the same JSON payload, with the raw text one toggle away.
+              `content` is still the string that gets committed, so `save` and the
+              Worker contract are unchanged by any of this. */}
+          <ContentEditor value={content} onChange={setContent} section={tab} />
           <button className="admin-submit" onClick={save} disabled={status.kind === 'busy' || !content}>
             {status.kind === 'busy' ? '···' : 'COMMIT'}
           </button>

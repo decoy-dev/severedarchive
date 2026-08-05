@@ -1,25 +1,40 @@
 import { useEffect, useRef, useState } from 'react'
 import { aspectRatio, fullSrc, isStill, type ArchiveFile } from '../data/archive'
-import { DISSOLVE_CELL, DISSOLVE_MS, dissolveClipPath } from '../lib/dissolve'
+import { RECEDE_MS, recedeAt, recedeFilter, recedeTransform } from '../lib/recede'
 import { prefersReducedMotion } from '../lib/perfTier'
 import { windowWidthCss } from '../lib/windowManager'
 import { useAdminSession } from '../lib/adminSession'
-import EntryEditPanel from './EntryEditPanel'
+import { Suspense, lazy } from 'react'
+
+/** Code-split with AdminPanel and for the same reason — owner-only code. */
+const EntryEditPanel = lazy(() => import('./EntryEditPanel'))
 import InfoPopover from './InfoPopover'
 import VolumeControl from './VolumeControl'
 
 export default function FileWindow({
-  file, x, y, z, focused, dissolving, volume, onVolume, onFocus, onClose, registerEl, bodyRef,
+  file, x, y, z, focused, receding, enlarged, volume,
+  onVolume, onFocus, onClose, onToggleEnlarge, registerEl, bodyRef,
 }: {
   file: ArchiveFile
   x: number; y: number; z: number
   focused: boolean
-  /** Closing: the window plays its dissolve and Desktop unmounts it after. */
-  dissolving: boolean
+  /** Closing: the window recedes into the background and Desktop unmounts it after. */
+  receding: boolean
+  /**
+   * Filling the browser window.
+   *
+   * Owned by Desktop, not by this component, for two reasons that both come from
+   * §4.6: Escape has to mean "come back down" before it means "close", and there
+   * is exactly one window-level keydown listener in the application to say so.
+   * Holding it there also makes "only one enlarged window" a fact about the state
+   * rather than something the geometry happens to hide.
+   */
+  enlarged: boolean
   volume: number
   onVolume: (v: number) => void
   onFocus: () => void
   onClose: () => void
+  onToggleEnlarge: () => void
   registerEl: (el: HTMLDivElement | null) => void
   /** registers `.fw-body` as this file's media slot; returns mediaController's cleanup */
   bodyRef: (el: HTMLDivElement | null) => (() => void) | void
@@ -39,38 +54,46 @@ export default function FileWindow({
   const { authed } = useAdminSession()
   const [editing, setEditing] = useState(false)
 
-  // The dissolve. A `clip-path` with a hole per gone cell, so the squares are
-  // genuinely removed from the window and the desktop shows through them. An
-  // overlay cannot do this: drawing over the cells leaves the panel standing as
-  // a rectangle that fills in, and CSS has no `destination-out` blend mode to
-  // punch through with.
+  // The close: the panel is pulled back into the background until it is gone.
+  // See `recede`. Driven from here in rAF rather than by a CSS animation or a
+  // keyframe because the scale has to COMPOSE with the inline translate anime.js
+  // left on this element while it was dragged — a CSS `transform` would replace
+  // that translate and snap the window back to its cascade position on the first
+  // frame of its own close.
   const rootRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     const root = rootRef.current
-    if (!dissolving || !root) return
+    if (!receding || !root) return
     if (prefersReducedMotion()) return
 
-    const w = root.offsetWidth
-    const h = root.offsetHeight
-    const cols = Math.max(1, Math.ceil(w / DISSOLVE_CELL))
-    const rows = Math.max(1, Math.ceil(h / DISSOLVE_CELL))
-    // One fixed value per cell, so a cell cannot come back once it has gone.
-    const noise = new Float32Array(cols * rows)
-    for (let i = 0; i < noise.length; i++) noise[i] = Math.random()
+    // Read once, before the first frame writes anything: after that the inline
+    // transform is ours and re-reading it would compound the scale each frame.
+    // An ENLARGED window has no translate to keep — the stylesheet cancels the
+    // drag offset while it fills the viewport (see `[data-enlarged]`), so
+    // composing with it here would jump the panel by that offset as it went.
+    const base = enlarged ? '' : root.style.transform
 
     let raf = 0
     const start = performance.now()
     const tick = (now: number) => {
-      const progress = Math.min(1, (now - start) / DISSOLVE_MS)
-      root.style.clipPath = dissolveClipPath(progress, w, h, noise)
+      const progress = Math.min(1, (now - start) / RECEDE_MS)
+      const { scale, opacity, blur, brightness } = recedeAt(progress)
+      // `important`, because the enlarged rule cancels transforms with it and an
+      // ordinary inline write would lose to that. Inline !important still wins.
+      root.style.setProperty('transform', recedeTransform(base, scale), 'important')
+      root.style.opacity = `${opacity}`
+      root.style.filter = recedeFilter(blur, brightness)
       if (progress < 1) raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => {
       cancelAnimationFrame(raf)
-      root.style.clipPath = ''
+      root.style.removeProperty('transform')
+      if (base) root.style.transform = base
+      root.style.opacity = ''
+      root.style.filter = ''
     }
-  }, [dissolving])
+  }, [receding, enlarged])
 
   return (
     <div
@@ -84,9 +107,17 @@ export default function FileWindow({
         // of it. A root that carries `aspect-ratio` has to bar the media on one
         // axis, which is the pillarboxing the rulings rule out.
         width: windowWidthCss(ar),
+        // The enlarged size is computed in CSS from this, so the same true-frame
+        // rule holds at viewport scale: the panel grows to the largest box the
+        // window will take at the file's own ratio, and the media is neither
+        // stretched nor barred. The stylesheet cannot read the inline
+        // `aspect-ratio` off `.fw-body`, so the number is handed over as a custom
+        // property as well.
+        ['--fw-ar' as string]: `${ar}`,
       }}
       onPointerDown={onFocus}
-      data-dissolving={dissolving ? 'true' : undefined}
+      data-receding={receding ? 'true' : undefined}
+      data-enlarged={enlarged ? 'true' : undefined}
     >
       <header className="fw-titlebar">
         {/* The drag handle is the TITLE, not the whole bar. It was the bar, and
@@ -119,6 +150,33 @@ export default function FileWindow({
           {/* A still has no audio track, and no controller node to route a volume
               to. The control would be a slider that does nothing. */}
           {!isStill(file.id) && <VolumeControl value={volume} onChange={onVolume} />}
+          {/* ENLARGE / MINIMIZE — the control that replaced VIEW ON INSTAGRAM. In
+              the title bar rather than floating over the media: it is a window
+              control, it belongs with the other window controls, and the bar is
+              the one part of the frame that is not the picture.
+
+              Deliberately not the Fullscreen API. `requestFullscreen` promotes the
+              element into the browser's top layer, which takes it out of
+              `.desktop` — and the `<video>` inside it belongs to mediaController,
+              which reparents it into `.fw-body` from outside React against a slot
+              registered in this document. Growing the window to the viewport in
+              CSS keeps every one of those relationships intact, so enlarging is a
+              layout change and nothing else. See `[data-enlarged]`.
+
+              No stopPropagation — the press SHOULD reach the root's
+              focus handler, because the enlarged window is the one you are
+              looking at and focus is what gets it the full-resolution encode. It
+              is outside the drag handle, so nothing starts a drag either. */}
+          <button
+            className="fw-scale"
+            onClick={onToggleEnlarge}
+            aria-label={enlarged
+              ? `Restore ${file.name}.${file.ext} to its window size`
+              : `Enlarge ${file.name}.${file.ext} to fill the browser window`}
+            aria-pressed={enlarged}
+          >
+            <ScaleIcon enlarged={enlarged} />
+          </button>
           {/* Closes on pointerdown, not click: the press is the commit, so
               nothing downstream — a drift, a re-render, a media reconcile —
               can swallow it. `onClick` is still here for the keyboard, which
@@ -133,22 +191,16 @@ export default function FileWindow({
           </button>
         </span>
       </header>
-      {/* Floats over the media, centred on its bottom edge. Outside `.fw-body`
-          on purpose: the body is the controller's slot and its contents are
-          moved in and out from under React, so nothing of ours may live in
-          there. Positioned against the window root instead, which is why the
-          offset is the body's own height rather than simply `bottom: 16px`. */}
-      <a
-        className="fw-insta"
-        href={file.postUrl}
-        target="_blank"
-        rel="noreferrer noopener"
-        // The window raises on pointerdown; without this the link would also
-        // ride that handler and the press would read as a drag on the chrome.
-        onPointerDown={(e) => e.stopPropagation()}
-      >
-        VIEW ON INSTAGRAM
-      </a>
+      {/* The lock-on: scanlines and a roll band, over the whole frame for the
+          beat a window takes to change size. Always mounted and inert — the
+          animation is keyed off `data-locking`, which `playLockOn` sets on the
+          root for ~300ms — so there is no element to create at the exact moment
+          the compositor is busiest with the FLIP.
+
+          Outside `.fw-body`, like everything else of ours: the body is the media
+          controller's slot and its contents are moved in and out from under
+          React. */}
+      <div className="fw-lock" aria-hidden="true" />
       {/* An empty, stable slot — never a `<video>` of its own. mediaController
           moves this file's host in here and takes it away again; React only ever
           sees an empty div, which is the whole safety argument.
@@ -168,7 +220,59 @@ export default function FileWindow({
       {/* Rendered from here rather than plumbed through Desktop: the panel is
           `position: fixed` and centres on the viewport, so it does not inherit
           this window's box, and the window already knows which file it is. */}
-      {editing && <EntryEditPanel file={file} onClose={() => setEditing(false)} />}
+      {editing && (
+        <Suspense fallback={null}>
+          <EntryEditPanel file={file} onClose={() => setEditing(false)} />
+        </Suspense>
+      )}
     </div>
+  )
+}
+
+/**
+ * The enlarge/minimize glyph: four corner brackets, thrown outward to the edges
+ * of the box or pulled inward to its centre.
+ *
+ * Inline SVG on `currentColor` and a 1.5 stroke, matching `MediaKindIcon` — the
+ * title bar is set in Share Tech Mono and an icon at a different weight reads as
+ * pasted in from another interface. Corners rather than the usual arrows-in-a-box
+ * because they are the same drawing in both directions, so the two states are
+ * legibly one control that flipped rather than two unrelated symbols.
+ */
+function ScaleIcon({ enlarged }: { enlarged: boolean }) {
+  return (
+    <svg
+      className="scale-icon"
+      viewBox="0 0 16 16"
+      width="13"
+      height="13"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="square"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {enlarged ? (
+        <>
+          {/* pulled in: the same four brackets, moved off the corners, opening
+              away from the centre. The elbows sit at 5.5/10.5 rather than nearer
+              in — closer than that and the four of them touch and the glyph reads
+              as a plus sign at 13px instead of as brackets. */}
+          <path d="M5.5 2.5v3h-3" />
+          <path d="M10.5 2.5v3h3" />
+          <path d="M5.5 13.5v-3h-3" />
+          <path d="M10.5 13.5v-3h3" />
+        </>
+      ) : (
+        <>
+          {/* thrown out: the brackets hug the corners, opening away from centre */}
+          <path d="M2.5 6V2.5H6" />
+          <path d="M10 2.5h3.5V6" />
+          <path d="M13.5 10v3.5H10" />
+          <path d="M6 13.5H2.5V10" />
+        </>
+      )}
+    </svg>
   )
 }

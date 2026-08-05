@@ -127,4 +127,36 @@ describe('VideoDirector', () => {
     d.setFocus('a') // triggers apply() again; must re-issue play() for 'a'
     expect(el.play).toHaveBeenCalledTimes(2)
   })
+
+  it('setMaxPlaying pauses the surplus and resumes it when the cap lifts', () => {
+    // The enlarge case: everything but the focused window is behind an opaque
+    // picture, so its frames are spent on pixels nobody can see.
+    const d = new VideoDirector(4)
+    const els = ['a', 'b', 'c', 'd'].map((id) => ({ id, el: fake() }))
+    els.forEach(({ id, el }) => d.register(id, el))
+    d.setFocus('c')
+    expect(d.playingIds()).toEqual(['a', 'b', 'c', 'd'])
+
+    d.setMaxPlaying(1)
+    // Focus survives — the enlarged window is exactly the one that must keep going.
+    expect(d.playingIds()).toEqual(['c'])
+    // Paused, NOT unregistered: the elements are still known, so their frames are
+    // held and they resume in place rather than restarting from zero.
+    expect(els[0].el.pause).toHaveBeenCalled()
+
+    d.setMaxPlaying(4)
+    expect(d.playingIds()).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  it('setMaxPlaying is idempotent and never goes below one', () => {
+    const d = new VideoDirector(2)
+    const a = fake(), b = fake()
+    d.register('a', a); d.register('b', b)
+    a.play.mockClear(); b.play.mockClear()
+    d.setMaxPlaying(2)
+    expect(a.play).not.toHaveBeenCalled()
+    // A cap of zero would silence the surface the viewer is actually looking at.
+    d.setMaxPlaying(0)
+    expect(d.playingIds().length).toBe(1)
+  })
 })

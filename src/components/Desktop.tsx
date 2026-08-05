@@ -9,7 +9,8 @@ import { desiredPlacement } from '../lib/placement'
 import { useIsDesktop } from '../hooks/useIsDesktop'
 import { createMediaController } from '../lib/mediaController'
 import { flipMove } from '../lib/mediaMove'
-import { DISSOLVE_MS } from '../lib/dissolve'
+import { RECEDE_MS } from '../lib/recede'
+import { LOCK_MS, lockDelta, lockEase, lockIsNoop, lockTransform, type LockBox } from '../lib/lockOn'
 import { VideoDirector } from '../lib/videoDirector'
 import FileWindow from './FileWindow'
 import { MediaControllerProvider, MediaLayer } from './MediaLayer'
@@ -38,6 +39,53 @@ function playRefusal(el: HTMLElement) {
     return
   }
   animate(text, { opacity: [0, 1, 1, 0], scale: [1.04, 1], duration: REFUSAL_MS, ease: 'outQuad' })
+}
+
+/**
+ * The enlarge/minimize beat: the frame glides to its new box while a stepped
+ * scanline roll passes through it. See `lib/lockOn` for the curve and why the
+ * geometry is smooth while the overlay stutters.
+ *
+ * Driven here rather than in `FileWindow` because the pre-change box only exists
+ * before React is told about the toggle, and Desktop is where the toggle happens
+ * — it also already holds the window elements (`els`).
+ *
+ * rAF and `important`, for the same reason the recede uses them: the enlarged rule
+ * cancels transforms with `!important`, and on the way down the FLIP has to compose
+ * with the translate anime.js holds for a dragged window rather than replace it.
+ */
+function playLockOn(el: HTMLElement, from: LockBox, enlarging: boolean) {
+  if (prefersReducedMotion()) return
+  const to = el.getBoundingClientRect()
+  const delta = lockDelta(from, to)
+  if (lockIsNoop(delta)) return
+
+  // Going up, the window must end with NO transform — the enlarged rule cancels
+  // the drag offset, and composing with it here would slide the centred box off
+  // by however far it had been dragged. Coming down, the offset is the base.
+  const base = enlarging ? '' : el.style.transform
+
+  el.dataset.locking = 'true'
+  el.style.transformOrigin = '0 0'
+  // Progress 0 is written HERE, synchronously, not in the first rAF callback.
+  // This runs in a layout effect — before paint — so the window is mapped back
+  // onto its old box in the same frame that resized it. Deferring even one frame
+  // paints the new layout untransformed first: a full-size flash before the
+  // travel starts, which is exactly what a FLIP exists to prevent.
+  el.style.setProperty('transform', lockTransform(base, delta, 0), 'important')
+  const start = performance.now()
+  const step = (now: number) => {
+    const t = (now - start) / LOCK_MS
+    el.style.setProperty('transform', lockTransform(base, delta, lockEase(t)), 'important')
+    if (t < 1) { requestAnimationFrame(step); return }
+    // Hand everything back: the CSS `none` while enlarged, or anime's own inline
+    // translate. Leaving an important transform here would outrank both.
+    el.style.removeProperty('transform')
+    if (base) el.style.transform = base
+    el.style.transformOrigin = ''
+    delete el.dataset.locking
+  }
+  requestAnimationFrame(step)
 }
 
 /** The window on top, i.e. the one that plays full-res with audio available. */
@@ -83,14 +131,52 @@ export default function Desktop({
   // One controller and one director for the whole app, owned here. The director
   // is the controller's policy object, not a second decision-maker: nothing else
   // in the app constructs or calls one.
+  // Held separately from the controller so the cap can move: the controller takes
+  // the director as its policy object and never reaches back out for it.
+  const director = useMemo(() => new VideoDirector(MAX_PLAYING), [])
   const media = useMemo(
-    () => createMediaController({ animateMove: flipMove, director: new VideoDirector(MAX_PLAYING) }),
-    [],
+    () => createMediaController({ animateMove: flipMove, director }),
+    [director],
   )
   const [volumes, setVolumes] = useState<Record<string, number>>({})
   const rootRef = useRef<HTMLDivElement | null>(null)
   const nodes = useRef(new Map<string, HTMLElement>())
+  /**
+   * Every window's root element, unconditionally. `nodes` looks like this map and
+   * is not: it doubles as attachDrag's "already wired" guard, so it is emptied for
+   * a window whose draggable is torn down (the whole enlarged period). The lock-on
+   * and the dashboard's live sampler need the element precisely then, which is why
+   * they read this map and never that one.
+   */
+  const els = useRef(new Map<string, HTMLElement>())
   const scopes = useRef(new Map<string, { revert: () => void }>())
+  /** The live draggable per window — the only holder of a dragged window's position. */
+  const drags = useRef(new Map<string, ReturnType<typeof createDraggable>>())
+  /** Where each enlarged window's drag was, so restoring can put it back. */
+  const dragCoords = useRef(new Map<string, { x: number; y: number }>())
+  /** The box a window is leaving, captured on the toggle so the lock-on can FLIP. */
+  const lockFrom = useRef<{ id: string; box: LockBox | null } | null>(null)
+  /**
+   * One STABLE `bodyRef` per window, for the life of the window.
+   *
+   * An inline `(el) => media.registerSlot(...)` changes identity every render, and
+   * React refires a changed ref: the old cleanup PARKS the file (pause, detach to
+   * the attic) and the new attach restores it. Ordinary re-renders of this
+   * component were therefore pausing and resuming every window's video — measured
+   * as three pause/play cycles per enlarge toggle and two per close, each a decode
+   * stall on a slower machine. A stable identity means the ref fires once on mount
+   * and its cleanup once on unmount, which is the round trip `registerSlot` was
+   * actually designed around. Entries die with the window in `closeNow`.
+   */
+  const bodyRefs = useRef(new Map<string, (el: HTMLDivElement | null) => (() => void) | void>())
+  const bodyRefFor = (id: string) => {
+    let cb = bodyRefs.current.get(id)
+    if (!cb) {
+      cb = (el) => media.registerSlot(`window:${id}`, el)
+      bodyRefs.current.set(id, cb)
+    }
+    return cb
+  }
   const refusalRef = useRef<HTMLDivElement | null>(null)
   const refusalTimer = useRef<number | undefined>(undefined)
 
@@ -111,6 +197,19 @@ export default function Desktop({
   }, [])
 
   const open = useCallback((id: string) => {
+    // Opening while another window is enlarged brings that window down first.
+    // An enlarged portrait clip leaves the explorer visible in the margins and
+    // the scrim does not eat clicks (it is decorative), so a row can be picked —
+    // and the new window then mounted at 10+z, behind the enlarged one's 60,
+    // looking exactly like it had opened backwards. The viewer asked for a new
+    // video; the enlarged state belongs to "the thing being looked at", and that
+    // is about to be the new window. `lockFrom` is set so the way down plays the
+    // same minimize beat the button does.
+    const enlarged = enlargedRef.current
+    if (enlarged && enlarged !== id) {
+      lockFrom.current = { id: enlarged, box: els.current.get(enlarged)?.getBoundingClientRect() ?? null }
+      setEnlargedId(null)
+    }
     setWindows((cur) => {
       const area = { w: window.innerWidth, h: window.innerHeight }
       const file = fileById(id)
@@ -148,16 +247,122 @@ export default function Desktop({
   envRef.current = { isDesktop, tier }
 
   /**
-   * Windows mid-dissolve. They are still mounted and still hold their media —
-   * the close is deferred, not faked, so nothing is torn out from under the
-   * animation. Kept in state because the window has to re-render to paint.
+   * Windows mid-close, receding into the background. They are still mounted and
+   * still hold their media — the close is deferred, not faked, so nothing is torn
+   * out from under the animation. Kept in state because the window has to
+   * re-render to paint.
    */
-  const [dissolving, setDissolving] = useState<readonly string[]>([])
+  const [receding, setReceding] = useState<readonly string[]>([])
+
+  /**
+   * The one window filling the browser window, or null.
+   *
+   * Held here rather than inside `FileWindow` because Escape has to mean "come
+   * back down" before it means "close", and §4.6 gives the application exactly one
+   * window-level keydown listener — the one below — to decide that. Single-valued,
+   * so enlarging one window brings any other back down by construction.
+   */
+  const [enlargedId, setEnlargedId] = useState<string | null>(null)
+
+  const enlargedRef = useRef<string | null>(null)
+  enlargedRef.current = enlargedId
+
+  /**
+   * Enlarging also raises: the enlarged window is the one being looked at, and
+   * focus is what earns it the full-resolution encode (see `desiredPlacement`).
+   *
+   * The drag coordinates are snapshotted HERE, in the handler, rather than in the
+   * effect below. anime.js watches the window with a ResizeObserver and re-clamps
+   * its offset to keep the box inside `.desktop` — an element that has just grown
+   * to fill the viewport cannot hold any offset at all, so the position of a
+   * window that was dragged before being enlarged is destroyed about 150ms later
+   * (the observer's debounce). Reading it on the click is reading it before that.
+   */
+  const toggleEnlarge = useCallback((id: string) => {
+    // The box it is leaving, measured before React is told anything. This is the
+    // only moment it exists: a layout effect runs after the commit, when the
+    // window is already at its new size, and React has no pre-commit hook for
+    // function components. `playLockOn` needs both boxes to FLIP between.
+    lockFrom.current = { id, box: els.current.get(id)?.getBoundingClientRect() ?? null }
+    if (enlargedRef.current !== id) {
+      const drag = drags.current.get(id)
+      if (drag) dragCoords.current.set(id, { x: drag.x, y: drag.y })
+      // The draggable is TORN DOWN for the whole enlarged period, not merely
+      // ignored. Its ResizeObserver reacts to the window growing by scheduling a
+      // debounced `refresh()`, and refresh ends in `setX/setY` — a PLAIN inline
+      // transform write, which strips the `!important` off the lock-on's write
+      // and hands the property to the enlarged rule's `transform: none`. On
+      // screen that was the window snapping to full size for one frame in the
+      // middle of its own travel, ~150ms in (the observer's debounce), every
+      // time. `attachDrag` declines to re-wire while this id is enlarged, and
+      // the restore render re-wires automatically because `registerEl` refires
+      // on every render.
+      nodes.current.delete(id)
+      scopes.current.get(id)?.revert()
+      scopes.current.delete(id)
+      setEnlargedId(id)
+    } else {
+      setEnlargedId(null)
+    }
+    setWindows((cur) => focusWindow(cur, id))
+  }, [])
+
+  /**
+   * Coming back down: hand the saved offset back to anime.js.
+   *
+   * A layout effect, so the window has already been re-rendered at its cascade
+   * width — `refresh()` recomputes the drag bounds against that box, and without
+   * it `setX` would clamp against the bounds of the viewport-filling one it just
+   * left and drop the window near the top-left corner. The observer's own
+   * debounced refresh lands after this and finds nothing to change.
+   */
+  useLayoutEffect(() => {
+    for (const [id, saved] of dragCoords.current) {
+      if (id === enlargedId) continue
+      const drag = drags.current.get(id)
+      dragCoords.current.delete(id)
+      if (!drag) continue
+      drag.refresh()
+      drag.setX(saved.x)
+      drag.setY(saved.y)
+    }
+    // AFTER the offset is back, never before: on the way down the window has to
+    // end up where anime.js says it is, and `playLockOn` reads that transform as
+    // the base it animates toward.
+    const from = lockFrom.current
+    lockFrom.current = null
+    if (!from?.box) return
+    const el = els.current.get(from.id)
+    if (el) playLockOn(el, from.box, enlargedId === from.id)
+  }, [enlargedId])
+
+  /**
+   * While one window fills the browser window, only that window decodes.
+   *
+   * Everything else — the other two windows, the explorer preview, whatever the
+   * backdrop is doing — is behind an opaque picture and a blurred scrim, so its
+   * frames are being decoded, composited and blurred for pixels nobody can see.
+   * Three of the four decodes measured with a full desktop are exactly that.
+   *
+   * The cap PAUSES the surplus rather than releasing it, which is why this is
+   * cheap to reverse: a paused file holds its frame and its playhead and resumes
+   * in place, where a released one drops its `src` and restarts from zero (see
+   * `releaseFile`). Nothing about placement or layout changes, so coming back down
+   * has nothing to rebuild.
+   */
+  useEffect(() => {
+    director.setMaxPlaying(enlargedId ? 1 : MAX_PLAYING)
+  }, [director, enlargedId])
 
   const closeNow = useCallback((id: string) => {
+    // Or the id would outlive its window and re-enlarge the next window to reuse
+    // it — the slot is recycled, and this state is keyed by id.
+    setEnlargedId((cur) => (cur === id ? null : cur))
     scopes.current.get(id)?.revert()
     scopes.current.delete(id)
     nodes.current.delete(id)
+    els.current.delete(id)
+    bodyRefs.current.delete(id)
     // Closing is a reconcile, not an inverse animation. It runs synchronously
     // BEFORE setWindows so React never unmounts a body that still contains the
     // node: either a live slot still wants the file (it moves there, instantly,
@@ -170,19 +375,19 @@ export default function Desktop({
   }, [media])
 
   /**
-   * Closing is two beats now: the window dissolves where it stands, then it is
-   * actually closed. Deferred rather than animated-on-the-way-out, because the
+   * Closing is two beats: the window is pulled back into the background, then it
+   * is actually closed. Deferred rather than animated-on-the-way-out, because the
    * media node inside it belongs to the controller and `closeWindow` reconciles
-   * it away synchronously — start that first and the dissolve would be painting
-   * over a window whose contents had already left.
+   * it away synchronously — start that first and the animation would be playing
+   * on a window whose contents had already left.
    */
   const requestClose = useCallback((id: string) => {
     if (prefersReducedMotion()) { closeNow(id); return }
-    setDissolving((cur) => (cur.includes(id) ? cur : [...cur, id]))
+    setReceding((cur) => (cur.includes(id) ? cur : [...cur, id]))
     window.setTimeout(() => {
       closeNow(id)
-      setDissolving((cur) => cur.filter((x) => x !== id))
-    }, DISSOLVE_MS)
+      setReceding((cur) => cur.filter((x) => x !== id))
+    }, RECEDE_MS)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -195,6 +400,11 @@ export default function Desktop({
   // any caller that needs "grabbing must not focus".
   const attachDrag = useCallback((id: string, el: HTMLElement | null) => {
     if (!el) return
+    els.current.set(id, el)
+    // No draggable exists while this window is enlarged — see `toggleEnlarge` for
+    // why it is torn down. `registerEl` refires on every render, so without this
+    // guard the very next render would quietly wire a new one, observer and all.
+    if (enlargedRef.current === id) return
     // The ref callbacks below are inline arrows, so React detaches and re-attaches
     // them on every render. Key the guard on the node rather than on "have I ever
     // wired this id", so a re-render is a no-op but a swapped node re-wires — and
@@ -222,7 +432,11 @@ export default function Desktop({
           releaseEase: reduce ? 'outQuad' : createSpring({ stiffness: 120, damping: 14 }),
           onGrab: () => setWindows((cur) => focusWindow(cur, id)),
         })
-        return () => drag.revert()
+        // Kept so enlarging can put the drag back where it found it — see
+        // `toggleEnlarge`. anime.js is the only holder of a dragged window's
+        // position, so nothing else can restore it.
+        drags.current.set(id, drag)
+        return () => { drags.current.delete(id); drag.revert() }
       })
     scopes.current.set(id, scope)
   }, [])
@@ -234,16 +448,26 @@ export default function Desktop({
   // ArrowUp/ArrowDown/Enter are local to the explorer's row list by design.
   // Esc closes the focused window; the explorer is not a window and is
   // unreachable from here.
+  //
+  // Esc on an ENLARGED window brings it back down instead, and only then closes
+  // it on a second press. Escape means "undo the last thing that took over the
+  // screen", and one key doing both steps in order is why this state lives up here
+  // rather than in the window: two listeners would race and the window would
+  // shrink and close on the same press.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isInteractiveTarget(e)) return
       if (e.key === 'ArrowLeft') { onTabShift?.(-1); return }
       if (e.key === 'ArrowRight') { onTabShift?.(1); return }
-      if (e.key === 'Escape' && focusedId) requestClose(focusedId)
+      if (e.key !== 'Escape' || !focusedId) return
+      // Through the toggle, not straight to state: the keyboard gets the same
+      // beat, and the same drag-offset restore, as the button.
+      if (enlargedId === focusedId) { toggleEnlarge(focusedId); return }
+      requestClose(focusedId)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [focusedId, requestClose, onTabShift])
+  }, [focusedId, enlargedId, requestClose, toggleEnlarge, onTabShift])
 
   useEffect(() => () => window.clearTimeout(refusalTimer.current), [])
 
@@ -275,7 +499,7 @@ export default function Desktop({
 
   // `nodes` is a ref, so this identity is stable and reading it always sees the
   // element currently mounted for that id.
-  const windowNode = useCallback((id: string) => nodes.current.get(id) ?? null, [])
+  const windowNode = useCallback((id: string) => els.current.get(id) ?? null, [])
 
   // Top of the stack first, so the dashboard's reading order is the screen's
   // depth order. Volume comes from the controller record rather than `volumes`
@@ -302,8 +526,8 @@ export default function Desktop({
   // way the opener does — into a registry that sits above this component.
   const publishWindows = usePublishWindows()
   const view = useMemo<WindowView>(
-    () => ({ windows: openWindows, focus, close: requestClose, node: windowNode }),
-    [openWindows, focus, requestClose, windowNode],
+    () => ({ windows: openWindows, enlargedId, focus, close: requestClose, node: windowNode }),
+    [openWindows, enlargedId, focus, requestClose, windowNode],
   )
   useEffect(() => {
     publishWindows(view)
@@ -317,7 +541,16 @@ export default function Desktop({
   return (
     <DesktopContext.Provider value={api}>
       <MediaControllerProvider value={media}>
-        <div className="desktop" ref={rootRef} data-refusing={refusing ? 'true' : undefined}>
+        {/* `data-enlarged` is on the desktop as well as on the window: the scrim
+            that dims and blurs everything behind an enlarged window is one layer
+            under it, not something each window can own, because only one window
+            is ever enlarged. */}
+        <div
+          className="desktop"
+          ref={rootRef}
+          data-refusing={refusing ? 'true' : undefined}
+          data-enlarged={enlargedId ? 'true' : undefined}
+        >
           <MediaLayer controller={media} />
           {children}
           {windows.map((w) => {
@@ -329,15 +562,17 @@ export default function Desktop({
                 file={file}
                 x={w.x} y={w.y} z={w.z}
                 focused={focusedId === w.id}
-                dissolving={dissolving.includes(w.id)}
+                receding={receding.includes(w.id)}
+                enlarged={enlargedId === w.id}
                 // Hydrated from the controller record, which outlives the window:
                 // adopting a node already at 0.6 renders VOL 060, not 000.
                 volume={volumes[w.id] ?? media.stateOf(w.id).volume}
                 onVolume={(v) => setVolume(w.id, v)}
                 onFocus={() => setWindows((cur) => focusWindow(cur, w.id))}
                 onClose={() => requestClose(w.id)}
+                onToggleEnlarge={() => toggleEnlarge(w.id)}
                 registerEl={(el) => attachDrag(w.id, el)}
-                bodyRef={(el) => media.registerSlot(`window:${w.id}`, el)}
+                bodyRef={bodyRefFor(w.id)}
               />
             )
           })}

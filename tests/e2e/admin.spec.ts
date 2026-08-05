@@ -164,10 +164,14 @@ test.describe('admin tools', () => {
     const panel = page.locator('.admin-panel')
 
     const field = panel.locator('.admin-field').filter({ hasText: 'REPLACE FILE' })
-    await expect(field.locator('.admin-note')).toContainText('LEAVE EMPTY')
+    // The empty state is the picker's own label now (the styled row that replaced
+    // the native "Choose File" widget), and the note appears only once a file is
+    // picked — an always-on caption under an empty picker said nothing.
+    await expect(field.locator('.file-picker-name')).toContainText('LEAVE EMPTY')
     await field.locator('input[type="file"]').setInputFiles({
       name: 'replacement.mp4', mimeType: 'video/mp4', buffer: Buffer.alloc(1024, 7),
     })
+    await expect(field.locator('.file-picker-name')).toContainText('replacement.mp4')
     // Overwriting the renditions is not obvious from a file picker, so it says so.
     await expect(field.locator('.admin-note')).toContainText('OVERWRITTEN')
     await expect(panel.locator('.admin-hint')).toContainText('SELECTED')
@@ -190,9 +194,13 @@ test.describe('admin tools', () => {
     // the scrubber a preview rather than a slider with a number beside it.
     await expect(editor.locator('.thumb-frame video')).toHaveCount(1)
     await editor.locator('.thumb-slider input').first().fill('7.5')
+    // 10s, not the default 5: this waits on a real video seek, and with three
+    // browser projects decoding in parallel the machine can take most of the
+    // default budget before the seek is even scheduled. The seek itself is not
+    // the behaviour under test — where it lands is.
     await expect.poll(async () =>
       Number(await editor.locator('.thumb-frame video').evaluate((v: HTMLVideoElement) => v.currentTime)),
-    ).toBeGreaterThan(7)
+    { timeout: 10_000 }).toBeGreaterThan(7)
 
     // Zoom is applied as the transform the pipeline's crop is derived from.
     await editor.locator('.thumb-slider input').nth(1).fill('2.4')

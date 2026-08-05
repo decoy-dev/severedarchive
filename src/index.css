@@ -1,5 +1,8 @@
 @import 'tailwindcss';
-@import '@fontsource/share-tech-mono';
+/* Share Tech Mono was retired for VT323 (owner's call) and its @fontsource
+   import is gone with it: no font-family referenced it, so its files shipped in
+   every build without ever being fetched. Bringing the face back = reinstall
+   `@fontsource/share-tech-mono`, re-import, and drop the type tokens 3px. */
 @import '@fontsource/vt323'; /* EXPERIMENT — see --mono below */
 @import '@fontsource/archivo-black/latin-400.css';
 
@@ -287,18 +290,31 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .tw-dot {
   flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%;
   background: var(--acid); box-shadow: 0 0 6px rgba(182, 255, 46, 0.5);
-  animation: session-blink 5s steps(1, end) infinite;
+  animation: session-blink 5s linear infinite;
+  /* The RECHARGE: out of the blink, the dot climbs back to full green over
+     ~1.6s instead of snapping. Ease-out, because that is what charging looks
+     like — most of the level early, the last of it asymptotic. The blink
+     itself must stay a snap (it is a blink, not a fade), which is why the
+     `off` state below carries its own near-instant transition override. */
+  transition: opacity 1600ms cubic-bezier(0.16, 0.6, 0.35, 1), box-shadow 1600ms cubic-bezier(0.16, 0.6, 0.35, 1);
 }
+/* `linear`, not `steps(1)`: the keyframes are the whole animation on lite tier
+   and under reduced motion, and the recharge has to exist there too. The drop
+   is a 50ms segment (4%→5%), so it still reads as a blink; the climb back is
+   8%→38%, the same ~1.5s the transition gives the JS-driven path. */
 @keyframes session-blink {
   0%, 4% { opacity: 1; }
-  5%, 9% { opacity: 0.25; }
-  10%, 100% { opacity: 1; }
+  5%, 8% { opacity: 0.25; }
+  38%, 100% { opacity: 1; }
 }
 /* The blink, driven from the canvas loop rather than by a second animation, so
    the dot going dark and the wave leaving are the same instant. `SessionPulse`
    turns the keyframes above off when it takes over; they remain the behaviour
    on lite tier and under reduced motion, where the wave never runs. */
-.tw-dot[data-blink='off'] { opacity: 0.16; box-shadow: none; }
+.tw-dot[data-blink='off'] {
+  opacity: 0.16; box-shadow: none;
+  transition: opacity 40ms linear, box-shadow 40ms linear;
+}
 /* Grain, not glow: the buffer is a quarter-scale image stretched back up, and
    `pixelated` is what keeps the cells hard-edged instead of interpolating them
    into a soft gradient. */
@@ -705,7 +721,13 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .dash-row {
   flex: 1 1 0; min-height: 0; display: flex; align-items: stretch;
   border: 1px solid var(--hair); background: rgba(0, 0, 0, 0.5);
+  /* Rows animate their flex-grow in and out; without this the card's contents
+     paint at full size outside a shrinking row. */
+  overflow: hidden;
 }
+/* A card mid-exit is a readout of a window that no longer exists: inert, and
+   its frozen telemetry is the point, not a bug to keep updating. */
+.dash-row[data-dash-leaving] { pointer-events: none; }
 .dash-row-main {
   flex: 1 1 auto; min-width: 0; text-align: left;
   display: flex; flex-direction: column; gap: 6px;
@@ -960,6 +982,40 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .admin-again:hover, .admin-again:focus-visible {
   color: var(--acid); border-color: var(--hair); outline: none;
 }
+/* ── the file picker ──
+   A styled row over a visually-hidden native input. The input keeps the OS
+   dialog, keyboard focus and the form mechanics; the row is what is drawn,
+   because the native "Choose File — No file chosen" widget ignores every token
+   this interface is set in. Hidden with the sr-only recipe rather than
+   `display:none`, or the input would drop out of the tab order and take its
+   focus ring with it. */
+.file-picker { display: block; min-width: 0; }
+.file-picker-input {
+  position: absolute; width: 1px; height: 1px; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+.file-picker-row {
+  display: flex; align-items: center; gap: 12px; min-width: 0;
+  padding: 8px 10px; cursor: pointer;
+  background: rgba(0, 0, 0, 0.45); border: 1px solid var(--hair-bright);
+}
+.file-picker-row:hover { border-color: var(--acid); }
+.file-picker-row:hover .file-picker-cta { color: var(--acid); border-color: var(--acid); }
+/* The input is where focus actually lands; the row is what shows it. */
+.file-picker-input:focus-visible + .file-picker-row { border-color: var(--acid); }
+.file-picker-cta {
+  flex: 0 0 auto; padding: 3px 10px;
+  font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--text);
+  border: 1px solid var(--hair-bright);
+}
+.file-picker-name {
+  flex: 1 1 auto; min-width: 0;
+  font-size: var(--fs-xs); letter-spacing: 0.04em; color: var(--bright);
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.file-picker-name[data-empty] { color: var(--dim); letter-spacing: 0.08em; }
+.file-picker-size { flex: 0 0 auto; font-size: var(--fs-xs); color: var(--dim); letter-spacing: 0.06em; }
+
 .admin-form { display: inline-flex; align-items: center; gap: 8px; }
 .admin-label { font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--dim); }
 .admin-input {
@@ -1009,8 +1065,14 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   display: flex; flex-direction: column;
   overflow: hidden;
 }
-.admin-head[data-admin-drag] { cursor: grab; }
-.admin-head[data-admin-drag]:active { cursor: grabbing; }
+/* The handle is the title (or the title+subject wrapper), never the bar: the bar
+   contains the tabs and the ✕, and a drag trigger that contains a control eats
+   any drifting click on it — anime takes pointer capture on the trigger, and the
+   click is delivered to the capture target instead of the button. The handle
+   stretches to fill the bar's free space, so the grabbable area is still every
+   part of the bar that is not a control, which is what it looks like. */
+[data-admin-drag] { cursor: grab; }
+[data-admin-drag]:active { cursor: grabbing; }
 .admin-head {
   display: flex; align-items: center; gap: 16px;
   padding: 0 14px; height: 46px; flex: 0 0 auto;
@@ -1018,6 +1080,17 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   position: relative; z-index: 2;
 }
 .admin-title { font-size: var(--fs-sm); letter-spacing: 0.08em; color: var(--bright); }
+/* The PUBLISH panel's handle: the title fills the space up to the tabs. Height
+   matches the bar so the target is the full strip, not a text-height sliver. */
+.admin-title[data-admin-drag] {
+  flex: 1 1 auto; align-self: stretch;
+  display: inline-flex; align-items: center;
+}
+/* The EDIT panel's handle: title + subject + the slack before the ✕. */
+.admin-grab {
+  flex: 1 1 auto; min-width: 0; align-self: stretch;
+  display: inline-flex; align-items: center; gap: 16px;
+}
 .admin-tabs { display: flex; gap: 0; margin-left: auto; }
 .admin-tabs button {
   padding: 6px 12px; font-size: var(--fs-xs); letter-spacing: 0.06em;
@@ -1044,6 +1117,86 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .admin-field input:focus-visible, .admin-field select:focus-visible,
 .admin-field textarea:focus-visible, .admin-json:focus-visible { outline: none; border-color: var(--acid); }
 .admin-json { grid-column: 1 / -1; min-height: 300px; resize: vertical; line-height: 1.5; }
+
+/* ── the ABOUT/LINKS editor ──
+   Fields over `content.json`, in the same idiom as the rest of the panel: hairline
+   boxes, VT323, uppercase labels, acid only on focus and hover. It replaced a raw
+   JSON textarea (`.admin-json`, still used for the RAW view and for a file the form
+   cannot model) — see `ContentEditor`.
+
+   The list is the only scrolling region: the panel's own height is fixed by its
+   header and the COMMIT button, and with a dozen blocks in it the button would
+   otherwise be pushed off the bottom of the screen where it cannot be reached. */
+.content-editor { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ce-modes { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ce-modes button {
+  font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--dim);
+  border: 1px solid var(--hair); padding: 3px 10px;
+}
+.ce-modes button.is-active { color: var(--acid); border-color: var(--acid); }
+.ce-modes button:hover:not(:disabled), .ce-modes button:focus-visible:not(:disabled) {
+  color: var(--bright); border-color: var(--hair-bright); outline: none;
+}
+.ce-modes button:disabled { color: rgba(255, 255, 255, 0.18); border-color: var(--hair); cursor: default; }
+.ce-note { font-size: var(--fs-xs); letter-spacing: 0.06em; color: var(--acid); }
+
+.ce-scroll {
+  display: flex; flex-direction: column; gap: 18px;
+  max-height: 52vh; overflow-y: auto; padding-right: 6px;
+}
+.ce-section { display: flex; flex-direction: column; gap: 10px; }
+.ce-head {
+  font: inherit; font-size: var(--fs-xs); letter-spacing: 0.16em; color: var(--bright);
+  border-bottom: 1px solid var(--hair); padding-bottom: 5px; margin: 0;
+}
+.ce-empty { font-size: var(--fs-xs); letter-spacing: 0.06em; color: var(--dim); margin: 0; }
+.ce-item {
+  display: flex; flex-direction: column; gap: 8px;
+  border: 1px solid var(--hair); padding: 10px; background: rgba(0, 0, 0, 0.22);
+}
+.ce-item-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+/* The block's position in the list, which is the order it renders in on the page.
+   Zero-padded, like every other index in this interface. */
+.ce-index { font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--dim); }
+.ce-inline { display: inline-flex; align-items: center; gap: 6px; }
+.ce-inline > span { font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--dim); }
+.ce-inline select {
+  font: inherit; font-size: var(--fs-xs); letter-spacing: 0.06em;
+  color: var(--bright); background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--hair-bright); padding: 3px 6px;
+}
+.ce-inline input[type='checkbox'] { accent-color: var(--acid); }
+.ce-inline select:focus-visible, .ce-inline input:focus-visible { outline: none; border-color: var(--acid); }
+/* Pushed to the end of the bar: reordering and deleting are the destructive pair,
+   and they should not sit next to the field the eye lands on first. */
+.ce-ctl { margin-left: auto; display: inline-flex; gap: 4px; }
+.ce-ctl button {
+  width: 26px; height: 24px; font-size: var(--fs-xs); color: var(--dim);
+  border: 1px solid var(--hair);
+}
+.ce-ctl button:hover:not(:disabled), .ce-ctl button:focus-visible:not(:disabled) {
+  color: var(--acid); border-color: var(--acid); outline: none;
+}
+.ce-ctl button:disabled { color: rgba(255, 255, 255, 0.16); cursor: default; }
+.ce-ctl .ce-del:hover, .ce-ctl .ce-del:focus-visible { color: #ff5b5b; border-color: #ff5b5b; }
+
+.ce-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ce-field > span { font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--dim); }
+.ce-field input, .ce-field textarea {
+  font: inherit; font-size: var(--fs-xs); letter-spacing: 0.04em; line-height: 1.5;
+  color: var(--bright); background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--hair-bright); padding: 6px 8px; min-width: 0;
+  resize: vertical;
+}
+.ce-field input:focus-visible, .ce-field textarea:focus-visible { outline: none; border-color: var(--acid); }
+.ce-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+@media (max-width: 560px) { .ce-pair { grid-template-columns: minmax(0, 1fr); } }
+.ce-add {
+  align-self: start; padding: 5px 12px;
+  font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--dim);
+  border: 1px dashed var(--hair-bright);
+}
+.ce-add:hover, .ce-add:focus-visible { color: var(--acid); border-color: var(--acid); outline: none; }
 .admin-submit {
   grid-column: 1 / -1; justify-self: start;
   padding: 8px 20px; font-size: var(--fs-xs); letter-spacing: 0.1em;
@@ -1064,7 +1217,11 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .admin-status[data-kind='error'] { color: var(--bright); }
 .admin-status[data-kind='busy'] { color: var(--dim); }
 /* The file being edited, named in the panel's header beside the mode. */
-.admin-subject { font-size: var(--fs-xs); letter-spacing: 0.06em; margin-right: auto; }
+/* No margin-right:auto any more — the .admin-grab wrapper owns the slack now. */
+.admin-subject {
+  font-size: var(--fs-xs); letter-spacing: 0.06em;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
 .admin-note {
   font-size: var(--fs-xs); letter-spacing: 0.05em; color: var(--dim); font-style: normal;
 }
@@ -1169,11 +1326,185 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 }
 .fw-edit:hover, .fw-edit:focus-visible { color: var(--acid); background: rgba(182, 255, 46, 0.08); outline: none; }
 
-/* The dissolve clips the window rather than drawing on it — see
-   `dissolveClipPath`. The whole panel comes apart: chrome, glass fill, media and
-   all, with the desktop showing through the holes. Nothing in a closing window
-   is pressable while it goes. */
-.file-window[data-dissolving] { pointer-events: none; }
+/* ENLARGE / MINIMIZE, in the title bar. Same 40px-tall target as ✕ and EDIT, and
+   for the same reason. */
+.fw-scale {
+  color: var(--dim);
+  width: 34px; height: 40px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.fw-scale:hover, .fw-scale:focus-visible { color: var(--acid); background: rgba(182, 255, 46, 0.08); outline: none; }
+/* Enlarged is a state, so the control that holds it reads as held. */
+.fw-scale[aria-pressed='true'] { color: var(--bright); }
+.scale-icon { display: block; }
+
+/* ── enlarged: the window takes the whole browser window ──
+   Still `.desktop`'s absolutely-positioned child, not the browser's fullscreen
+   top layer — the media inside is reparented into `.fw-body` from outside React
+   by mediaController, and promoting the element would take that slot out of the
+   document it was registered in. Enlarging is a layout change and nothing else.
+
+   `!important` throughout, because every property here overrides an INLINE one:
+   the cascade position (left/top) and the true-frame width are written on the
+   element by `FileWindow`, and the transform is written by anime.js's draggable.
+
+   The size is the largest box the viewport will take AT THE FILE'S OWN RATIO
+   (`--fw-ar`, handed over from the same generated metadata as the width). That is
+   the true-frame ruling applied at viewport scale: the picture grows until it
+   runs out of room on one axis, and it is never stretched and never barred. The
+   desktop shows around it on the other axis, which is a margin, not a pillarbox.
+   Width comes off the shorter axis; height falls out of `.fw-body`'s inline
+   aspect-ratio, exactly as it does at cascade size. */
+.file-window[data-enlarged='true'] {
+  inset: 0 !important;
+  margin: auto !important;   /* with inset:0 on both axes, this centres the box */
+  width: min(
+    calc(100dvw - var(--fw-frame, 2px)),
+    calc((100dvh - var(--fw-chrome, 42px)) * var(--fw-ar, 1.7777))
+  ) !important;
+  height: fit-content !important;
+  /* Above the other two windows and above the wordmark overprint. */
+  z-index: 60 !important;
+  /* Cancels the drag offset. A window dragged to a corner and then enlarged would
+     otherwise be translated off the viewport by that same offset — the transform
+     applies after layout, so `inset: 0` cannot undo it. anime.js keeps its own
+     x/y, so restoring returns the window to where it was left. */
+  transform: none !important;
+}
+/* Title bar height (40px) + the glass border top and bottom. Named so the
+   arithmetic above says what it is measuring. */
+.file-window { --fw-chrome: 42px; --fw-frame: 2px; }
+/* ── the lock-on: what a window plays while it changes size ──
+   A display re-locking onto a new mode, in the vocabulary the rest of the app
+   already speaks: the same 1px-on-3px scanlines as `.terminal-window::after`, a
+   band rolling through once, and `steps()` so nothing about it glides. The travel
+   itself is a stepped FLIP in `lib/lockOn` — this is the surface treatment over
+   the top of it.
+
+   Inert until `data-locking` appears on the window root: opacity 0, no animation,
+   nothing composited. The element is always mounted rather than conditionally
+   rendered, so no node has to be created at the moment the compositor is already
+   scaling the whole window.
+
+   z 5 puts it over the media (2) and the title bar (4), and under the (i) panel
+   (6) — which cannot be open during a resize anyway, but the order should not
+   depend on that. */
+.fw-lock {
+  position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  overflow: hidden; opacity: 0;
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.42) 0 1px, transparent 1px 3px);
+}
+/* The roll band: acid at its edges, near-white at its core, because that is the
+   accent this interface flashes with. Travels top to bottom exactly once. */
+.fw-lock::after {
+  content: ''; position: absolute; left: 0; right: 0; height: 26%;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(182, 255, 46, 0.16) 34%,
+    rgba(255, 255, 255, 0.3) 50%,
+    rgba(182, 255, 46, 0.16) 66%,
+    transparent 100%
+  );
+  transform: translateY(-140%);
+}
+.file-window[data-locking] .fw-lock { animation: lock-lines 300ms steps(9, end) both; }
+.file-window[data-locking] .fw-lock::after { animation: lock-roll 300ms steps(9, end) both; }
+/* Full strength while the frame is travelling, gone by the time it lands: the
+   treatment is the switch, not a state the window sits in afterwards. */
+@keyframes lock-lines { 0% { opacity: 0.9 } 62% { opacity: 0.75 } 100% { opacity: 0 } }
+@keyframes lock-roll { from { transform: translateY(-140%) } to { transform: translateY(500%) } }
+@media (prefers-reduced-motion: reduce) {
+  /* `playLockOn` returns before it can set `data-locking`, so these never run.
+     Stated anyway: the attribute is written imperatively, and a guard that
+     depends on a JS early-return is a guard that can be removed by accident. */
+  .file-window[data-locking] .fw-lock,
+  .file-window[data-locking] .fw-lock::after { animation: none; }
+}
+
+/* ── the scrim behind an enlarged window ──
+   Only one window can be enlarged at a time, so this is a single layer rather
+   than anything per-window: `.desktop` says whether one is up, and this sits
+   directly under it at z 59 against the window's 60.
+
+   It darkens AND blurs, because the two answer different problems. The dim is
+   for the other windows and the explorer, which are glass and would otherwise
+   keep competing at full contrast beside a full-screen picture. The blur is for
+   the footage — the backdrop video is still playing behind everything, and a
+   motion picture behind a motion picture reads as two things fighting however
+   dark you make it.
+
+   `backdrop-filter` samples everything painted beneath, whatever the index says,
+   so this catches the backdrop layer, the glass margin and the overprint wordmark
+   as well as the desktop's own contents — all of which paint below `.desktop`.
+   -webkit- first: Lightning CSS collapses the duplicate pair to whichever is
+   LAST, so the standard property has to come second or the build strips it.
+
+   Generated only while a window is enlarged — an always-present full-viewport
+   backdrop-filter surface would cost GPU work on every frame of a page that is
+   already playing up to five videos, whether or not it is visible. That is also
+   why the fade-in is a keyframe animation rather than a transition: there is no
+   previous state to transition FROM when the element does not exist yet. */
+.desktop[data-enlarged='true']::after {
+  content: ''; position: absolute; inset: 0; z-index: 59; pointer-events: none;
+  /* The dim compounds: the filter's brightness multiplies what is behind, and the
+     fill then sits over the result — measured together, not by either number
+     alone. 0.62 over brightness(0.7) left ~27% of the original light, which read
+     as the interface having been switched off rather than pushed back. These
+     leave ~38%: enough that the explorer and the wordmark are still legibly
+     THERE, blurred, behind the picture. */
+  background: rgba(3, 5, 7, 0.52);
+  -webkit-backdrop-filter: blur(16px) saturate(0.75) brightness(0.8);
+  backdrop-filter: blur(16px) saturate(0.75) brightness(0.8);
+  animation: enlarge-scrim 220ms ease both;
+}
+@keyframes enlarge-scrim { from { opacity: 0 } to { opacity: 1 } }
+@media (prefers-reduced-motion: reduce) {
+  .desktop[data-enlarged='true']::after { animation: none; }
+}
+
+/* Dragging an enlarged window is meaningless — it has nowhere to go, and the
+   transform that would move it is cancelled above, so a drag would silently
+   accumulate an offset that only appears on restore. */
+.file-window[data-enlarged='true'] .fw-title { cursor: default; pointer-events: none; }
+
+/* The close: the panel is pulled back into the background until it is gone. The
+   scale and opacity are written per frame by `FileWindow` (they have to compose
+   with the drag transform, which a CSS animation would overwrite); what belongs
+   here is where it shrinks toward, and that nothing in a closing window is
+   pressable while it goes. */
+.file-window[data-receding] {
+  pointer-events: none; transform-origin: 50% 50%;
+  will-change: transform, opacity, filter;
+}
+
+/* While a window is mid-lock or mid-recede its glass goes flat. `backdrop-filter`
+   is resampled whenever the element's box moves over new pixels, so a surface
+   that is being scaled every frame re-runs a viewport-sized blur every frame —
+   that IS the lag on older GPUs, not the transform. The translucent fill stays,
+   so nothing pops; only the blur behind a fast-moving frame vanishes, which is
+   not something an eye tracking that frame can see. Restored the moment the
+   attribute comes off. */
+.file-window[data-locking],
+.file-window[data-receding] {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* On the lite tier the recede keeps its shrink and fade but drops its blur: a
+   per-frame `filter: blur()` re-rasterises the whole window each step, which is
+   the class of work this tier exists to refuse. Inline style loses to
+   !important, so this wins over what FileWindow writes. */
+[data-tier='lite'] .file-window[data-receding] { filter: none !important; }
+
+/* Same trade for the scrim behind an enlarged window: on lite the backdrop is a
+   static poster and the glass is already flat, so the blur has nothing moving to
+   quiet — a heavier plain dim does the whole job for free. */
+[data-tier='lite'] .desktop[data-enlarged='true']::after {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: rgba(3, 5, 7, 0.78);
+}
 
 /* The (i) control and its panel. Used in the window title bar and on dashboard
    cards, so it positions against itself rather than against either host. */
@@ -1210,33 +1541,6 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   white-space: normal; overflow-wrap: anywhere;
 }
 
-/* The VIEW ON INSTAGRAM popout: a small floating plate on the bottom edge of
-   the media, centred. It sits above the body (z 3 against the body's 2) and is
-   a sibling of it, because the body is the media controller's slot and nothing
-   of ours may be inside it. */
-.fw-insta {
-  position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
-  z-index: 3;
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 8px 14px; white-space: nowrap;
-  font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--text);
-  background: rgba(6, 9, 11, 0.72); border: 1px solid var(--hair-bright);
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  /* Fades up with the window rather than sitting on the media at full strength
-     the whole time — it is an offer, not a caption. */
-  opacity: 0.72; transition: opacity 140ms ease, color 140ms ease, border-color 140ms ease;
-}
-.file-window:hover .fw-insta { opacity: 1; }
-.fw-insta:hover, .fw-insta:focus-visible {
-  opacity: 1; color: var(--acid); border-color: var(--acid); outline: none;
-}
-/* A portrait window is ~250px wide and the label is 17 characters; let it shrink
-   rather than push the plate past the frame. */
-.fw-insta { max-width: calc(100% - 28px); overflow: hidden; text-overflow: ellipsis; }
-@media (prefers-reduced-motion: reduce) {
-  .fw-insta { transition: none; }
-}
-
 /* True-frame: `aspect-ratio` is set inline from generated metadata and the body
    is the element that carries it, so the window root's height is body + title bar
    + border and nothing is ever barred. flex-basis stays `auto` and the item does
@@ -1269,8 +1573,20 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
     repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.24) 0 1px, rgba(0, 0, 0, 0) 1px 3px),
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/></filter><rect width='120' height='120' filter='url(%23n)' opacity='0.24'/></svg>");
   background-size: auto, 120px 120px;
-  -webkit-backdrop-filter: saturate(0.7) contrast(1.05) brightness(0.95);
-  backdrop-filter: saturate(0.7) contrast(1.05) brightness(0.95);
+  /* A flat veil, NOT `backdrop-filter: saturate(0.7) contrast(1.05) brightness(0.95)`.
+     That is what this used to be, and it was the most expensive surface on the
+     page per pixel it changed: a backdrop-filter samples what is beneath it, and
+     what is beneath it here is a PLAYING video, so it re-ran over the whole body of
+     every unfocused window on every frame of that video — two of them with a full
+     desktop, over the two nearly-viewport-sized glass blurs already doing the same.
+     A veil is composited once and never resamples.
+
+     The look survives because the desaturation was never what carried it: the
+     scanlines and the grain above do that, and this cools and dims what shows
+     between them. Compared against the filtered version at 1440×900 on file01, the
+     brightest clip in the archive, which is where a flat colour would show itself
+     if it were going to. */
+  background-color: rgba(9, 14, 18, 0.22);
   opacity: 1;
   transition: opacity 200ms ease;
 }
@@ -1280,29 +1596,51 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 }
 
 
-/* ── cap refusal: the page blows out, the type stays black ──
-   Not a white fill over the top: the whole stage has its brightness driven up
-   hard for a beat, as if the signal were overdriven, and BUFFER FULL reads as a
-   hole punched in it. Black survives any brightness multiplier (0 × n is still
-   0), which is why the type stays legible at the peak instead of washing out
-   the way a light colour would.
+/* ── cap refusal: the whole page photo-negates, the type punches through ──
+   Not a white fill over the top: the stage itself is inverted for a beat, as if
+   the signal had flipped, and BUFFER FULL reads as a hole in it.
+
+   `invert()`, NOT the `contrast()`/`brightness()` blowout this replaced. That
+   version drove the stage to near-white, and at the peak the whole viewport WAS
+   white with no type visible at all — verified in pixels. The reason is pipeline
+   order: `.refusal-text` blends with `difference` INSIDE the stage, so it resolves
+   against the dark video first and comes out white, and the stage filter then
+   multiplied white by 3.8 and washed it away. Every legibility argument for that
+   version was about a black glyph that never existed.
+
+   Inverting fixes it at the same point it broke. The differenced fill is white
+   going into the filter, so the invert flips it to black at exactly the instant it
+   flips the near-black interface to near-white: black type, light page, maximum
+   contrast, and the acid green reads as violet for the beat — the inversion is the
+   effect rather than a side effect of it.
+
+   Portalling the type out of `.stage` to escape the filter was tried first and is
+   a dead end: `.stage` composites separately (fixed position, `backdrop-filter`
+   descendants), and `mix-blend-mode` does not cross that boundary — at body level
+   the word renders flat white even over bright thumbnails, blend or no blend.
 
    `:has()` rather than a class on .stage: the refusal is Desktop's state, and
    this is how the stage reacts to it without App having to hold a flag it does
    not otherwise care about. */
 .stage:has(.desktop[data-refusing='true']) {
-  animation: buffer-blowout 450ms steps(60, end);
+  animation: buffer-negate 450ms steps(60, end);
 }
-/* `contrast()` BEFORE `brightness()`, and both are load-bearing in that order.
-   Filters apply left to right: dropping contrast first lifts the blacks off the
-   floor so the multiply has something to work with, and a near-black clip then
-   blows out along with everything else. Brightness alone left the darkest video
-   dark, and the black type vanished against exactly the surface it was supposed
-   to punch through. */
-@keyframes buffer-blowout {
+/* `invert()` stays at 1 for the whole beat rather than ramping — a partial
+   invert is grey mush — so the LIFE of the flash is carried by the brightness
+   envelope inside it: a hot attack, then a long decay across the whole beat,
+   the shape of an overdriven signal settling. The first cut of this held
+   brightness nearly constant and released in three frames, and the owner read
+   it exactly right: a square pulse that "snaps" in and out, where the old
+   blowout flashed and then audibly died away. The decay is most of the
+   animation now, and the release leaves from an already-dimmed inverted frame
+   (0.86) so the flip back to the dark interface crosses a smaller luminance
+   gap than it would from full brightness. */
+@keyframes buffer-negate {
   0%   { filter: none; }
-  8%   { filter: contrast(0.32) brightness(3.8) saturate(0.5); }
-  55%  { filter: contrast(0.6) brightness(2) saturate(0.8); }
+  5%   { filter: invert(1) brightness(1.55) saturate(0.4); }
+  30%  { filter: invert(1) brightness(1.12) saturate(0.6); }
+  70%  { filter: invert(1) brightness(0.98) saturate(0.75); }
+  92%  { filter: invert(1) brightness(0.86) saturate(0.85); }
   100% { filter: none; }
 }
 .refusal { position: absolute; inset: 0; z-index: 50; pointer-events: none; display: grid; place-items: center; }
@@ -1311,12 +1649,17 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   font-family: var(--display);   /* sanctioned display exception — wordmark + this */
   font-size: clamp(48px, 9vw, 160px);
   letter-spacing: -0.03em;
-  /* Inverted against whatever is behind it, rather than a fixed colour with a
-     shadow propping it up. The blowout runs the stage from near-black to
-     near-white inside 450ms and the archive itself runs from a dark clip to a
-     pale mint, so no single ink is legible across all of it. `difference` on
-     white gives black type over a light frame and white over a dark one,
-     automatically, at every instant of the flash. */
+  /* Inverted against whatever is behind it, rather than a fixed ink. The archive
+     runs from a near-black clip to a pale mint, so no single colour is legible
+     across all of it; `difference` on white gives white type over a dark frame and
+     black over a light one, automatically. The negate flash then inverts that
+     result along with the rest of the page — see `buffer-negate`, which is what
+     makes the word land black on white at the peak.
+
+     No outline. A 3px black `-webkit-text-stroke` layer was added over the top of
+     this and removed again at the owner's request: with the flash inverting
+     properly the fill carries itself, and the stroke was propping up type that no
+     longer needed it. */
   color: #ffffff;
   mix-blend-mode: difference;
 }

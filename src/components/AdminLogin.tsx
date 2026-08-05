@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { ADMIN_API, useAdminSession } from '../lib/adminSession'
-import AdminPanel from './AdminPanel'
+import { Suspense, lazy } from 'react'
+
+/**
+ * Code-split: everything behind the passcode — the upload form, the thumbnail
+ * editor, the content editor — is for exactly one person, and every other
+ * visitor was shipping it in the main bundle. `lazy` is fine HERE, unlike the
+ * ABOUT object: that ban exists because Suspense holds its fallback ~300ms on a
+ * hot visible path, and this panel opens from a deliberate owner click where a
+ * beat of nothing before the form is imperceptible.
+ */
+const AdminPanel = lazy(() => import('./AdminPanel'))
 
 /**
  * The way in to the admin backend: a passcode, checked by the Worker, and then
@@ -80,7 +90,7 @@ export default function AdminLogin() {
     // Closing the panel does NOT sign out: the admin tools in the window bars
     // are the point of staying signed in, and the passcode should not have to be
     // retyped to edit a second file.
-    return <AdminPanel onClose={() => setState('closed')} />
+    return <Suspense fallback={null}><AdminPanel onClose={() => setState('closed')} /></Suspense>
   }
 
   const endSession = () => {

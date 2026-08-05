@@ -1,4 +1,4 @@
-import { createContext, useContext, useSyncExternalStore } from 'react'
+import { createContext, useContext, useRef, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { fullSrc, posterSrc, thumbSrc } from '../data/archive'
 import type { MediaController } from '../lib/mediaController'
@@ -43,6 +43,35 @@ export function useMediaController(): MediaController | null {
  */
 export function MediaLayer({ controller }: { controller: MediaController }) {
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot)
+
+  /**
+   * One STABLE ref callback per file, minted on first render and reused for the
+   * element's whole life.
+   *
+   * An inline `(el) => controller.attachVideo(id, el)` changes identity every
+   * render, and React refires a changed ref: cleanup, then attach. The cleanup is
+   * `director.unregister`, which pauses a playing element — so every snapshot
+   * notify paused every video on the page for a beat and played it again.
+   * Measured on an enlarge: three pause/play cycles per toggle, each one a real
+   * decode stall on a slower machine. A stable identity means React fires the ref
+   * once on mount and keeps its returned cleanup for unmount, which is exactly
+   * the contract `attachVideo` was written for.
+   *
+   * Entries are deleted when a file leaves the snapshot, so a released file does
+   * not pin its closure forever.
+   */
+  const videoRefs = useRef(new Map<string, (el: HTMLVideoElement | null) => () => void>())
+  const refFor = (id: string) => {
+    let cb = videoRefs.current.get(id)
+    if (!cb) {
+      cb = (el) => controller.attachVideo(id, el)
+      videoRefs.current.set(id, cb)
+    }
+    return cb
+  }
+  const live = new Set(snapshot.fileIds)
+  for (const id of videoRefs.current.keys()) if (!live.has(id)) videoRefs.current.delete(id)
+
   return (
     <>
       {snapshot.fileIds.map((id) =>
@@ -52,7 +81,7 @@ export function MediaLayer({ controller }: { controller: MediaController }) {
             loop
             playsInline
             autoPlay
-            ref={(el) => controller.attachVideo(id, el)}
+            ref={refFor(id)}
             // A tier swap resets the element to paused at time zero. This is
             // where the controller lands the playhead back and re-judges
             // playback — the director's own resync idiom.

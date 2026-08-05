@@ -145,7 +145,11 @@ test.describe('window focus and playback tiers', () => {
     expect(back.focused).toBe('false')
     expect(back.src).toMatch(/_thumb\.mp4/)
     expect(back.muted).toBe(true)
-    expect(back.overlay, 'unfocused window carries the degradation overlay').toBe(1)
+    // Polled, not read once: the overlay fades in over 200ms and the fade only
+    // starts when the focus attribute flips, so a single read taken right after the
+    // second window opens can legitimately catch it at 0 on a loaded machine.
+    await expect.poll(async () => (await read('file01')).overlay, { timeout: 2000 })
+      .toBe(1)
 
     const front = await read('file02')
     expect(front.focused).toBe('true')

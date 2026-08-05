@@ -459,9 +459,71 @@ export function createMediaController(
         rec.currentTime = v.currentTime
         rec.playing = !v.paused
         resumeAt.set(fileId, v.currentTime)
+        freezeFrame(fileId, v)
       }
       tiers.set(fileId, want)
       dirty = true
+    }
+  }
+
+  /**
+   * Hold the last frame across a tier swap.
+   *
+   * Swapping `src` empties the element: it shows its poster (a jump-cut to an
+   * unrelated frame) or black until the new encode has data, and the seek back to
+   * the stashed playhead lands a beat after that. On a window being promoted to
+   * focus — the moment its neighbour closes — that read as the surviving windows
+   * "glitching". So the frame that is on screen is copied to a canvas laid over
+   * the video INSIDE the host, and removed only when the new source is seeked and
+   * presenting. The host is this module's own element, never React's, which is
+   * what makes an imperative child here legitimate at all.
+   *
+   * `try` around the draw: a tainted or not-yet-decoded element throws, and jsdom
+   * has no canvas — in every such case the swap simply behaves as it did before
+   * this existed.
+   */
+  function freezeFrame(fileId: string, v: HTMLVideoElement) {
+    const host = hosts.get(fileId)
+    if (!host || v.videoWidth === 0) return
+    try {
+      const c = document.createElement('canvas')
+      c.width = v.videoWidth
+      c.height = v.videoHeight
+      const ctx = c.getContext('2d')
+      if (!ctx) return
+      ctx.drawImage(v, 0, 0)
+      host.querySelector('[data-media-freeze]')?.remove()
+      c.setAttribute('data-media-freeze', '')
+      // Same geometry the video renders with (`.media-host > video` is
+      // object-fit: contain), so the held frame sits exactly over the live one.
+      c.style.cssText =
+        'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none'
+      host.style.position = 'relative'
+      host.appendChild(c)
+
+      let done = false
+      const lift = () => {
+        if (done) return
+        done = true
+        c.remove()
+        v.removeEventListener('seeked', lift)
+        v.removeEventListener('playing', lift)
+        v.removeEventListener('error', lift)
+        window.clearTimeout(timer)
+      }
+      // `seeked` is the moment the new encode is presenting the stashed playhead
+      // — resync() sets currentTime on loadeddata, so it fires once per swap.
+      // `playing` covers the one case resync does not seek (a playhead within
+      // SEEK_EPSILON of zero, where the new source already starts in the right
+      // place). The timeout is the escape hatch for a source that never loads (a
+      // released file, a network failure): a stale still over a dead pane is
+      // strictly worse than the pane.
+      const timer = window.setTimeout(lift, 4000)
+      v.addEventListener('seeked', lift)
+      v.addEventListener('playing', lift)
+      v.addEventListener('error', lift)
+    } catch {
+      /* no freeze — the swap is merely as abrupt as it always was */
     }
   }
 

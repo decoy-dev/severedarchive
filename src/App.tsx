@@ -9,8 +9,9 @@ import BootSequence from './components/BootSequence'
 import Wordmark from './components/Wordmark'
 import Desktop from './components/Desktop'
 import { readPerfTier, prefersReducedMotion } from './lib/perfTier'
+import { MAX_WINDOWS } from './lib/windowManager'
 import { ArchiveSelectionProvider, useArchiveSelection } from './lib/selection'
-import { WindowRegistryProvider } from './lib/windowRegistry'
+import { WindowRegistryProvider, useWindowView } from './lib/windowRegistry'
 import { AdminSessionProvider } from './lib/adminSession'
 
 const TAB_ORDER: TabId[] = ['archive', 'about', 'links']
@@ -36,6 +37,20 @@ export default function App() {
 
 function AppShell() {
   const [tier] = useState(readPerfTier)
+  /**
+   * The backdrop holds its frame when nobody can see it move: a full desktop of
+   * windows, or one window filling the browser window.
+   *
+   * Decided here rather than inside `BackgroundVideo` because this is where the
+   * backdrop and the window registry are both in scope — and read from the
+   * registry, not from Desktop, because App must not reach into Desktop for state
+   * any more than the explorer may (selection contract rule 1).
+   *
+   * At the cap the backdrop is behind three windows and the terminal; short of it,
+   * it is the surface the glass is sampling and it keeps moving.
+   */
+  const { windows: openWindows, enlargedId } = useWindowView()
+  const backdropHeld = enlargedId !== null || openWindows.length >= MAX_WINDOWS
   const [booted, setBooted] = useState(false)
   const [tab, setTabState] = useState<TabId>('archive')
   const { selectedId } = useArchiveSelection()
@@ -70,7 +85,7 @@ function AppShell() {
 
   return (
     <div className="stage" data-tier={tier} data-booted={booted ? 'true' : 'false'}>
-      <BackgroundVideo tier={tier} fileId={selectedId} />
+      <BackgroundVideo tier={tier} fileId={selectedId} hold={backdropHeld} />
       <Wordmark />
       {/* One layer, clipped to a frame — not four strips. See `.glass-frame`. */}
       <div className="glass-frame" />
