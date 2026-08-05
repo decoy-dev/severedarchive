@@ -123,9 +123,19 @@ async function handleSession(req: Request, env: Env): Promise<Response> {
 
   const token = await signSession(env.SESSION_SECRET)
   return json({ ok: true }, 200, env, {
-    // httpOnly so no script can read it, SameSite=Strict so no other site can
-    // cause it to be sent, Secure so it never crosses plaintext.
-    'set-cookie': `${SESSION_COOKIE}=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=3600`,
+    // httpOnly so no script can read it, Secure so it never crosses plaintext.
+    //
+    // SameSite=None, NOT Strict, and this is load-bearing: the Worker lives on
+    // workers.dev and the site on github.io (or localhost in dev), which are
+    // different SITES — and a Strict cookie is never sent on a cross-site
+    // request, `credentials: 'include'` or not. With Strict, login "worked"
+    // (that call only SETS the cookie) and every authed call after it answered
+    // 401: the owner's exact report, and the reason the browser→Worker half of
+    // this pipeline had never actually been proven. The CSRF protection Strict
+    // was buying is the exact-origin allow-list check on every mutating route,
+    // which was already there — a cross-site attacker's browser always sends
+    // its Origin, and an attacker outside a browser has no cookie to ride.
+    'set-cookie': `${SESSION_COOKIE}=${token}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=3600`,
   }, req)
 }
 
@@ -140,7 +150,7 @@ function handleSignOut(req: Request, env: Env): Response {
   return json({ ok: true }, 200, env, {
     // Same attributes as when it was set, or the browser treats it as a
     // different cookie and leaves the real one in place.
-    'set-cookie': `${SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0`,
+    'set-cookie': `${SESSION_COOKIE}=; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=0`,
   }, req)
 }
 
@@ -347,8 +357,11 @@ export default {
     const url = new URL(req.url)
     if (req.method === 'OPTIONS') return corsPreflight(env, req)
 
-    // Exact-origin check on everything that mutates. The session cookie is
-    // SameSite=Strict, so this is belt and braces — but the braces are cheap.
+    // Exact-origin check on everything that mutates. With the session cookie
+    // SameSite=None (it has to cross from github.io to workers.dev — see
+    // handleSession), this check IS the CSRF defence, not belt and braces:
+    // a browser always stamps a cross-origin fetch with its Origin, and a
+    // client that can omit Origin is not a browser and holds no cookie.
     if (req.method !== 'GET') {
       const origin = req.headers.get('origin')
       if (origin && !allowedOrigins(env).includes(origin)) {

@@ -43,13 +43,17 @@ describe('POST /api/session', () => {
   let env: Env
   beforeEach(async () => { env = await makeEnv() })
 
-  it('issues an httpOnly, Secure, SameSite=Strict cookie for the right passcode', async () => {
+  it('issues an httpOnly, Secure, SameSite=None cookie for the right passcode', async () => {
     const res = await worker.fetch(post('/api/session', { passcode: PASSCODE }), env)
     expect(res.status).toBe(200)
     const set = res.headers.get('set-cookie')!
     expect(set).toMatch(/HttpOnly/)
     expect(set).toMatch(/Secure/)
-    expect(set).toMatch(/SameSite=Strict/)
+    // None, not Strict: the site and the Worker are different SITES (github.io
+    // vs workers.dev), and a Strict cookie is never sent cross-site — with it,
+    // login succeeded and every authed call 401'd. CSRF is carried by the
+    // exact-origin check on mutating routes instead.
+    expect(set).toMatch(/SameSite=None/)
   })
 
   it('rejects the wrong passcode, and says nothing else', async () => {
@@ -295,7 +299,7 @@ describe('DELETE /api/session', () => {
     // A cookie cleared with different attributes is a different cookie, and the
     // real session would survive.
     expect(set).toContain('HttpOnly')
-    expect(set).toContain('SameSite=Strict')
+    expect(set).toContain('SameSite=None')
     expect(set).toContain('Path=/')
   })
 })
