@@ -1,6 +1,6 @@
 # CONTEXT.md — severedarchive portfolio (resume point)
 
-Last updated: 2026-08-03, after the owner's revision pass. All six slices are done and deployed (branch `desktop-windows`; `main` is at the same commit). **Read this first when picking the project back up.**
+Last updated: 2026-08-05, end of the 2026-08-04→05 overnight session (revision pass + the admin pipeline actually working). Everything is committed and live at `eea1ec8`. **Read this first when picking the project back up.**
 
 ## What this is
 
@@ -26,9 +26,9 @@ The v2 archive-stack build was replaced by a desktop window manager. Work was re
 
 All six slices are complete and deployed. The owner's 2026-08-03 revision pass (wordmark fit, thumbnail LIST, standby pane, refusal blowout, About ASCII object, close-button target) is also in and live.
 
-### Session of 2026-08-04
+### Session of 2026-08-04 → 05 (overnight)
 
-Live at `BLD e3adcd5`. Worker at version `3ca4c2ac`. Everything through the third pass is committed and live (`80afeea`, `b6fe1e6`, `1804724`); 314 vitest, 103 e2e, clean lint.
+Live at `eea1ec8`; Worker at `efacff86` + a secret-change version (the working PAT). 322 vitest, 103 e2e, clean lint. The night's commits, in order: `80afeea` (the whole revision pass — enlarge/minimize + lock-on, recede close, playback-weight work, refusal negate, dashboard/dot animation, admin rework, lazy admin chunks, SEO), `b6fe1e6` (SameSite), `1804724` (workflows get `actions: write`), `6498054` (`?v=` rendition cache-bust + editor tests stop assuming default specs), `eea1ec8` (deploy watch / LIVE status). Two `edit file01 from admin` commits in between are the owner's own — the first real archive edits ever made through the admin.
 
 **The admin pipeline is proven end-to-end as of 2026-08-05** — a real browser edit travelled session → Worker → GitHub → Edit entry run → deploy, and the rendered poster on the live site hash-matches the commit. Three walls fell in one evening, each hiding the next:
 1. The session cookie was `SameSite=Strict` across sites (github.io → workers.dev) — never sent, every authed call 401. Now `None`; the Worker's exact-origin check carries CSRF.
