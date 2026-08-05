@@ -8,6 +8,7 @@ import { serialiseThumb } from '../lib/thumbCrop'
 import ContentEditor from './ContentEditor'
 import EntryFields, { FilePicker, UploadLimitsHint, emptyDraft, nameFromFile, type EntryDraft } from './EntryFields'
 import ThumbnailEditor from './ThumbnailEditor'
+import { watchForDeploy } from '../lib/deployWatch'
 
 /**
  * What the passcode was for: publishing.
@@ -21,7 +22,7 @@ import ThumbnailEditor from './ThumbnailEditor'
  * transcode it, and that takes minutes. Saying "published" would be a lie for
  * most of that window, so it says what actually happened.
  */
-type Status = { kind: 'idle' | 'busy' | 'ok' | 'error'; message?: string }
+type Status = { kind: 'idle' | 'busy' | 'ok' | 'error' | 'live'; message?: string }
 
 export default function AdminPanel({ onClose }: { onClose: () => void }) {
   // ABOUT and LINKS are separate tabs at the owner's request — they are edited on
@@ -31,6 +32,18 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   // payload when LINKS commits, and the two tabs can never race each other.
   const [tab, setTab] = useState<'upload' | 'about' | 'links'>('upload')
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
+
+  /** Same watch the edit panel runs — see `deployWatch`. Dies with the panel. */
+  const deployWatchRef = useRef<(() => void) | null>(null)
+  useEffect(() => () => deployWatchRef.current?.(), [])
+  const watchDeploy = () => {
+    deployWatchRef.current?.()
+    deployWatchRef.current = watchForDeploy({
+      onLive: () => setStatus({ kind: 'live', message: 'LIVE. RELOAD TO SEE IT.' }),
+      onTimeout: () => setStatus((cur) =>
+        cur.kind === 'ok' ? { kind: 'ok', message: 'STILL RUNNING — A TRANSCODE CAN TAKE A WHILE. CHECK BACK.' } : cur),
+    })
+  }
 
   // Upload fields. One draft object, shared with the edit panel via
   // `EntryFields`, so a field cannot exist in one form and not the other.
@@ -149,6 +162,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
           kind: 'ok',
           message: 'STAGED. TRANSCODE AND DEPLOY RUNNING — A FEW MINUTES.',
         })
+        watchDeploy()
         // Reset to a fresh draft, keeping the date: a run of uploads from one
         // shoot all carry the same one.
         setFile(null); setThumbImage(null); setDraft((d) => ({ ...emptyDraft(), date: d.date }))
@@ -173,7 +187,10 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ content, sha }),
       })
-      if (res.ok) setStatus({ kind: 'ok', message: 'COMMITTED. DEPLOY RUNS ON THE NEXT WORKFLOW.' })
+      if (res.ok) {
+        setStatus({ kind: 'ok', message: 'COMMITTED. DEPLOY RUNNING — A MINUTE OR TWO.' })
+        watchDeploy()
+      }
       else if (res.status === 422) setStatus({ kind: 'error', message: 'NOT VALID JSON' })
       else if (res.status === 409) setStatus({ kind: 'error', message: 'CHANGED ELSEWHERE — REOPEN AND REDO' })
       else setStatus({ kind: 'error', message: `REFUSED (${res.status})` })
@@ -276,7 +293,14 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
       )}
 
       {status.message && (
-        <p className="admin-status" data-kind={status.kind} role="status">&gt; {status.message}</p>
+        <p className="admin-status" data-kind={status.kind} role="status">
+          &gt; {status.message}
+          {status.kind === 'live' && (
+            <button type="button" className="admin-reload" onClick={() => window.location.reload()}>
+              RELOAD
+            </button>
+          )}
+        </p>
       )}
     </div>,
     document.body,

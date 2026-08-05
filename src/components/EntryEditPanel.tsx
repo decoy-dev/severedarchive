@@ -6,6 +6,7 @@ import { normaliseThumb, serialiseThumb } from '../lib/thumbCrop'
 import ThumbnailEditor from './ThumbnailEditor'
 import { ADMIN_API } from '../lib/adminSession'
 import EntryFields, { FilePicker, UploadLimitsHint, nameFromFile, type EntryDraft } from './EntryFields'
+import { watchForDeploy } from '../lib/deployWatch'
 
 /**
  * What an authenticated admin gets on an entry that already exists: its fields,
@@ -21,7 +22,7 @@ import EntryFields, { FilePicker, UploadLimitsHint, nameFromFile, type EntryDraf
  *   be typed back. That is not friction for its own sake: the edit run deletes
  *   three renditions and there is no undo in this interface.
  */
-type Status = { kind: 'idle' | 'busy' | 'ok' | 'error'; message?: string }
+type Status = { kind: 'idle' | 'busy' | 'ok' | 'error' | 'live'; message?: string }
 
 const draftFrom = (file: ArchiveFile): EntryDraft => ({
   name: file.name,
@@ -44,6 +45,21 @@ export default function EntryEditPanel({ file, onClose }: { file: ArchiveFile; o
   const [replacement, setReplacement] = useState<File | null>(null)
   const [thumbImage, setThumbImage] = useState<File | null>(null)
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
+
+  /**
+   * One watch at a time, cancelled with the panel: announcing LIVE for a panel
+   * that was closed two edits ago would attach the wrong meaning to it.
+   */
+  const deployWatchRef = useRef<(() => void) | null>(null)
+  useEffect(() => () => deployWatchRef.current?.(), [])
+  const watchDeploy = () => {
+    deployWatchRef.current?.()
+    deployWatchRef.current = watchForDeploy({
+      onLive: () => setStatus({ kind: 'live', message: 'LIVE. RELOAD TO SEE IT.' }),
+      onTimeout: () => setStatus((cur) =>
+        cur.kind === 'ok' ? { kind: 'ok', message: 'STILL DEPLOYING — CHECK BACK IN A MINUTE.' } : cur),
+    })
+  }
   const [confirming, setConfirming] = useState(false)
   const [confirm, setConfirm] = useState('')
   const panelRef = useRef<HTMLDivElement | null>(null)
@@ -104,6 +120,10 @@ export default function EntryEditPanel({ file, onClose }: { file: ArchiveFile; o
         })
         setReplacement(null)
         setThumbImage(null)
+        // Feedback, not optimism: LIVE is announced when the deploy that
+        // carries this edit is actually being served, which is the moment a
+        // reload will show it. Until then the message above is the truth.
+        watchDeploy()
       } else if (res.status === 422) {
         setStatus({ kind: 'error', message: (body.details ?? ['INVALID ENTRY']).join(' · ').toUpperCase() })
       } else if (res.status === 401) {
@@ -131,6 +151,7 @@ export default function EntryEditPanel({ file, onClose }: { file: ArchiveFile; o
         setStatus({ kind: 'ok', message: 'REMOVED. DEPLOY RUNNING — A MINUTE OR TWO.' })
         setConfirming(false)
         setConfirm('')
+        watchDeploy()
       } else if (res.status === 422) {
         setStatus({ kind: 'error', message: 'NAME DOES NOT MATCH' })
       } else if (res.status === 401) {
@@ -250,7 +271,14 @@ export default function EntryEditPanel({ file, onClose }: { file: ArchiveFile; o
       </div>
 
       {status.message && (
-        <p className="admin-status" data-kind={status.kind} role="status">&gt; {status.message}</p>
+        <p className="admin-status" data-kind={status.kind} role="status">
+          &gt; {status.message}
+          {status.kind === 'live' && (
+            <button type="button" className="admin-reload" onClick={() => window.location.reload()}>
+              RELOAD
+            </button>
+          )}
+        </p>
       )}
     </div>,
     document.body,
