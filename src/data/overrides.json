@@ -11,10 +11,10 @@
       "postUrl": "https://instagram.com/severedarchive",
       "thumb": {
         "custom": false,
-        "cx": 1,
-        "cy": 0.297,
+        "cx": 0.107,
+        "cy": 0.254,
         "time": 1,
-        "zoom": 1.75
+        "zoom": 2.8
       }
     }
   },
