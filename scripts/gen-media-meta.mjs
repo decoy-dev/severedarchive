@@ -25,7 +25,8 @@
 // the silent skip rule 1 is about.
 
 import { execFileSync } from 'node:child_process'
-import { readdirSync, writeFileSync, existsSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 
@@ -108,9 +109,23 @@ const need = (id, suffix) => {
   return path
 }
 
+/**
+ * A short content hash per rendition, for cache-busting.
+ *
+ * The renditions keep their filenames across edits — file01_poster.jpg is
+ * file01_poster.jpg forever — and GitHub Pages serves max-age=600, so an edited
+ * thumbnail sat invisible behind the browser's cached copy until it expired:
+ * the owner's first real edit "didn't work" for exactly this reason. `src`
+ * helpers append this as ?v=, so a changed file is a changed URL and an
+ * unchanged one keeps its cache. Eight hex chars: this distinguishes versions
+ * of one file, it does not need to survive an adversary.
+ */
+const version = (path) => createHash('sha1').update(readFileSync(path)).digest('hex').slice(0, 8)
+
 const rows = []
 const thumbRows = []
 const kindRows = []
+const versionRows = []
 for (const id of ids) {
   const kind = found.get(id)
   const ext = kind === 'photo' ? 'jpg' : 'mp4'
@@ -128,6 +143,9 @@ for (const id of ids) {
   kindRows.push(`  ${id}: '${kind}',`)
   // Every entry needs its poster: the grid and the tiles use it at both tiers.
   need(id, '_poster.jpg')
+  versionRows.push(
+    `  ${id}: { full: '${version(need(id, `_full.${ext}`))}', thumb: '${version(need(id, `_thumb.${ext}`))}', poster: '${version(need(id, '_poster.jpg'))}' },`,
+  )
   console.log(`${id}  ${kind}  ${width}x${height}  ${durationSec}s  thumb ${t.width}x${t.height}`)
 }
 
@@ -160,6 +178,15 @@ ${thumbRows.join('\n')}
  */
 export const MEDIA_KIND: Record<string, 'video' | 'photo'> = {
 ${kindRows.join('\n')}
+}
+
+/**
+ * Content hashes of the shipped renditions, appended to their URLs as ?v=.
+ * The filenames never change across edits and the host caches for 10 minutes,
+ * so without this an edited poster stays invisible until the cache expires.
+ */
+export const MEDIA_VERSION: Record<string, { full: string; thumb: string; poster: string }> = {
+${versionRows.join('\n')}
 }
 `,
 )

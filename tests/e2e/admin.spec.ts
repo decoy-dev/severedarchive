@@ -189,6 +189,12 @@ test.describe('admin tools', () => {
     await page.locator('.fw-edit').first().click()
     const panel = page.locator('.admin-panel')
     const editor = panel.locator('.thumb-editor')
+    // The entry's committed thumb spec is whatever the owner last saved — a
+    // real edit is in the archive's history now, so the editor does NOT open at
+    // defaults. These tests are about the editor's mechanics, not the current
+    // data, so they start from a clean spec.
+    const resetBtn = editor.locator('.thumb-reset')
+    if (await resetBtn.isEnabled()) await resetBtn.click()
 
     // The preview is the committed clip, not a still of it: that is what makes
     // the scrubber a preview rather than a slider with a number beside it.
@@ -237,6 +243,12 @@ test.describe('admin tools', () => {
     await signIn(page)
     await page.locator('.fw-edit').first().click()
     const editor = page.locator('.admin-panel .thumb-editor')
+    // The entry's committed thumb spec is whatever the owner last saved — a
+    // real edit is in the archive's history now, so the editor does NOT open at
+    // defaults. These tests are about the editor's mechanics, not the current
+    // data, so they start from a clean spec.
+    const resetBtn = editor.locator('.thumb-reset')
+    if (await resetBtn.isEnabled()) await resetBtn.click()
 
     // At zoom 1 the whole frame is the crop, so there is no slack to pan into.
     // Dragging must be inert rather than fighting a clamp.

@@ -18,7 +18,7 @@ test.describe('mobile archive', () => {
 
     // Tile 2 → file02. The activation policy resolves this to selection only.
     await page.locator('[data-file-tile]').nth(1).click()
-    await expect(primary.locator('video')).toHaveAttribute('src', /file02_full\.mp4$/)
+    await expect(primary.locator('video')).toHaveAttribute('src', /file02_full\.mp4(\?v=\w+)?$/)
 
     // Swipe left = advance. `useSwipe` ignores mouse pointers by design, so the
     // gesture has to arrive as a real touch pointer rather than page.mouse.
@@ -32,7 +32,7 @@ test.describe('mobile archive', () => {
     // how many decodes, never whether the content exists.
     const video = primary.locator('video')
     await expect(video).toHaveCount(1)
-    await expect(video).toHaveAttribute('src', /file03_full\.mp4$/)
+    await expect(video).toHaveAttribute('src', /file03_full\.mp4(\?v=\w+)?$/)
 
     // …and on lite it is the ONLY decode on the page: lite spends its single
     // decode on the surface the viewer is looking at, and every other surface —

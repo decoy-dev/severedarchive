@@ -57,3 +57,23 @@ export const MEDIA_KIND: Record<string, 'video' | 'photo'> = {
   file11: 'video',
   file12: 'video',
 }
+
+/**
+ * Content hashes of the shipped renditions, appended to their URLs as ?v=.
+ * The filenames never change across edits and the host caches for 10 minutes,
+ * so without this an edited poster stays invisible until the cache expires.
+ */
+export const MEDIA_VERSION: Record<string, { full: string; thumb: string; poster: string }> = {
+  file01: { full: '0b35797a', thumb: 'ec097efd', poster: '964f8ee2' },
+  file02: { full: 'ff8df29a', thumb: 'b6b5a62d', poster: '36c38728' },
+  file03: { full: 'e60eed79', thumb: 'f588b91e', poster: 'cef4515b' },
+  file04: { full: 'f66f40a9', thumb: '532698e0', poster: 'd49f2041' },
+  file05: { full: 'f5bdb897', thumb: '6f46ec58', poster: '54b2b6d2' },
+  file06: { full: 'bb7ab16d', thumb: '9f036096', poster: '2fc87fce' },
+  file07: { full: '42ac4dc1', thumb: 'cd068aa9', poster: '323f804c' },
+  file08: { full: '2c1918be', thumb: '24ced885', poster: 'fe80fa84' },
+  file09: { full: 'e7ea6815', thumb: 'a640bc25', poster: 'a123aa16' },
+  file10: { full: 'a7913ab4', thumb: 'fbbf41a0', poster: '47c260b0' },
+  file11: { full: 'd0e70b44', thumb: 'b538ffcd', poster: '37fb111c' },
+  file12: { full: 'd104fe7c', thumb: 'b9a48d99', poster: '5d3cabde' },
+}

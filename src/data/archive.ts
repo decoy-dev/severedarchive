@@ -1,4 +1,4 @@
-import { MEDIA_KIND, MEDIA_META, type MediaMeta } from './mediaMeta.generated'
+import { MEDIA_KIND, MEDIA_META, MEDIA_VERSION, type MediaMeta } from './mediaMeta.generated'
 import UPLOADED_ENTRIES from './entries.json'
 import ENTRY_OVERRIDES from './overrides.json'
 import type { ThumbSpec } from '../lib/thumbCrop'
@@ -216,7 +216,21 @@ export const isStill = (id: string): boolean => MEDIA_KIND[id] === 'photo'
 /** The ladder's extension: a clip's renditions are `.mp4`, a still's are `.jpg`. */
 const ladder = (id: string): 'mp4' | 'jpg' => (isStill(id) ? 'jpg' : 'mp4')
 
-export const thumbSrc = (id: string) => media(`${id}_thumb.${ladder(id)}`)
-export const fullSrc = (id: string) => media(`${id}_full.${ladder(id)}`)
+/**
+ * `?v=` is the rendition's content hash from the generated metadata. The
+ * filenames are stable across edits and the host caches them for ten minutes,
+ * so without the version a re-rendered poster (or a replaced clip) keeps
+ * serving from the browser's cache after it has changed — the owner's first
+ * real thumbnail edit looked like it had done nothing for exactly that reason.
+ * An id without a version (never true after gen:media-meta, but stated) gets
+ * the bare URL rather than a broken one.
+ */
+const versioned = (id: string, file: string, kind: 'full' | 'thumb' | 'poster') => {
+  const v = MEDIA_VERSION[id]?.[kind]
+  return media(v ? `${file}?v=${v}` : file)
+}
+
+export const thumbSrc = (id: string) => versioned(id, `${id}_thumb.${ladder(id)}`, 'thumb')
+export const fullSrc = (id: string) => versioned(id, `${id}_full.${ladder(id)}`, 'full')
 /** Always a JPEG: it is a still by definition, whatever the entry is. */
-export const posterSrc = (id: string) => media(`${id}_poster.jpg`)
+export const posterSrc = (id: string) => versioned(id, `${id}_poster.jpg`, 'poster')

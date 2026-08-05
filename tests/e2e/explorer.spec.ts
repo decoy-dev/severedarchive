@@ -41,7 +41,7 @@ test.describe('desktop explorer', () => {
 
     // …and opening is what starts playback.
     await page.locator('[data-file-row]').nth(4).click()
-    await expect(page.locator('[data-file-window="file05"] video')).toHaveAttribute('src', /file05_full\.mp4$/)
+    await expect(page.locator('[data-file-window="file05"] video')).toHaveAttribute('src', /file05_full\.mp4(\?v=\w+)?$/)
   })
 
   test('the standby pane becomes a dashboard of the open windows', async ({ page }) => {
