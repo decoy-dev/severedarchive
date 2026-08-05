@@ -10,6 +10,13 @@ on:
 
 permissions:
   contents: write
+  # `actions: write` is what lets the last step run `gh workflow run deploy.yml`.
+  # The dispatch is explicit because a push made with the job's own token does
+  # not trigger push workflows (GitHub's anti-recursion rule) — and without this
+  # permission that dispatch answers 403 "Resource not accessible by
+  # integration": the edit commits and then never deploys, which is exactly how
+  # the first real admin edit failed.
+  actions: write
 
 concurrency:
   # Two ingests committing to main at once would race on the data file.
