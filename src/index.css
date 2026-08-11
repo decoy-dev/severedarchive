@@ -65,6 +65,19 @@ body {
   overscroll-behavior: none;
   -webkit-font-smoothing: antialiased;
 }
+/* The page never scrolls, but inner boxes do (the tile list, the dashboard,
+   the admin panels) — and every one of them was wearing the browser's own
+   scrollbar. Themed once, globally, so a scroll container added later cannot
+   ship native by omission. Both syntaxes on purpose: engines that understand
+   `scrollbar-color` (Firefox, Chromium 121+) use it and ignore the -webkit
+   pseudo-elements; Safari has no `scrollbar-color` and falls through to the
+   pseudo-elements. Thumb stays in the hairline greys — the accent is reserved
+   for active/hover marks and a resting scrollbar is neither. Square corners:
+   nothing in this interface is rounded. */
+* { scrollbar-width: thin; scrollbar-color: var(--hair-bright) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--hair-bright); }
+*::-webkit-scrollbar-thumb:hover { background: var(--dim); }
 a { color: inherit; text-decoration: none; }
 /* Selection in the accent rather than the browser's blue, which is the one
    colour on the page that belongs to nothing else here. */
@@ -620,13 +633,18 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   flex: 1 1 auto; min-height: 0;
   display: grid; grid-template-columns: 1fr 300px; grid-template-rows: minmax(0, 1fr); gap: 16px;
 }
-/* Two-column thumbnail view. `auto-fill` with a floor rather than a hard
-   `repeat(2, 1fr)`: the track is a fixed width, so two columns is what this
-   resolves to, and a narrower panel degrades to one column instead of crushing
-   two unreadable ones. */
+/* Two-column thumbnail view — a hard two columns, not `auto-fill` with a
+   132px floor. The floor version collapsed to one column whenever anything
+   shaved the 300px track: first a 240px media-query step, then — the subtle
+   one — CLASSIC scrollbars. On a Mac with "always show scroll bars" (or any
+   mouse user, or Windows) the list's own scrollbar takes ~11-15px of layout
+   width, 282px of content becomes ~271px, and two 132px tiles need 272px.
+   Headless verification never sees it: overlay scrollbars take 0px. The panel
+   is a fixed 300px on every desktop width now, so there is no narrow case to
+   degrade for — the tiles just split whatever the scrollbar leaves. */
 .explorer-list {
   grid-column: 2; grid-row: 1; min-height: 0; overflow-y: auto;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px; align-content: start; padding: 8px;
   border: 1px solid var(--hair);
 }
@@ -717,7 +735,13 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .dash-boot-line { font-size: var(--fs-sm); letter-spacing: 0.06em; line-height: 1.7; }
 /* At most MAX_WINDOWS cards, so this never actually scrolls — the overflow is a
    floor under a short box, not a scrolling region by design. */
-.dash-list { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+/* `scrollbar-gutter: stable`: the themed scrollbar is a classic one and takes
+   layout width, unlike the overlay it replaced. The cards animate flex-grow,
+   so the list overflows for a beat mid-animation — without the gutter the bar
+   pops in, reflows every card 8px narrower, and pops out, which is a moving
+   target for anything measuring card geometry (explorer.spec.ts's ✕ hit-test
+   flaked under full-suite load exactly there). */
+.dash-list { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; scrollbar-gutter: stable; }
 .dash-row {
   flex: 1 1 0; min-height: 0; display: flex; align-items: stretch;
   border: 1px solid var(--hair); background: rgba(0, 0, 0, 0.5);
@@ -781,9 +805,12 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .preview-meta-head { font-size: var(--fs-lg); color: var(--bright); letter-spacing: 0.02em; }
 .preview-meta-sub { font-size: var(--fs-sm); margin-top: 4px; letter-spacing: 0.03em; }
 
-@media (max-width: 1024px) {
-  .archive-explorer { grid-template-columns: 1fr 240px; }
-}
+/* No narrow-desktop override of the 300px list column. There used to be a
+   `1fr 240px` step at 1024px, from when the list was text rows — but two
+   132px tiles plus gap, padding and border need 290px, so ANY narrower track
+   collapses the thumbnail view to one column. The desktop range ends at 861px
+   (the mobile split), and 300px holds two columns all the way down to it;
+   explorer.spec.ts asserts the geometry at the narrow end. */
 /* ── mobile archive: primary player + one swipeable row (Slice D) ──
    Below the 861px split the explorer does not render at all, so nothing here
    is a responsive override of it — this is a separate surface with its own

@@ -27,6 +27,23 @@ test.describe('desktop explorer', () => {
     expect(Math.abs(c.x - a.x)).toBeLessThanOrEqual(1)
   })
 
+  // The narrow end of the desktop range, not just 1440. A `1fr 240px` step at
+  // 1024px used to collapse the tile view to one column across 861–1024 — two
+  // 132px tiles need 290px of track, so any narrowing does. The step is gone;
+  // this holds the geometry where it used to break.
+  test('two columns hold at the narrow end of the desktop range', async ({ page, viewport }) => {
+    test.skip(viewport!.width !== 1440, 'one desktop project resizes itself; the others need not repeat it')
+    await page.setViewportSize({ width: 900, height: 900 })
+    await ready(page)
+    const rows = page.locator('[data-file-row]')
+    await expect(rows).toHaveCount(12)
+    const box = async (i: number) => (await rows.nth(i).boundingBox())!
+    const [a, b, c] = [await box(0), await box(1), await box(2)]
+    expect(Math.abs(a.y - b.y)).toBeLessThanOrEqual(1)
+    expect(b.x).toBeGreaterThan(a.x)
+    expect(c.y).toBeGreaterThan(a.y)
+  })
+
   test('nothing plays until a file is opened', async ({ page }) => {
     await ready(page)
     await expect(page.locator('[data-preview-standby]')).toBeVisible()
@@ -175,11 +192,14 @@ test.describe('desktop explorer', () => {
 
     for (const id of ['file01', 'file02', 'file03']) {
       const b = (await page.locator(`[data-dash-row="${id}"] .dash-close`).boundingBox())!
-      const reachable = await page.evaluate(
-        ([x, y]) => document.elementFromPoint(x, y)?.classList.contains('dash-close') ?? false,
+      const hit = await page.evaluate(
+        ([x, y]) => {
+          const el = document.elementFromPoint(x as number, y as number)
+          return el ? `${el.tagName}.${el.className}` : 'none'
+        },
         [b.x + b.width / 2, b.y + b.height / 2],
       )
-      expect(reachable, `${id}'s ✕ is covered by a window`).toBe(true)
+      expect(hit, `${id}'s ✕ at ${JSON.stringify(b)} is covered (hit: ${hit})`).toContain('dash-close')
     }
 
     // And it is a real control, not just an exposed rectangle: close the two
