@@ -1,12 +1,12 @@
 # CONTEXT.md — severedarchive portfolio (resume point)
 
-Last updated: 2026-08-05, end of the 2026-08-04→05 overnight session (revision pass + the admin pipeline actually working). Everything is committed and live at `eea1ec8`. **Read this first when picking the project back up.**
+Last updated: 2026-08-11, end of the custom-domain session (severedarchive.com live, blank page fixed, Worker CORS updated). Everything is committed and live at `255de3d`. **Read this first when picking the project back up.**
 
 ## What this is
 
 Single-screen portfolio site for severedarchive (motion/visual artist: Blender renders set to music, metalheart/chromeheart, neo-2000s). A **desktop**: video files open in draggable, closable windows over a fullscreen video backdrop, with a huge overprint wordmark behind everything. Zero scrolling on any device.
 
-- **Live:** https://decoy-dev.github.io/severedarchive/ — serves `main`, and **a push deploys it** (see Workflows; the older claim that it does not was wrong). **Confirm the live build stamp before assuming any work is deployed** — `.build-tag` carries the short SHA. CONTEXT has been wrong about this in both directions, so check rather than trust either sentence.
+- **Live:** https://severedarchive.com — the custom domain, as of 2026-08-11 (Cloudflare-proxied GitHub Pages; the old github.io URL redirects). Serves `main`, and **a push deploys it** (see Workflows; the older claim that it does not was wrong). **Confirm the live build stamp before assuming any work is deployed** — `.build-tag` carries the short SHA. CONTEXT has been wrong about this in both directions, so check rather than trust either sentence.
 - **Pushing** needs the other account: `gh auth switch --user decoy-dev`, push, then `gh auth switch --user ch-readycloud` to put it back. Forgetting the switch back leaves the wrong identity active for everything else on the machine.
 - **Repo:** decoy-dev/severedarchive. `main` and `desktop-windows` now point at the same commit — the branch was merged after Slice C, so "28 commits ahead" is no longer true.
 - **Local:** the tree this was last worked in. `raw/` (107MB of source video) is gitignored, was never pushed, and exists only on the machine that encoded it.
@@ -25,6 +25,20 @@ The v2 archive-stack build was replaced by a desktop window manager. Work was re
 | F — deploy | ✅ done |
 
 All six slices are complete and deployed. The owner's 2026-08-03 revision pass (wordmark fit, thumbnail LIST, standby pane, refusal blowout, About ASCII object, close-button target) is also in and live.
+
+### Session of 2026-08-11 (custom domain cutover)
+
+**severedarchive.com is the site's address now**, live and verified at `255de3d`. The domain had been hooked up (Cloudflare-proxied GitHub Pages, custom domain set in Pages settings) but served a blank page: the Vite `base` was still `/severedarchive/`, so the HTML asked for `/severedarchive/assets/index-*.js`, which is a 404 at the domain root. One commit fixed the cutover:
+
+- `vite.config.ts` base → `/'`. Safe for both hosts: github.io now 301s to the custom domain.
+- Every absolute URL the 08-04 SEO pass hard-coded against github.io (canonical, OG/Twitter, JSON-LD, `sitemap.xml`, `robots.txt`) → `https://severedarchive.com/`. That audit's own warning ("if the site moves to a custom domain, those must all change") is discharged.
+- `ALLOWED_ORIGIN` gained `https://severedarchive.com` and the **Worker was redeployed** (version `be084549`). Without it the browser's cross-origin block surfaced in the UI as "backend unreachable" — the Worker was answering 403 by design, exactly as the allow-list intends. Verified after: preflight echoes the new origin, wrong passcode gets 401 not 403.
+
+Account map that made this fiddly (three identities on one machine):
+- **GitHub pushes**: `gh auth switch --user decoy-dev` (unchanged, see above; switched back after).
+- **Cloudflare**: the Worker AND the severedarchive.com zone live on **chris@hvddox.com** (account `92162a0f…`), not the ReadyCloud account wrangler normally holds. **wrangler was left logged in as chris@hvddox.com at session end** — switch back before deploying anything ReadyCloud.
+
+**Open item — HTTP→HTTPS redirect.** HTTPS itself works (valid edge cert to Nov 2026), but plain `http://severedarchive.com` serves 200 over HTTP, and the github.io 301 points at `http://` too. Fix is one toggle on the chris@hvddox.com Cloudflare dash: zone → SSL/TLS → Edge Certificates → **Always Use HTTPS** (confirm SSL mode Full while there; consider HSTS after). Do NOT instead enable GitHub Pages "Enforce HTTPS" (`https_enforced` is false) — behind the Cloudflare proxy that risks a redirect loop if SSL mode is Flexible.
 
 ### Session of 2026-08-04 → 05 (overnight)
 
