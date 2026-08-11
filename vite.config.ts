@@ -11,7 +11,7 @@ const sha = (() => {
 const buildId = `BLD ${sha} · ${new Date().toISOString().slice(0, 16).replace('T', ' ')}Z`
 
 export default defineConfig({
-  base: '/severedarchive/',
+  base: '/',
   plugins: [react(), tailwindcss()],
   define: { __BUILD_ID__: JSON.stringify(buildId) },
   test: {
