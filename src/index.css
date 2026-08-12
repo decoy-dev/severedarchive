@@ -1213,6 +1213,15 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .ce-ctl button:disabled { color: rgba(255, 255, 255, 0.16); cursor: default; }
 .ce-ctl .ce-del:hover, .ce-ctl .ce-del:focus-visible { color: #ff5b5b; border-color: #ff5b5b; }
 
+/* An href the rewrite could not settle. The warm red the REMOVE control uses,
+   not the accent: this is something to look at, not something to press.
+   `font-style: normal` on the `<em>`, as `.admin-note` does — the element is the
+   right one semantically, and italic monospace is not a thing this interface
+   does. */
+.ce-warn {
+  font-size: var(--fs-xs); letter-spacing: 0.06em; color: #ff6b5e;
+  font-style: normal; line-height: 1.5;
+}
 .ce-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .ce-field > span { font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--dim); }
 .ce-field input, .ce-field textarea {

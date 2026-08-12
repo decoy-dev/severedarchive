@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   parseContent, serialiseContent, moveItem, removeItem, replaceItem,
-  blankAbout, blankLink, LINK_ICONS, type ContentDraft,
+  blankAbout, blankLink, LINK_ICONS, normaliseHref, hrefWarning, type ContentDraft,
 } from '../lib/contentDraft'
 
 /**
@@ -206,7 +206,24 @@ export default function ContentEditor({
                       ...draft!,
                       links: replaceItem(draft!.links, i, { ...row, href: e.target.value }),
                     })}
+                    // On blur, not on change: rewriting mid-keystroke fights the
+                    // typing — `chris@severedarchive.com` passes through states
+                    // that already look like a finished address, and prefixing
+                    // one of them puts the caret behind seven characters the
+                    // owner did not type. Leaving it to the commit instead would
+                    // fix the file silently and leave the field disagreeing with
+                    // what shipped, so the correction happens here, in view.
+                    onBlur={(e) => {
+                      const href = normaliseHref(e.target.value)
+                      if (href === row.href) return
+                      write({ ...draft!, links: replaceItem(draft!.links, i, { ...row, href }) })
+                    }}
                   />
+                  {/* Where the rewrite cannot be sure, say so rather than commit a
+                      link that resolves somewhere nobody intended. */}
+                  {hrefWarning(row.href) && (
+                    <em className="ce-warn" role="status">{hrefWarning(row.href)}</em>
+                  )}
                 </label>
               </article>
             ))}

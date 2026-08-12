@@ -4,6 +4,7 @@ import { createDraggable } from 'animejs'
 import { ARCHIVE } from '../data/archive'
 import { SITE_CONTENT } from '../data/content'
 import { ADMIN_API } from '../lib/adminSession'
+import { normaliseContentHrefs } from '../lib/contentDraft'
 import { serialiseThumb } from '../lib/thumbCrop'
 import ContentEditor from './ContentEditor'
 import EntryFields, { FilePicker, UploadLimitsHint, emptyDraft, nameFromFile, type EntryDraft } from './EntryFields'
@@ -180,12 +181,19 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
 
   const save = async () => {
     setStatus({ kind: 'busy', message: 'COMMITTING content.json' })
+    // The last thing that happens to the file before it leaves the browser: an
+    // href typed and saved without the field ever losing focus never met the
+    // blur that would have given it its scheme. A no-op when it already has one.
+    // Written back to state as well as sent, so the form shows what shipped —
+    // silently committing something other than what is on screen is its own bug.
+    const body = normaliseContentHrefs(content)
+    if (body !== content) setContent(body)
     try {
       const res = await fetch(`${ADMIN_API}/api/content`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ content, sha }),
+        body: JSON.stringify({ content: body, sha }),
       })
       if (res.ok) {
         setStatus({ kind: 'ok', message: 'COMMITTED. DEPLOY RUNNING — A MINUTE OR TWO.' })

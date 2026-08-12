@@ -36,7 +36,17 @@ test.describe('admin tools', () => {
       const ok = (route.request().postData() ?? '').includes('open-sesame')
       return route.fulfill({ status: ok ? 200 : 401, body: '{}' })
     })
-    await page.route('**/api/content', (route) => route.fulfill({ status: 200, body: '{"content":null,"sha":null}' }))
+    await page.route('**/api/content', async (route: Route) => {
+      if (route.request().method() === 'POST') {
+        seen.push({
+          method: 'POST', url: 'content',
+          fields: JSON.parse(route.request().postData() ?? '{}'),
+          hasFile: false,
+        })
+        return route.fulfill({ status: 200, body: '{"ok":true}' })
+      }
+      return route.fulfill({ status: 200, body: '{"content":null,"sha":null}' })
+    })
     await page.route('**/api/entry/**', async (route: Route) => {
       const req = route.request()
       const body = req.postData() ?? ''
@@ -71,11 +81,16 @@ test.describe('admin tools', () => {
     await expect(page.locator('.stage')).toHaveAttribute('data-booted', 'true', { timeout: 6000 })
   }
 
-  const signIn = async (page: Page) => {
+  /** Sign in and leave the publish panel open — the ABOUT/LINKS editor is in it. */
+  const signInKeepPanel = async (page: Page) => {
     await page.locator('.admin-open').click()
     await page.locator('#admin-passcode').fill('open-sesame')
     await page.locator('.admin-go').click()
     await expect(page.locator('.admin-panel')).toBeVisible()
+  }
+
+  const signIn = async (page: Page) => {
+    await signInKeepPanel(page)
     // The publish panel opens on success; closing it must not sign out.
     await page.locator('.admin-panel .admin-close').click()
     await expect(page.locator('.admin-panel')).toHaveCount(0)
@@ -358,5 +373,81 @@ test.describe('admin tools', () => {
     // The desktop's global Escape closes the focused window. Dismissing a dialog
     // must not also close the thing behind it.
     await expect(page.locator('[data-file-window]')).toHaveCount(1)
+  })
+
+  /**
+   * The LINKS form used to invite the bug it shipped: a bare address typed into
+   * a field labelled LINK is a relative URL, and MAIL 404'd in production for it.
+   * These are about the form, not the normaliser — `contentDraft.test.ts` covers
+   * the string rules. What matters here is that the owner SEES the correction.
+   */
+  test('a bare email typed into LINK gains its mailto: in view', async ({ page }) => {
+    const seen: Seen[] = []
+    await boot(page, seen)
+    await signInKeepPanel(page)
+    await page.locator('.admin-tabs button', { hasText: 'LINKS' }).click()
+
+    // The MAIL row by index, NOT `filter({ hasText: 'MAIL' })`: every row's icon
+    // <select> contains an <option>MAIL</option>, so that filter matches all
+    // three and silently resolves to INSTAGRAM. `links[1]` is MAIL in the seed.
+    const mail = page.locator('.ce-item').nth(1)
+    const href = mail.locator('.ce-field').filter({ hasText: 'LINK' }).locator('input')
+    await href.fill('chris@severedarchive.com')
+    // Still exactly what was typed while the field has focus: rewriting
+    // mid-keystroke would move the caret out from under the owner.
+    await expect(href).toHaveValue('chris@severedarchive.com')
+
+    await href.blur()
+    await expect(href).toHaveValue('mailto:chris@severedarchive.com')
+  })
+
+  test('an href it cannot settle is called out instead of guessed at', async ({ page }) => {
+    const seen: Seen[] = []
+    await boot(page, seen)
+    await signInKeepPanel(page)
+    await page.locator('.admin-tabs button', { hasText: 'LINKS' }).click()
+
+    // The MAIL row by index, NOT `filter({ hasText: 'MAIL' })`: every row's icon
+    // <select> contains an <option>MAIL</option>, so that filter matches all
+    // three and silently resolves to INSTAGRAM. `links[1]` is MAIL in the seed.
+    const mail = page.locator('.ce-item').nth(1)
+    const field = mail.locator('.ce-field').filter({ hasText: 'LINK' })
+    await field.locator('input').fill('contact')
+    await field.locator('input').blur()
+    // Left as typed — 'contact' has no right answer — and the form says so.
+    await expect(field.locator('input')).toHaveValue('contact')
+    await expect(field.locator('.ce-warn')).toContainText('NO SCHEME')
+
+    // And the warning clears once it is addressable.
+    await field.locator('input').fill('mailto:chris@severedarchive.com')
+    await expect(field.locator('.ce-warn')).toHaveCount(0)
+  })
+
+  /**
+   * The backstop, in the one place it is actually reachable.
+   *
+   * Clicking SAVE blurs the field first, so the form path is already covered by
+   * the blur. RAW JSON mode has no field to blur — the owner edits the file as
+   * text — and that is the case a bare address can still reach the commit
+   * through. Normalising at the moment of commit catches it.
+   */
+  test('RAW JSON with a bare address is fixed on the way out, not committed as typed', async ({ page }) => {
+    const seen: Seen[] = []
+    await boot(page, seen)
+    await signInKeepPanel(page)
+    await page.locator('.admin-tabs button', { hasText: 'LINKS' }).click()
+    await page.locator('.ce-modes button', { hasText: 'RAW JSON' }).click()
+
+    const file = {
+      about: [{ label: 'OPERATOR', body: 'SEVEREDARCHIVE', big: true }],
+      links: [{ label: 'MAIL', value: 'chris@severedarchive.com', href: 'chris@severedarchive.com', icon: 'mail' }],
+    }
+    await page.locator('.admin-json').fill(`${JSON.stringify(file, null, 2)}\n`)
+    await page.locator('.admin-submit', { hasText: 'COMMIT' }).click()
+
+    const post = seen.find((s) => s.method === 'POST' && s.url === 'content')!
+    expect(JSON.parse(post.fields.content).links[0].href).toBe('mailto:chris@severedarchive.com')
+    // And the editor shows what shipped, rather than disagreeing with it.
+    await expect(page.locator('.admin-json')).toHaveValue(/mailto:chris@severedarchive\.com/)
   })
 })

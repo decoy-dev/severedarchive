@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { SITE_CONTENT } from '../data/content'
 import {
   parseContent, serialiseContent, moveItem, removeItem, replaceItem,
-  blankAbout, blankLink, LINK_ICONS,
+  blankAbout, blankLink, LINK_ICONS, normaliseHref, hrefWarning, normaliseContentHrefs,
 } from './contentDraft'
 
 const seed = `${JSON.stringify(SITE_CONTENT, null, 2)}\n`
@@ -89,5 +89,96 @@ describe('list edits', () => {
     expect(blankAbout()).toEqual({ label: '', body: '' })
     expect(blankLink().label).toBe('')
     expect(LINK_ICONS).toContain(blankLink().icon)
+  })
+})
+
+describe('normaliseHref', () => {
+  // The exact value the owner committed on 2026-08-12, which shipped a MAIL link
+  // that resolved to /chris@severedarchive.com and 404'd.
+  it('gives a bare email address its mailto:', () => {
+    expect(normaliseHref('chris@severedarchive.com')).toBe('mailto:chris@severedarchive.com')
+  })
+
+  it('gives a bare host its https:, path and all', () => {
+    expect(normaliseHref('severedarchive.com')).toBe('https://severedarchive.com')
+    expect(normaliseHref('instagram.com/severedarchive')).toBe('https://instagram.com/severedarchive')
+  })
+
+  // Everything below is a live value in content.json or a deliberate one, and
+  // rewriting any of it would break a working link to fix a broken one.
+  it('leaves anything already addressed alone', () => {
+    for (const href of [
+      'mailto:chris@severedarchive.com',
+      'https://instagram.com/severedarchive',
+      'http://example.com',
+      'tel:+15551234567',
+      '#',
+      '/press',
+      '//cdn.example.com/x.png',
+    ]) expect(normaliseHref(href)).toBe(href)
+  })
+
+  it('is idempotent, because it runs on blur and again on commit', () => {
+    const once = normaliseHref('chris@severedarchive.com')
+    expect(normaliseHref(once)).toBe(once)
+  })
+
+  it('trims, and leaves empty empty', () => {
+    expect(normaliseHref('  https://x.com  ')).toBe('https://x.com')
+    expect(normaliseHref('   ')).toBe('')
+  })
+
+  it('does not invent a scheme for something it cannot read', () => {
+    // No dot and no @: 'contact' could be a path or a typo, and guessing wrong
+    // silently is what this whole function exists to stop. hrefWarning speaks.
+    expect(normaliseHref('contact')).toBe('contact')
+    expect(hrefWarning('contact')).toMatch(/NO SCHEME/)
+  })
+})
+
+describe('hrefWarning', () => {
+  it('is silent for anything that resolves off the site', () => {
+    for (const href of ['mailto:a@b.co', 'https://x.com', '#', '/press']) {
+      expect(hrefWarning(href)).toBeNull()
+    }
+  })
+
+  it('is silent for a bare address, because that one gets fixed', () => {
+    expect(hrefWarning('chris@severedarchive.com')).toBeNull()
+  })
+
+  it('speaks up for empty', () => {
+    expect(hrefWarning('')).toMatch(/EMPTY/)
+  })
+})
+
+describe('normaliseContentHrefs', () => {
+  it('fixes a bare address on the way to the commit, so a save cannot ship the 404', () => {
+    const draft = parseContent(seed)!
+    draft.links[1] = { ...draft.links[1], href: 'chris@severedarchive.com' }
+    const written = JSON.parse(normaliseContentHrefs(serialiseContent(draft)))
+    expect(written.links[1].href).toBe('mailto:chris@severedarchive.com')
+  })
+
+  it('returns the very same string when there is nothing to fix', () => {
+    // Identity, not just equality: `save` compares the two to decide whether to
+    // write back to state, and a fresh-but-equal string would rerender for nothing.
+    expect(normaliseContentHrefs(seed)).toBe(seed)
+  })
+
+  it('does not touch a file the form cannot model', () => {
+    // Raw mode's whole purpose. Rewriting a shape we do not understand is how
+    // someone's data gets lost.
+    const odd = '{"about":"not an array","links":[]}'
+    expect(normaliseContentHrefs(odd)).toBe(odd)
+    expect(normaliseContentHrefs('{ not json')).toBe('{ not json')
+  })
+
+  it('serialiseContent itself leaves hrefs alone', () => {
+    // It runs per keystroke (ContentEditor re-parses the draft from its output),
+    // so normalising in there would rewrite the field mid-word.
+    const draft = parseContent(seed)!
+    draft.links[1] = { ...draft.links[1], href: 'chris@severedarchive.com' }
+    expect(JSON.parse(serialiseContent(draft)).links[1].href).toBe('chris@severedarchive.com')
   })
 })

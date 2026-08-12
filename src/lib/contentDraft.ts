@@ -106,3 +106,81 @@ export function replaceItem<T>(list: readonly T[], index: number, item: T): T[] 
 /** A new block reads as empty rather than as example copy nobody asked for. */
 export const blankAbout = (): AboutBlock => ({ label: '', body: '' })
 export const blankLink = (): LinkRow => ({ label: '', value: '', href: '', icon: 'mail' })
+
+/** Anything already addressed: a scheme, an in-page anchor, or a rooted path. */
+const isAddressed = (href: string) =>
+  /^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith('#') || href.startsWith('/')
+
+/**
+ * Give a LINK row's href the scheme the owner meant.
+ *
+ * This exists because the MAIL row shipped broken on 2026-08-12. The href was
+ * set to `chris@severedarchive.com` with no `mailto:`, and a bare address in an
+ * href is a RELATIVE URL — the browser resolves it against the site, so MAIL
+ * navigated to `/chris@severedarchive.com` and 404'd. The owner caught it in
+ * production and fixed it by hand.
+ *
+ * The form invited that, and would keep inviting it: the field is a plain text
+ * input (it cannot be `type="url"` — that rejects both `mailto:` and the `#` the
+ * commissions row uses), the label says LINK, and an email address is a
+ * perfectly reasonable thing to type into a field called LINK next to one called
+ * SHOWN AS that you just typed the same address into.
+ *
+ * So: an address becomes `mailto:`, a bare host becomes `https://`, and anything
+ * already addressed is returned untouched — `#`, a rooted path, and any existing
+ * scheme all pass through, because each is a live value in this file today.
+ * Guessing stops where it would have to invent: a lone word like `contact` has no
+ * right answer, so it is left alone and `hrefWarning` speaks up instead.
+ */
+export function normaliseHref(raw: string): string {
+  const href = raw.trim()
+  if (!href || isAddressed(href)) return href
+  // A bare email address.
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(href)) return `mailto:${href}`
+  // A bare host, with or without a path: `severedarchive.com`, `x.com/user`.
+  if (/^[^\s/?#@]+\.[^\s/?#@]{2,}(?:[/?#]|$)/.test(href)) return `https://${href}`
+  return href
+}
+
+/**
+ * What is still wrong with an href after normalising, in the owner's register, or
+ * null when it is fine.
+ *
+ * The counterpart to the rewrite above: where `normaliseHref` can be sure, it
+ * acts silently; where it cannot, the form says so rather than committing a link
+ * that resolves somewhere nobody intended. Both beat what happened, which was
+ * neither.
+ */
+/**
+ * Normalise every href in a whole `content.json` string. The backstop, for the
+ * moment of commit.
+ *
+ * NOT inside `serialiseContent`, which is where this was first written and was
+ * wrong: `ContentEditor` holds the serialised string as its only state and
+ * re-parses the draft from it on every keystroke, so anything normalising in
+ * there runs per character. Typing an address would grow a `mailto:` halfway
+ * through the domain and move the caret out from under the owner — the exact
+ * behaviour the blur-not-change decision on the field exists to avoid.
+ *
+ * Here it runs once, on the string about to be committed, which is what "last
+ * place before it becomes the file" actually means. It catches the case blur
+ * cannot: a value typed and saved by keyboard without the field losing focus.
+ *
+ * A file the form cannot model comes back untouched — raw mode is the escape
+ * hatch for exactly that, and rewriting a shape we do not understand is how you
+ * lose someone's data.
+ */
+export function normaliseContentHrefs(raw: string): string {
+  const draft = parseContent(raw)
+  if (!draft) return raw
+  const links = draft.links.map((l) => ({ ...l, href: normaliseHref(l.href) }))
+  if (links.every((l, i) => l.href === draft.links[i].href)) return raw
+  return serialiseContent({ ...draft, links })
+}
+
+export function hrefWarning(raw: string): string | null {
+  const href = normaliseHref(raw)
+  if (!href) return 'EMPTY — THIS ROW LINKS NOWHERE'
+  if (isAddressed(href)) return null
+  return 'NO SCHEME — THIS WILL POINT INSIDE THE SITE. DID YOU MEAN mailto: OR https:?'
+}
