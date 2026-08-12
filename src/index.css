@@ -1268,10 +1268,24 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 }
 .admin-signout:hover, .admin-signout:focus-visible { color: var(--text); border-color: var(--hair); outline: none; }
 
-/* Removal. Set apart below the form and under its own rule, because it is the
-   one action in this interface that destroys something: it deletes committed
-   renditions and the site has no undo for it. The accent green is reserved for
-   things you want people to press, so this does not get it. */
+/* The removal trigger, in the title bar beside the ✕: it acts on the whole entry
+   the way closing does, and under the form it read as the form's last step. Dim
+   until hovered, and never the accent green — that is reserved for things you
+   want people to press. Compact enough to share a 46px bar with the filename.
+
+   One 16px gap from the close button. That adjacency is only tolerable because
+   the typed confirmation stands between this and a deletion: a slipped click
+   opens a prompt, and pressing REMOVE again closes it. */
+.admin-remove-head { flex: 0 0 auto; padding: 5px 10px; }
+/* Held open. The confirmation autofocuses its input, so focus is gone from this
+   button and hover ends the moment the pointer moves — without this, the control
+   that opened the prompt goes back to looking untouched while the prompt sits
+   there, and the way to cancel from up here is invisible. */
+.admin-remove-head[aria-expanded='true'] { color: #ff6b5e; border-color: #ff6b5e; }
+
+/* The confirmation. Set apart below the form and under its own rule, because it
+   is the one action in this interface that destroys something: it deletes
+   committed renditions and the site has no undo for it. */
 .admin-danger {
   flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--hair);
   position: relative; z-index: 2;

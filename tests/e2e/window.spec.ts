@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test'
+import { expectAboutCopy } from './aboutCopy'
 
 test('tabs switch panels', async ({ page }) => {
   await page.goto('./')
   await expect(page.locator('.stage')).toHaveAttribute('data-booted', 'true', { timeout: 6000 })
   await page.getByRole('tab', { name: 'ABOUT' }).click()
-  await expect(page.getByText('MOTION + VISUAL ART')).toBeVisible()
+  await expectAboutCopy(page)
   await page.getByRole('tab', { name: 'LINKS' }).click()
   await expect(page.getByText('INSTAGRAM')).toBeVisible()
 })
@@ -13,7 +14,7 @@ test('arrow keys switch tabs', async ({ page }) => {
   await page.goto('./')
   await expect(page.locator('.stage')).toHaveAttribute('data-booted', 'true', { timeout: 6000 })
   await page.keyboard.press('ArrowRight')
-  await expect(page.getByText('MOTION + VISUAL ART')).toBeVisible()
+  await expectAboutCopy(page)
   await page.keyboard.press('ArrowLeft')
   await expect(page.getByRole('tab', { name: 'ARCHIVE' })).toHaveAttribute('aria-selected', 'true')
 })

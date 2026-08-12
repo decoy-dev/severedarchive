@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { ready } from './helpers'
+import { expectAboutCopy } from './aboutCopy'
 
 /**
  * The About object is three.js behind an ASCII pass, mounted only while its tab
@@ -167,7 +168,7 @@ test('at the mobile breakpoint the object sits under the copy, and nothing scrol
   test.skip(viewport!.width > 640, 'mobile-only assertion')
   await ready(page)
   await page.getByRole('tab', { name: 'ABOUT' }).click()
-  await expect(page.getByText('MOTION + VISUAL ART')).toBeVisible()
+  await expectAboutCopy(page)
 
   // The object used to be gated off below 641px for want of room; the owner
   // asked for it here too. Measured on a 390x844 phone, the copy leaves 194px

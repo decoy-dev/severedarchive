@@ -21,6 +21,11 @@ import { watchForDeploy } from '../lib/deployWatch'
  * - Removal is destructive against committed media, so it asks for the name to
  *   be typed back. That is not friction for its own sake: the edit run deletes
  *   three renditions and there is no undo in this interface.
+ *
+ * REMOVE sits in the title bar beside the ✕ (owner's call), because taking the
+ * entry out of the archive acts on the whole entry the way closing does — it is
+ * not another field, and under the fields it read as the last step of the form.
+ * The typed confirmation is what lets it sit next to the close button at all.
  */
 type Status = { kind: 'idle' | 'busy' | 'ok' | 'error' | 'live'; message?: string }
 
@@ -193,6 +198,23 @@ export default function EntryEditPanel({ file, onClose }: { file: ArchiveFile; o
           <span className="admin-title">EDIT</span>
           <span className="admin-subject tw-dim">{file.name}.{file.ext}</span>
         </span>
+        {/* Removal belongs to the entry, not to the form — so it sits with the
+            other thing that acts on the whole panel rather than under the
+            fields. Outside `admin-grab` for the same reason the ✕ is: a drag
+            trigger that contains a control eats drifting clicks on it.
+
+            Next to the ✕ is deliberately close to a destructive action, which
+            the typed confirmation below is what makes safe: the worst a slipped
+            click does here is open a prompt. Pressing it again takes it back. */}
+        <button
+          type="button"
+          className="admin-remove admin-remove-head"
+          onClick={() => { setConfirming((c) => !c); setConfirm('') }}
+          aria-expanded={confirming}
+          aria-label={`Remove ${file.name} from the archive`}
+        >
+          REMOVE
+        </button>
         <button className="admin-close" onClick={onClose} aria-label="Close editor">✕</button>
       </header>
 
@@ -242,10 +264,11 @@ export default function EntryEditPanel({ file, onClose }: { file: ArchiveFile; o
         </button>
       </form>
 
-      <div className="admin-danger">
-        {!confirming ? (
-          <button className="admin-remove" onClick={() => setConfirming(true)}>REMOVE FROM ARCHIVE</button>
-        ) : (
+      {/* Only while confirming. With the trigger moved to the title bar there is
+          nothing left to keep a permanent footer open for, and an empty ruled
+          strip under the form would read as a control that had gone missing. */}
+      {confirming && (
+        <div className="admin-danger">
           <div className="admin-confirm">
             <label className="admin-field admin-field-wide">
               <span>TYPE {file.name} TO REMOVE</span>
@@ -254,6 +277,7 @@ export default function EntryEditPanel({ file, onClose }: { file: ArchiveFile; o
             <p className="admin-note">THIS DELETES THE FILE'S RENDITIONS. THERE IS NO UNDO HERE.</p>
             <div className="admin-confirm-row">
               <button
+                type="button"
                 className="admin-remove"
                 onClick={remove}
                 // Checked here as well as by the Worker, so the button that
@@ -262,13 +286,17 @@ export default function EntryEditPanel({ file, onClose }: { file: ArchiveFile; o
               >
                 CONFIRM REMOVAL
               </button>
-              <button className="admin-cancel" onClick={() => { setConfirming(false); setConfirm('') }}>
+              <button
+                type="button"
+                className="admin-cancel"
+                onClick={() => { setConfirming(false); setConfirm('') }}
+              >
                 CANCEL
               </button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {status.message && (
         <p className="admin-status" data-kind={status.kind} role="status">
