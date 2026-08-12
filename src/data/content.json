@@ -29,7 +29,7 @@
     {
       "label": "MAIL",
       "value": "chris@severedarchive.com",
-      "href": "chris@severedarchive.com",
+      "href": "mailto:chris@severedarchive.com",
       "icon": "mail"
     },
     {
