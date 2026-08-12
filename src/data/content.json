@@ -1,0 +1,42 @@
+{
+  "about": [
+    {
+      "label": "OPERATOR",
+      "body": "SEVEREDARCHIVE",
+      "big": true
+    },
+    {
+      "label": "FIELD",
+      "body": "MOTION + VISUAL ART",
+      "big": true
+    },
+    {
+      "label": "BACKSTORY",
+      "body": "Blender-built worlds set to music. Chrome, glass, and metal — still frames and moving sequences in a neo-2000s register. The archive updates when the renders survive."
+    },
+    {
+      "label": "TOOLING",
+      "body": "BLENDER · GEOMETRY NODES · SOUND-SYNCED SEQUENCING"
+    }
+  ],
+  "links": [
+    {
+      "label": "INSTAGRAM",
+      "value": "@severedarchive",
+      "href": "https://instagram.com/severedarchive",
+      "icon": "instagram"
+    },
+    {
+      "label": "MAIL",
+      "value": "CONTACT@SEVEREDARCHIVE",
+      "href": "chris@severedarchive.com",
+      "icon": "mail"
+    },
+    {
+      "label": "COMMISSIONS",
+      "value": "STATUS: OPEN",
+      "href": "#",
+      "icon": "inbox"
+    }
+  ]
+}
