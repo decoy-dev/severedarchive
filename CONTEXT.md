@@ -1,6 +1,6 @@
 # CONTEXT.md — severedarchive portfolio (resume point)
 
-Last updated: 2026-08-12, end of the session that found ABOUT/LINKS edits had never reached the site (the Worker wrote `content.json`; nothing imported it). Everything is committed and live; the last change to the app is `97fa4ce`. The CONTEXT commit after it touches no app code, but it does trigger its own deploy — so the live build stamp will read one commit later than that, which is normal and not evidence of unpushed work. **Read this first when picking the project back up.**
+Last updated: 2026-08-12, end of the session that found ABOUT/LINKS edits had never reached the site (the Worker wrote `content.json`; nothing imported it). Everything is committed and live; the last change to the app is `f0b42fa`. The CONTEXT commit after it touches no app code, but it does trigger its own deploy — so the live build stamp will read one commit later than that, which is normal and not evidence of unpushed work. **Read this first when picking the project back up.**
 
 ## What this is
 
@@ -42,7 +42,7 @@ Account map that made this fiddly (three identities on one machine):
 
 ### Session of 2026-08-12 — the admin edited into a void for a week
 
-Live at `97fa4ce`. 324 vitest, 105 e2e, clean lint. Commits: `b3aa190` (content wiring), `8352af6` (REMOVE to the title bar + three e2e tests un-hardcoded), `97fa4ce` (one-column list).
+Live at `f0b42fa`. 337 vitest, 108 e2e, clean lint. Commits: `b3aa190` (content wiring), `8352af6` (REMOVE to the title bar + three e2e tests un-hardcoded), `97fa4ce` (one-column list), `f0b42fa` (LINK href normalising).
 
 **The owner reported that console edits — email, text, images — never appeared on the site. The pipeline was fine; the app just never read the file.** The Worker commits ABOUT/LINKS to `src/data/content.json`. `AboutPanel` and `LinksPanel` read the `SITE_CONTENT` constants in `src/data/content.ts`. Nothing imported the JSON. The comment in `content.ts` said the app "should prefer it when that file exists" — **that sentence was the entire implementation.** Six edits on 2026-08-12 committed, six Pages deploys went green, and the live site served the constants throughout.
 
@@ -59,7 +59,14 @@ Why nobody caught it, which is the part worth keeping:
 
 **Open item — the LINKS form invites a broken `href`, and did produce one.** The owner made four content commits from the console while this session ran (`e70053b`, `6320b83`, `9fe86f2` and one more) — the first ABOUT/LINKS edits that ever actually reached the site. One of them set MAIL to `"href": "chris@severedarchive.com"`, dropping the scheme. A bare address in `href` is a **relative URL**: clicking MAIL navigates to `/chris@severedarchive.com` and 404s rather than opening a mail client. **The owner spotted and fixed it themselves in `9fe86f2`** — `mailto:` is back and MAIL works.
 
-The form that invited it is unchanged, so it will invite it again. The guard: have `contentDraft` normalise an href that looks like a bare email to `mailto:` (and flag an http(s)-less non-mail href). Not done — a normaliser that rewrites what the owner typed needs their consent first, and this is a live example of the form being wrong rather than the person.
+**Fixed in `f0b42fa`** (owner asked for it): `normaliseHref` gives a bare address its `mailto:` and a bare host its `https:`, on the field's **blur** so the correction is in view, and leaves anything already addressed alone — schemes, `#` and rooted paths are all live values here. Where it cannot be sure it does not guess: `contact` stays as typed and `hrefWarning` says so under the field in red.
+
+Two things about it worth not relearning:
+- **The commit-time backstop is in `AdminPanel.save`, NOT in `serialiseContent`.** It was written there first and that was wrong: `ContentEditor` holds the serialised string as its only state and re-parses the draft from it on **every keystroke** (`ContentEditor.tsx:35,42`), so anything normalising in there runs per character and rewrites the field mid-word. The e2e test caught it — the field already read `mailto:` before it had been blurred. Anything that must happen once per save belongs in `save`; `serialiseContent` is on the hot path.
+- Its reachable case is **RAW JSON mode**, which has no field to blur. Clicking COMMIT blurs the input first, so the form path is already covered.
+- **`filter({ hasText: 'MAIL' })` matches every LINK row**, because every row's icon `<select>` carries an `<option>MAIL</option>`. Two new tests were quietly asserting against INSTAGRAM until a screenshot showed it. Address rows by index.
+
+Small cost, not paid down: `hrefWarning` and `normaliseHref` live in `contentDraft`, which the site imports for `parseContent`, so they sit in the **main** bundle (377.51→378.16 kB, +0.32 kB gzipped) although only the owner can reach them. That is against the "owner-only code is code-split" rule below. Moving the three href helpers to their own module imported by `ContentEditor`/`AdminPanel` only would put them in the admin chunk. Judged not worth a deploy for 0.65 kB; do it if that file is touched again.
 
 **Still not verified end to end:** no upload or removal has ever completed through the live pipeline. The entry-edit route is proven; ingest and delete are not. Treat the first real one of each as the test — and check that what it wrote is actually *read*, which is the whole lesson above.
 
