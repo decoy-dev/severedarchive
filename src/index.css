@@ -633,18 +633,24 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   flex: 1 1 auto; min-height: 0;
   display: grid; grid-template-columns: 1fr 300px; grid-template-rows: minmax(0, 1fr); gap: 16px;
 }
-/* Two-column thumbnail view — a hard two columns, not `auto-fill` with a
-   132px floor. The floor version collapsed to one column whenever anything
-   shaved the 300px track: first a 240px media-query step, then — the subtle
-   one — CLASSIC scrollbars. On a Mac with "always show scroll bars" (or any
-   mouse user, or Windows) the list's own scrollbar takes ~11-15px of layout
-   width, 282px of content becomes ~271px, and two 132px tiles need 272px.
-   Headless verification never sees it: overlay scrollbars take 0px. The panel
-   is a fixed 300px on every desktop width now, so there is no narrow case to
-   degrade for — the tiles just split whatever the scrollbar leaves. */
+/* One-column thumbnail view (owner's call, 2026-08-12, replacing the two-column
+   grid this briefly had). One tile per row at the full width of the track: the
+   poster is the thing being scanned here, and at two columns each one was ~131px
+   wide — a thumbnail of a thumbnail. Scrolling a longer list is the trade, and
+   it is the right way round for an archive of twelve.
+
+   A single column is also immune to the bug the two-column version was fighting.
+   `repeat(2, minmax(0, 1fr))` was a hard two columns because the `auto-fill`
+   floor it replaced collapsed whenever anything shaved the 300px track —
+   classic scrollbars take ~11-15px of layout width, and headless verification
+   never sees it because overlay scrollbars take 0px. With one column there is no
+   floor to fall under: the tile takes whatever the scrollbar leaves.
+
+   The scrollbar theming that came in with that fix stays — it is global, a few
+   hundred lines up, and has nothing to do with the column count. */
 .explorer-list {
   grid-column: 2; grid-row: 1; min-height: 0; overflow-y: auto;
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: grid; grid-template-columns: minmax(0, 1fr);
   gap: 8px; align-content: start; padding: 8px;
   border: 1px solid var(--hair);
 }

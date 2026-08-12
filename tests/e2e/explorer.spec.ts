@@ -4,7 +4,7 @@ import { ready } from './helpers'
 test.describe('desktop explorer', () => {
   test.skip(({ viewport }) => viewport!.width < 861, 'the explorer is the desktop surface')
 
-  test('the list is a two-column thumbnail view', async ({ page }) => {
+  test('the list is a one-column thumbnail view', async ({ page }) => {
     await ready(page)
     const rows = page.locator('[data-file-row]')
     await expect(rows).toHaveCount(12)
@@ -17,21 +17,26 @@ test.describe('desktop explorer', () => {
     await expect(page.locator('[data-file-row] .kind-icon')).toHaveCount(12)
     await expect(rows.first()).not.toContainText('001')
 
-    // Two columns, asserted by geometry rather than by reading the CSS back:
-    // the first two tiles share a row, the third starts a new one.
-    const box = async (i: number) => (await rows.nth(i).boundingBox())!
-    const [a, b, c] = [await box(0), await box(1), await box(2)]
-    expect(Math.abs(a.y - b.y)).toBeLessThanOrEqual(1)
-    expect(b.x).toBeGreaterThan(a.x)
-    expect(c.y).toBeGreaterThan(a.y)
-    expect(Math.abs(c.x - a.x)).toBeLessThanOrEqual(1)
+    // One column, asserted by geometry rather than by reading the CSS back:
+    // every tile starts a new row at the same left edge, and none shares a row
+    // with the one before it. Checked across all twelve rather than the first
+    // three, because a two-column regression would still put tiles 1 and 3 in
+    // the same column and only a pair would give it away.
+    const boxes = await Promise.all(
+      Array.from({ length: 12 }, (_, i) => rows.nth(i).boundingBox()),
+    )
+    for (let i = 1; i < boxes.length; i++) {
+      expect(Math.abs(boxes[i]!.x - boxes[0]!.x)).toBeLessThanOrEqual(1)
+      expect(boxes[i]!.y).toBeGreaterThan(boxes[i - 1]!.y)
+    }
   })
 
-  // The narrow end of the desktop range, not just 1440. A `1fr 240px` step at
-  // 1024px used to collapse the tile view to one column across 861–1024 — two
-  // 132px tiles need 290px of track, so any narrowing does. The step is gone;
-  // this holds the geometry where it used to break.
-  test('two columns hold at the narrow end of the desktop range', async ({ page, viewport }) => {
+  // The narrow end of the desktop range, not just 1440. The column count has
+  // been both ways here: an `auto-fill` floor collapsed under classic
+  // scrollbars, a hard `repeat(2, …)` fixed that, and one column is now what
+  // the owner wants. Every one of those was invisible headless at 1440, so this
+  // pins the geometry at the width where the track is tightest.
+  test('one column holds at the narrow end of the desktop range', async ({ page, viewport }) => {
     test.skip(viewport!.width !== 1440, 'one desktop project resizes itself; the others need not repeat it')
     await page.setViewportSize({ width: 900, height: 900 })
     await ready(page)
@@ -39,9 +44,24 @@ test.describe('desktop explorer', () => {
     await expect(rows).toHaveCount(12)
     const box = async (i: number) => (await rows.nth(i).boundingBox())!
     const [a, b, c] = [await box(0), await box(1), await box(2)]
-    expect(Math.abs(a.y - b.y)).toBeLessThanOrEqual(1)
-    expect(b.x).toBeGreaterThan(a.x)
-    expect(c.y).toBeGreaterThan(a.y)
+    expect(Math.abs(b.x - a.x)).toBeLessThanOrEqual(1)
+    expect(Math.abs(c.x - a.x)).toBeLessThanOrEqual(1)
+    expect(b.y).toBeGreaterThan(a.y)
+    expect(c.y).toBeGreaterThan(b.y)
+  })
+
+  // The scrollbar theming outlived the two-column grid it shipped with, and the
+  // owner asked for it explicitly. It is a global rule, so this guards it for
+  // every scroll container at once rather than for the list alone.
+  test('scroll containers wear the themed scrollbar, not the native one', async ({ page }) => {
+    await ready(page)
+    const styles = await page.locator('.explorer-list').evaluate((el) => {
+      const s = getComputedStyle(el)
+      return { width: s.scrollbarWidth, color: s.scrollbarColor }
+    })
+    expect(styles.width).toBe('thin')
+    // Not `auto`: that is the native bar. The thumb stays in the hairline greys.
+    expect(styles.color).not.toBe('auto')
   })
 
   test('nothing plays until a file is opened', async ({ page }) => {
