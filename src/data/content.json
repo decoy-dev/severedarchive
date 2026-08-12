@@ -28,8 +28,8 @@
     },
     {
       "label": "MAIL",
-      "value": "contact",
-      "href": "mailto:chris@severedarchive.com",
+      "value": "chris@severedarchive.com",
+      "href": "chris@severedarchive.com",
       "icon": "mail"
     },
     {
