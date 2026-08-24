@@ -8,7 +8,8 @@ import CommissionPanel from './components/CommissionPanel'
 import BootSequence from './components/BootSequence'
 import Wordmark from './components/Wordmark'
 import Desktop from './components/Desktop'
-import { readPerfTier } from './lib/perfTier'
+import { readPerfTier, prefersReducedMotion } from './lib/perfTier'
+import { RECEDE_MS } from './lib/recede'
 import { openFrom, type OpenOrigin } from './lib/openFrom'
 import { MAX_WINDOWS } from './lib/windowManager'
 import { ArchiveSelectionProvider, useArchiveSelection } from './lib/selection'
@@ -64,7 +65,44 @@ function AppShell() {
    * it is reached from the COMMISSIONS card, and a fourth tab for a form nobody
    * browses to put it in the top-level navigation where it does not belong.
    */
-  const [commission, setCommission] = useState<{ origin: OpenOrigin | null } | null>(null)
+  const [commission, setCommission] = useState<{
+    /**
+     * Which opening this is. Two jobs: it keys the panel, so reopening mounts a
+     * fresh one, and it lets a scheduled close tell whether the panel it was
+     * scheduled for is still the panel on screen.
+     *
+     * Both matter because reopening inside the 360ms of a close is one click
+     * away. Without the key React reuses the element, the entrance effect has
+     * already run, and the panel comes back still wearing the interrupted
+     * recede's inline styles — measured at scale 0.968 with a 2.6px blur, a
+     * visibly shrunken and hazy form. Without the generation check the new panel
+     * is unmounted by the old one's timer.
+     */
+    gen: number
+    origin: OpenOrigin | null
+    closing: boolean
+  } | null>(null)
+  const commissionGen = useRef(0)
+
+  /**
+   * Closing is two beats, the same shape `Desktop.requestClose` uses for a file
+   * window: mark it receding, let it play, then unmount. The panel animates
+   * itself; this only owns the timing, because the thing that unmounts has to be
+   * the thing that knows when the animation is over.
+   */
+  const closeCommission = useCallback(() => {
+    if (prefersReducedMotion()) { setCommission(null); return }
+    const gen = commissionGen.current
+    setCommission((c) => (c && !c.closing ? { ...c, closing: true } : c))
+    window.setTimeout(() => {
+      setCommission((c) => (c && c.gen === gen ? null : c))
+    }, RECEDE_MS)
+  }, [])
+
+  const openCommission = useCallback((origin: OpenOrigin) => {
+    commissionGen.current += 1
+    setCommission({ gen: commissionGen.current, origin, closing: false })
+  }, [])
 
   /**
    * The body opens out of the tab that was pressed, the same gesture the
@@ -120,7 +158,7 @@ function AppShell() {
             {tab === 'archive' && <ArchivePanel />}
             {tab === 'about' && <AboutPanel tier={tier} />}
             {tab === 'links' && (
-              <LinksPanel onCommission={(origin) => setCommission({ origin })} />
+              <LinksPanel onCommission={openCommission} />
             )}
           </TerminalWindow>
         </Desktop>
@@ -129,7 +167,12 @@ function AppShell() {
           to `document.body` and covers the whole stage. Only after boot — there
           is nothing to open it from until the terminal exists. */}
       {booted && commission && (
-        <CommissionPanel origin={commission.origin} onClose={() => setCommission(null)} />
+        <CommissionPanel
+          key={commission.gen}
+          origin={commission.origin}
+          closing={commission.closing}
+          onClose={closeCommission}
+        />
       )}
       <span className="build-tag" aria-hidden="true">{__BUILD_ID__}</span>
     </div>

@@ -1884,6 +1884,10 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   background: rgba(3, 5, 7, 0.66);
   opacity: 0;
 }
+/* On the way out it is scenery, not a form. Without this the 360ms of the recede
+   is 360ms in which a shrinking, blurring panel still takes clicks and keystrokes
+   — pressing SUBMIT on something that is halfway gone. */
+.commission-overlay[data-closing='true'] { pointer-events: none; }
 
 /* The panel itself: a box, not a full-bleed panel, so the terminal stays visible
    around it and the thing reads as opened OVER the site rather than as another

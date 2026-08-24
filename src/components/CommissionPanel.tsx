@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { animate } from 'animejs'
 import { prefersReducedMotion } from '../lib/perfTier'
 import { isInteractiveTarget } from '../lib/keyboard'
+import { RECEDE_MS, recedeAt, recedeFilter, recedeTransform } from '../lib/recede'
 import { openFrom, type OpenOrigin } from '../lib/openFrom'
 import { useTurnstile } from '../hooks/useTurnstile'
 import {
@@ -38,9 +39,14 @@ type Phase = 'idle' | 'busy' | 'done' | 'error'
  * the document gaining a scrollbar is not an option — the stage clips.
  */
 export default function CommissionPanel({
-  origin, onClose,
+  origin, closing, onClose,
 }: {
   origin: OpenOrigin | null
+  /**
+   * Leaving. Owned by `App`, which unmounts this after `RECEDE_MS` — the panel
+   * plays the recede, the parent decides when it is over.
+   */
+  closing: boolean
   onClose: () => void
 }) {
   const [values, setValues] = useState<CommissionValues>(blankCommission)
@@ -90,6 +96,48 @@ export default function CommissionPanel({
     }
     openFrom(panel, origin, { scale: 0.88 })
   }, [origin])
+
+  /**
+   * The close: the panel is pulled back into the background until it is gone.
+   *
+   * The same `recede` the file windows use, driven the same way — in rAF rather
+   * than by anime or a CSS animation, because `recedeAt` is a scale/opacity/blur
+   * quadruple per frame and the blur and brightness go through `filter`, which no
+   * keyframe here owns. Matching the file windows was the point: closing a panel
+   * should look like closing a window, and this interface already had an opinion
+   * about what that looks like.
+   *
+   * `transform-origin` goes back to the centre first. The entrance left it on the
+   * card the panel grew out of, and receding toward that point reads as the panel
+   * sliding off to one side rather than withdrawing — `recede` is explicit that it
+   * pulls back in place.
+   */
+  useEffect(() => {
+    const panel = panelRef.current
+    const backdrop = backdropRef.current
+    if (!closing || !panel) return
+    // `App` unmounts immediately when motion is reduced, so this is unreachable
+    // then — guarded anyway, because a panel left mid-recede would be a panel
+    // stuck at 8% scale.
+    if (prefersReducedMotion()) return
+
+    panel.style.transformOrigin = 'center'
+    let raf = 0
+    const start = performance.now()
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - start) / RECEDE_MS)
+      const { scale, opacity, blur, brightness } = recedeAt(progress)
+      panel.style.transform = recedeTransform('', scale)
+      panel.style.opacity = `${opacity}`
+      panel.style.filter = recedeFilter(blur, brightness)
+      // The ground comes back linearly while the panel accelerates away, so the
+      // site is legible again before the panel has finished leaving.
+      if (backdrop) backdrop.style.opacity = `${1 - progress}`
+      if (progress < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [closing])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -183,7 +231,7 @@ export default function CommissionPanel({
     // No dismiss-on-backdrop-click. Escape and the close control are deliberate
     // acts; a stray click on the margin is not, and this form is ten questions
     // deep by the time anyone would make one.
-    <div className="commission-overlay" ref={backdropRef}>
+    <div className="commission-overlay" ref={backdropRef} data-closing={closing ? 'true' : undefined}>
       <div
         className="commission-panel glass"
         ref={panelRef}
