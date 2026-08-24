@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from 'react'
 import { animate } from 'animejs'
 import { prefersReducedMotion, type PerfTier } from '../lib/perfTier'
+import { centreOf, type OpenOrigin } from '../lib/openFrom'
 import AdminLogin from './AdminLogin'
 import SessionPulse from './SessionPulse'
 
@@ -15,7 +16,8 @@ export default function TerminalWindow({
   tab, onTab, bodyRef, footer, tier, children,
 }: {
   tab: TabId
-  onTab: (t: TabId) => void
+  /** Handed the centre of the pressed tab, so the body can open out of it. */
+  onTab: (t: TabId, origin: OpenOrigin) => void
   bodyRef: RefObject<HTMLDivElement | null>
   footer?: ReactNode
   tier: PerfTier
@@ -52,7 +54,9 @@ export default function TerminalWindow({
         {TABS.map((t) => (
           <button key={t.id} role="tab" aria-selected={tab === t.id}
             className={tab === t.id ? 'tw-tab is-active' : 'tw-tab'}
-            onClick={() => onTab(t.id)}>
+            // Measured at the press. The strip reflows on every resize, and on a
+            // phone it moves to the bottom of the window entirely.
+            onClick={(e) => onTab(t.id, centreOf(e.currentTarget))}>
             {t.label}
           </button>
         ))}

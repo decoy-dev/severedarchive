@@ -14,6 +14,15 @@ export default defineConfig({
   base: '/',
   plugins: [react(), tailwindcss()],
   define: { __BUILD_ID__: JSON.stringify(buildId) },
+  server: {
+    // `wrangler dev` keeps its local KV in `.wrangler/state` as SQLite, and its
+    // write-ahead log changes on every KV write. Vite's watcher does not read
+    // .gitignore, so without this the admin Worker running alongside `vite dev`
+    // full-reloads the page every time it counts a rate-limit hit — which made
+    // filling in the commission form locally impossible, the page resetting
+    // mid-keystroke.
+    watch: { ignored: ['**/.wrangler/**'] },
+  },
   test: {
     // Playwright owns tests/e2e; keep vitest scoped to unit tests only.
     exclude: ['tests/e2e/**', 'node_modules/**', 'dist/**'],

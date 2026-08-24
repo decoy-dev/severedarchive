@@ -370,6 +370,63 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .about-panel[data-wide='false'] { grid-template-columns: minmax(0, 1fr); }
 .about-copy { min-width: 0; align-self: start; }
 
+/* Centre the stack in the panel instead of hanging it from the top.
+   The copy grew — SERVICES is a six-item list where TOOLING was one line — and
+   with the blocks pinned to the top all the slack pooled underneath: 32px above
+   against 140px below at 1440x900, and by 760px tall the last block was already
+   past the bottom edge and clipped by `.panel`'s `overflow: hidden`.
+
+   Auto margins rather than the grid's own `align-items: center`, because the
+   copy does not always fit. Auto margins absorb POSITIVE free space and resolve
+   to zero when it is negative, so the stack centres while there is room and
+   top-aligns the moment there is not. Centring outright would push OPERATOR up
+   out of the panel on a short window, and clipping the top of the copy instead
+   of the bottom is not an improvement.
+
+   Scoped to the two-column layout: below the split the panel top-aligns on
+   purpose (see the mobile rule) and the rows are content-sized anyway. */
+.about-panel[data-wide='true'] > .about-copy {
+  align-self: stretch; display: flex; flex-direction: column;
+  /* The last resort, below roughly 700px of window: the stack is 431px and the
+     tightening above cannot find another 90px, so under ~700px SERVICES was
+     simply cut off by `.panel`'s `overflow: hidden` — measured 12px gone at
+     700px, 92px at 620px, with no way to reach it.
+
+     Scrolling and not a third tightening tier, because there is no honest amount
+     of padding left to take: the type would have to shrink, and this is the
+     client's own copy at the size they set it. The document still never scrolls
+     — only this column does, and only when it has to. When the stack fits, the
+     auto margins centre it and no scrollbar appears at all. */
+  min-height: 0; overflow-y: auto;
+}
+.about-panel[data-wide='true'] > .about-copy > .panel-block:first-child { margin-top: auto; }
+/* Also drops the last block's trailing 12px, which would otherwise sit inside
+   the centred box and push the whole stack visibly off-centre. */
+.about-panel[data-wide='true'] > .about-copy > .panel-block:last-child { margin-bottom: auto; }
+
+/* Short windows: reclaim the room the stack is missing.
+
+   Centring alone was not enough. The four blocks and their gaps come to 467px,
+   and a 1512x775 window — a 14" laptop, which is what this gets read on — leaves
+   462px inside the panel. Five pixels short is enough to collapse the auto
+   margins to zero, and SERVICES ends up with 27px under it against 32px over the
+   top of OPERATOR, tightening to 2px by 750px tall.
+
+   The boxes give, not the type: padding and the gaps between blocks come in, and
+   the copy itself is untouched at the size the client set. That buys 36px, which
+   is enough to centre with room to spare across the whole laptop band instead of
+   running out inside it.
+
+   A height query and not a `vh` clamp, so nothing moves at the heights where
+   there was never a problem — at 900px tall the stack already had 92px above and
+   below, and tightening it there would be a design change nobody asked for. */
+@media (max-height: 820px) {
+  .about-panel[data-wide='true'] > .about-copy > .panel-block {
+    padding-block: 9px;
+    margin-bottom: 8px;
+  }
+}
+
 /* Ported from the prototype. The `!important`s are aimed at AsciiEffect's own
    inline styles, which it writes on its container every resize — a plain rule
    loses to them. Its `courier new` font declaration is deliberately NOT
@@ -416,7 +473,11 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 @media (prefers-reduced-motion: reduce) {
   .ascii-object > div { text-shadow: none; }
 }
-.panel-label { display: block; font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--dim); margin-bottom: 6px; }
+/* `margin` and `font-weight` written out, not just `margin-bottom`: the commission
+   form uses this class on an `h2` so the panel has a real heading to navigate to,
+   and a bare `h2` would otherwise bring a top margin and a bold weight with it.
+   No effect on the spans that carry this class elsewhere. */
+.panel-label { display: block; font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--dim); margin: 0 0 6px; font-weight: inherit; }
 .panel-big { font-size: clamp(18px, 2.4vw, 26px); letter-spacing: 0.02em; color: var(--bright); } /* Share Tech Mono is single-weight — no bold anywhere */
 
 /* Three square-ish cards filling the panel, even widths. `auto-fit` with a
@@ -439,6 +500,17 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
      full-height slab that stretching produces. Never taller than the panel
      itself, because the page cannot scroll to fit it. */
   aspect-ratio: 4 / 5; max-height: 100%;
+  /* `width: 100%` and not the grid item's default stretch, which an aspect ratio
+     beats. Without it, `max-height` capped the height on any window under about
+     860px tall and the ratio pulled the WIDTH down with it — 370px cards sitting
+     at the left edge of their 424px columns, so the row read as left-shifted
+     (0px lead-in against 54px tail-out at 1512x775) with the gaps blown out to
+     70px from the 16px set above. Ballooning to 130px by 700px tall.
+     A definite width wins over the ratio, so the cards keep dividing the row
+     evenly and the ratio governs only the height it was meant to. Below 860px
+     the cards resolve squarer than 4:5 — which is the point, since the height to
+     be 4:5 in is not there. */
+  width: 100%;
   border: 1px solid var(--hair); background: rgba(0, 0, 0, 0.28);
   text-align: center;
   transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
@@ -1774,4 +1846,177 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   .primary-view { max-height: 42vh; }
   .panel { padding: 12px; }
   .panel-block { padding: 10px 12px; }
+}
+
+/* ── commission form ──
+   The public counterpart to the admin editors, so it speaks the same language
+   as `.ce-*`: hairline boxes, near-black fills, uppercase dim labels, acid only
+   on focus and hover. What it cannot borrow is their layout: those live inside
+   a fixed admin window with their own scroll list, while this is a dialog opened
+   over the whole stage from the COMMISSIONS card.
+
+   So the panel splits in two: a header that never moves and `.commission-scroll`,
+   the only thing that scrolls. Ten questions do not fit a 775px-tall window, and
+   the document scrolling is not an option (the stage clips; a hidden container
+   would still shunt sideways to reveal a focused descendant — the same bug the
+   stage's `overflow: clip` ruling exists to kill). The scrollbar itself needs no
+   rule here: the global thin/hairline theme at the top of this file already
+   covers every scroll container, this one included. */
+/* The backdrop. Fixed over everything, above the terminal (z-index 3) and the
+   admin panel's own layer sits at 60 — this goes above both, because it is the
+   only thing the visitor is doing while it is open.
+
+   `opacity: 0` here and on the panel: both are drawn in by the mount effect, the
+   same arrangement `.terminal-window` uses, so a reduced-motion visit has to set
+   the end state directly rather than relying on the animation to arrive. */
+.commission-overlay {
+  position: fixed; inset: 0; z-index: 70;
+  /* Explicit tracks, not just `place-items: center`. The panel caps itself with
+     `max-height: 100%`, and a percentage max-height against an AUTO-sized track
+     resolves to none — the track depends on the content, the content on the
+     track. It measured 1456px tall in a 775px window, overflowing the viewport
+     top and bottom with no way to reach either end. `minmax(0, 1fr)` makes the
+     track definite, so the cap has something real to be a percentage of. */
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  display: grid; place-items: center;
+  padding: clamp(10px, 3vw, 40px);
+  background: rgba(3, 5, 7, 0.66);
+  opacity: 0;
+}
+
+/* The panel itself: a box, not a full-bleed panel, so the terminal stays visible
+   around it and the thing reads as opened OVER the site rather than as another
+   page of it. 620px because the form is one column of text inputs — past that a
+   text column stops being a form and starts being a banner, the same reason
+   `.panel-block` caps at 560. */
+.commission-panel {
+  position: relative;
+  width: min(100%, 620px); max-height: 100%;
+  display: flex; flex-direction: column;
+  border: 1px solid var(--hair-bright);
+  background: rgba(8, 11, 14, 0.97);
+  opacity: 0;
+  /* The mount effect overwrites this with the launching card's centre. Kept as
+     the fallback for an open with no origin to grow from. */
+  transform-origin: center;
+}
+.commission-panel:focus-visible { outline: none; }
+.commission-head {
+  flex: 0 0 auto;
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: clamp(14px, 2.4vw, 24px) clamp(14px, 2.4vw, 24px) 12px;
+  border-bottom: 1px solid var(--hair);
+}
+.commission-titles { flex: 1 1 auto; min-width: 0; }
+.commission-head .panel-label { margin-bottom: 2px; }
+.commission-sub {
+  font-size: var(--fs-lg); letter-spacing: 0.02em; color: var(--bright);
+}
+/* Matches `.admin-close`: the same glyph in the same corner does the same thing
+   everywhere in this interface. */
+.commission-close {
+  flex: 0 0 auto; font: inherit; font-size: var(--fs-sm); line-height: 1;
+  color: var(--dim); background: transparent; border: 1px solid var(--hair);
+  padding: 6px 9px;
+}
+.commission-close:hover, .commission-close:focus-visible {
+  color: var(--acid); border-color: var(--acid); outline: none;
+}
+.commission-scroll {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  padding: clamp(14px, 2.4vw, 24px);
+}
+.commission-form {
+  display: flex; flex-direction: column; gap: 16px;
+}
+.commission-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.commission-label {
+  font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--dim);
+  text-transform: uppercase;
+}
+/* The asterisk is the visible half of the contract; `required`/`aria-required`
+   on the control is the other. Acid, since it marks what must happen next. */
+.commission-req { color: var(--acid); }
+.commission-input {
+  font: inherit; font-size: var(--fs-sm); letter-spacing: 0.04em; line-height: 1.5;
+  color: var(--bright); background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--hair-bright); padding: 8px 10px; min-width: 0;
+  resize: vertical;
+}
+.commission-input:focus-visible { outline: none; border-color: var(--acid); }
+/* The alert token, not the accent: green here would read as "done right". */
+.commission-input[aria-invalid='true'] { border-color: var(--alert); }
+.commission-error {
+  font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--alert);
+}
+
+/* The drop zone is a label over a visually-hidden native input — a button
+   cannot open a picker, and the `.thumb-pick` precedent is exactly this. The
+   input keeps its 1px box (rather than `display: none`) so it stays in the tab
+   order; `:focus-within` on the label is the visible focus ring. Dashed, the
+   one dashed border in the interface, because a drop target should not read as
+   a filled control. */
+.commission-drop {
+  display: flex; flex-direction: column; gap: 4px; cursor: pointer;
+  padding: 12px 14px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px dashed var(--hair-bright);
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.commission-drop:hover, .commission-drop:focus-within,
+.commission-drop[data-drag='true'] {
+  border-color: var(--acid); background: rgba(182, 255, 46, 0.05);
+}
+.commission-drop[aria-invalid='true'] { border-color: var(--alert); }
+.commission-file {
+  position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;
+}
+.commission-drop-label {
+  font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--dim);
+  text-transform: uppercase;
+}
+.commission-drop:hover .commission-drop-label,
+.commission-drop:focus-within .commission-drop-label { color: var(--acid); }
+.commission-drop-hint {
+  font-size: var(--fs-sm); letter-spacing: 0.04em; color: var(--text);
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.commission-drop-size { font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--dim); }
+
+/* The widget draws its own box and owns its own height, so this only holds the
+   row. `min-height` keeps the SUBMIT button from jumping up the form while the
+   script is still loading and the container is empty — the layout settles once
+   and does not shift under the pointer. */
+.commission-turnstile { min-height: 65px; }
+
+.commission-submit {
+  align-self: start; padding: 8px 22px;
+  font-size: var(--fs-sm); letter-spacing: 0.12em; color: var(--bright);
+  border: 1px solid var(--hair-bright); background: rgba(0, 0, 0, 0.4);
+}
+.commission-submit:hover:not(:disabled), .commission-submit:focus-visible:not(:disabled) {
+  color: var(--acid); border-color: var(--acid); outline: none;
+}
+.commission-submit:disabled { color: var(--dim); cursor: default; }
+
+/* Same log-line idiom as `.admin-status`: a `>` prompt and a status word. */
+.commission-status {
+  font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--dim);
+}
+.commission-status[data-kind='ok'] { color: var(--acid); }
+.commission-status[data-kind='error'] { color: var(--alert); }
+
+@media (max-width: 640px) {
+  /* Fields are full-width already; what steps down is the chrome around them.
+     The label and hint sizes are left at the tokens — 15px is the interface
+     floor, and a sales form is not where legibility gets traded away. */
+  .commission-overlay { padding: 8px; }
+  /* Nearly the whole screen on a phone: a centred box with a margin all round
+     wastes the only dimension a phone has, and the form is ten questions. */
+  .commission-panel { width: 100%; max-height: 100%; }
+  .commission-head { padding: 12px 12px 8px; }
+  .commission-scroll { padding: 12px; }
+  .commission-sub { font-size: var(--fs-base); }
+  .commission-form { gap: 12px; }
 }

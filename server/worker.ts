@@ -1,7 +1,10 @@
 import { signSession, verifyPasscode, verifySession } from './auth'
+import { parseEnquiry, sendEnquiry } from './commission'
+import { contentCommitMessage } from './contentMessage'
 import { deletionConfirmed, validateEntry, validateEntryEdit } from './entry'
 import { dispatchEdit, dispatchIngest, stageRaw, readFile, writeFile, type GitHubConfig } from './github'
 import { clientKey, countAttempt, type CounterStore } from './ratelimit'
+import { verifyTurnstile, type TurnstileEnv } from './turnstile'
 
 /**
  * The admin backend: a Cloudflare Worker that authenticates the owner, stages
@@ -15,7 +18,7 @@ import { clientKey, countAttempt, type CounterStore } from './ratelimit'
  * Nothing here ever returns either secret, and no response distinguishes "wrong
  * passcode" from "no passcode": both are 401.
  */
-export type Env = {
+type BaseEnv = {
   /** `pbkdf2$iterations$salt$hash` — see `hashPasscode`. Never the passcode. */
   ADMIN_PASSCODE_HASH: string
   /** HMAC key for session tokens. Rotating it logs the owner out, which is fine. */
@@ -31,7 +34,23 @@ export type Env = {
    */
   ALLOWED_ORIGIN: string
   RATE_LIMIT: CounterStore
+  /**
+   * Resend, for the public commission form. Absent in a deployment that has not
+   * been given a key yet, and the form says so rather than pretending it sent —
+   * see `sendEnquiry`.
+   */
+  RESEND_API_KEY?: string
+  /** Who enquiries go to, and the verified sender they come from. */
+  COMMISSION_TO?: string
+  COMMISSION_FROM?: string
 }
+
+/**
+ * Everything the Worker is configured with. `TurnstileEnv` is mixed in rather
+ * than restated so the verifier's own contract stays the one definition of what
+ * it needs.
+ */
+export type Env = BaseEnv & TurnstileEnv
 
 /** Passcode attempts per IP per hour. Low: there is one person and one passcode. */
 const LOGIN_LIMIT = 8
@@ -39,6 +58,14 @@ const LOGIN_WINDOW_S = 60 * 60
 /** Uploads are expensive downstream (a transcode run each), so they are capped too. */
 const UPLOAD_LIMIT = 20
 const UPLOAD_WINDOW_S = 60 * 60
+/**
+ * Commission enquiries per IP per hour. Low, because each one is a stranger's
+ * 10MB upload and an email: generous enough that nobody with a real project is
+ * ever stopped, tight enough that the client's inbox cannot be flooded from one
+ * address. A legitimate resubmission after a mistake is well inside it.
+ */
+const COMMISSION_LIMIT = 5
+const COMMISSION_WINDOW_S = 60 * 60
 
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024
 
@@ -330,12 +357,65 @@ async function handleContent(req: Request, env: Env): Promise<Response> {
   } catch {
     return json({ error: 'content must be valid JSON' }, 422, env, {}, req)
   }
+  // The message names the rows that changed, which takes the version being
+  // replaced: one extra GET on a route that runs a handful of times a week and
+  // then waits minutes for a deploy. A read that fails costs the description and
+  // nothing else — `contentCommitMessage` falls back on null.
+  const current = await readFile(ghConfig(env), path).then((f) => f?.content ?? null, () => null)
   // The sha is the one just read. GitHub rejects a stale one, which is what
   // stops two sessions overwriting each other rather than merging silently.
   await writeFile(
-    ghConfig(env), path, body.content, 'Update site content from admin',
+    ghConfig(env), path, body.content, contentCommitMessage(current, body.content),
     typeof body.sha === 'string' ? body.sha : undefined,
   )
+  return json({ ok: true }, 200, env, {}, req)
+}
+
+/**
+ * The commission form. The one route here that does NOT require a session.
+ *
+ * Everything else on this Worker is the owner holding a cookie; this is a
+ * stranger with a 10MB file, so the guards are different in kind. There is no
+ * identity to check, so what is checked is a Turnstile token, then volume, then
+ * shape: every answer is length-capped, the file is size-capped, and no
+ * upstream's words ever reach the browser.
+ *
+ * ORDER MATTERS. The token arrives as a header, not a form field, which is the
+ * one deviation from Turnstile's documented shape and the reason for it: the
+ * token has to be checked BEFORE `formData()`, because `formData()` is where the
+ * 10MB upload gets read. A form field would mean reading the bot's megabytes in
+ * order to find out it was a bot. Verification is cheap and first; the rate limit
+ * is second, so a flood of valid-token submissions is still bounded.
+ */
+async function handleCommission(req: Request, env: Env): Promise<Response> {
+  const verdict = await verifyTurnstile(
+    env, req.headers.get('cf-turnstile-response'), req.headers.get('CF-Connecting-IP'),
+  )
+  if (!verdict.ok) return json({ error: verdict.error }, verdict.status, env, {}, req)
+
+  const limit = await countAttempt(env.RATE_LIMIT, `commission:${clientKey(req.headers)}`, {
+    limit: COMMISSION_LIMIT, windowS: COMMISSION_WINDOW_S,
+  })
+  if (!limit.allowed) {
+    return json(
+      { error: 'TOO MANY ENQUIRIES FROM THIS CONNECTION. TRY AGAIN LATER, OR MAIL CHRIS@SEVEREDARCHIVE.COM.' },
+      429, env, { 'retry-after': String(limit.retryAfter) }, req,
+    )
+  }
+
+  const form = await req.formData().catch(() => null)
+  if (!form) return json({ error: 'THAT DID NOT ARRIVE AS A FORM.' }, 400, env, {}, req)
+
+  const enquiry = await parseEnquiry(form)
+  if ('error' in enquiry) return json({ error: enquiry.error }, enquiry.status, env, {}, req)
+
+  const sent = await sendEnquiry(env, enquiry)
+  if (!sent.ok) {
+    // Logged with the name, so an enquiry that failed to send is not simply lost:
+    // `wrangler tail` has who it was from and it can be chased by hand.
+    console.error('commission send failed', { name: enquiry.name, status: sent.status })
+    return json({ error: sent.error }, sent.status, env, {}, req)
+  }
   return json({ ok: true }, 200, env, {}, req)
 }
 
@@ -346,7 +426,10 @@ export function corsPreflight(env: Env, req: Request): Response {
       'access-control-allow-origin': originFor(req, env),
       'access-control-allow-credentials': 'true',
       'access-control-allow-methods': 'GET,POST,DELETE,OPTIONS',
-      'access-control-allow-headers': 'content-type',
+      // `cf-turnstile-response` is why the commission form preflights at all: a
+      // multipart POST with no custom header is a simple request and skips this.
+      // Naming it here is what lets the browser send the token at all.
+      'access-control-allow-headers': 'content-type,cf-turnstile-response',
       'access-control-max-age': '86400',
     },
   })
@@ -374,6 +457,7 @@ export default {
       if (url.pathname === '/api/session' && req.method === 'DELETE') return handleSignOut(req, env)
       if (url.pathname === '/api/upload' && req.method === 'POST') return await handleUpload(req, env)
       if (url.pathname === '/api/content') return await handleContent(req, env)
+      if (url.pathname === '/api/commission' && req.method === 'POST') return await handleCommission(req, env)
       // `/api/entry/<id>` — POST edits (with an optional replacement file),
       // DELETE removes. The id is matched, not split off blindly, so a path with
       // extra segments is a 404 rather than an id containing a slash.

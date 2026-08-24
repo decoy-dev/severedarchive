@@ -37,7 +37,7 @@ const SEED_CONTENT: SiteContent = {
   links: [
     { label: 'INSTAGRAM', value: '@severedarchive', href: 'https://instagram.com/severedarchive', icon: 'instagram' },
     { label: 'MAIL', value: 'CONTACT@SEVEREDARCHIVE', href: 'mailto:hello@example.com', icon: 'mail' },
-    { label: 'COMMISSIONS', value: 'STATUS: OPEN', href: '#', icon: 'inbox' },
+    { label: 'COMMISSIONS', value: 'STATUS: OPEN', href: '#commission', icon: 'inbox' },
   ],
 }
 

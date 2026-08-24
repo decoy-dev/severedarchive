@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import worker, { type Env } from './worker'
 import { hashPasscode } from './auth'
 import type { CounterStore } from './ratelimit'
@@ -284,6 +284,86 @@ describe('/api/entry/:id', () => {
     expect(res.status).toBe(502)
     expect(await res.text()).not.toContain('ghp_secret')
     vi.restoreAllMocks()
+  })
+})
+
+describe('POST /api/content', () => {
+  let env: Env
+  let cookie: string
+
+  beforeEach(async () => {
+    env = await makeEnv()
+    const login = await worker.fetch(post('/api/session', { passcode: PASSCODE }), env)
+    cookie = cookieFrom(login)
+  })
+
+  const committed = JSON.stringify({
+    about: [{ label: 'TOOLING', body: 'BLENDER' }],
+    links: [{ label: 'COMMISSIONS', value: 'STATUS: OPEN', href: '#', icon: 'inbox' }],
+  }, null, 2)
+
+  const edited = JSON.stringify({
+    about: [{ label: 'SERVICES', body: 'BLENDER' }],
+    links: [{ label: 'COMMISSIONS', value: 'STATUS: OPEN', href: 'https://tally.so/r/x', icon: 'inbox' }],
+  }, null, 2)
+
+  /**
+   * Stands in for the contents API: serves the read, captures the write. The
+   * read is what the commit message is derived from, so a test that stubbed only
+   * the write would not exercise the thing worth checking.
+   */
+  const stubGitHub = (current: string | null): { message: string; sha?: string }[] => {
+    const writes: { message: string; sha?: string }[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const method = (init?.method ?? 'GET').toUpperCase()
+      if (method === 'GET') {
+        if (current === null) return new Response('not found', { status: 404 })
+        return new Response(JSON.stringify({
+          content: btoa(String.fromCharCode(...new TextEncoder().encode(current))),
+          sha: 'sha-current',
+          encoding: 'base64',
+        }), { headers: { 'content-type': 'application/json' } })
+      }
+      writes.push(JSON.parse(String(init?.body)))
+      return new Response('{}', { headers: { 'content-type': 'application/json' } })
+    })
+    return writes
+  }
+
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('commits a message that names what changed', async () => {
+    const writes = stubGitHub(committed)
+    const res = await worker.fetch(post('/api/content', { content: edited, sha: 'sha-current' }, {
+      headers: { cookie },
+    }), env)
+    expect(res.status).toBe(200)
+    expect(writes).toHaveLength(1)
+    const [subject, ...body] = writes[0].message.split('\n')
+    expect(subject).toBe('Admin: edit SERVICES, COMMISSIONS')
+    expect(body.join('\n')).toContain('LINKS COMMISSIONS href: "#" → "https://tally.so/r/x"')
+    // The sha still goes with it: the message is additional, not a replacement.
+    expect(writes[0].sha).toBe('sha-current')
+  })
+
+  it('still commits, under the old subject, when the current file cannot be read', async () => {
+    // The description is a nicety. Losing it must not cost the owner the save.
+    const writes = stubGitHub(null)
+    const res = await worker.fetch(post('/api/content', { content: edited, sha: 'sha-current' }, {
+      headers: { cookie },
+    }), env)
+    expect(res.status).toBe(200)
+    expect(writes).toHaveLength(1)
+    expect(writes[0].message).toBe('Update site content from admin')
+  })
+
+  it('rejects content that is not JSON before reading or writing anything', async () => {
+    const writes = stubGitHub(committed)
+    const res = await worker.fetch(post('/api/content', { content: 'not json {' }, {
+      headers: { cookie },
+    }), env)
+    expect(res.status).toBe(422)
+    expect(writes).toHaveLength(0)
   })
 })
 

@@ -22,6 +22,15 @@ raw/
 /playwright/.cache/
 /shots/
 
+# `wrangler dev` local state: Miniflare's KV and cache, as SQLite. Local only,
+# machine-specific, and rewritten constantly while the Worker runs.
+.wrangler/
+
+# `wrangler dev` local secrets. Real secret values for local runs — never commit
+# one, and never point the production deploy at this file.
+.dev.vars
+.dev.vars.*
+
 # Agent tooling (local only — installed skills, harness config, MCP scratch)
 .agents/
 .claude/

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { SITE_CONTENT, type LinkIcon } from '../data/content'
+import { centreOf, type OpenOrigin } from '../lib/openFrom'
 
 /**
  * Three large cards rather than three rows. The panel has the full height of
@@ -78,22 +79,28 @@ const ICONS: Record<LinkIcon, IconSpec> = {
   },
 }
 
-export default function LinksPanel() {
+/**
+ * The href that means "the form is on this site".
+ *
+ * A sentinel in `content.json` rather than a hardcoded exception here, so the
+ * row stays editable in the admin and keeps its label, value and icon like any
+ * other. `#`-prefixed, so `normaliseHref` already treats it as addressed and
+ * `hrefWarning` stays quiet about it.
+ */
+export const COMMISSION_HREF = '#commission'
+
+export default function LinksPanel({
+  onCommission,
+}: {
+  /** Handed the centre of the card, so the panel can grow out of it. */
+  onCommission: (origin: OpenOrigin) => void
+}) {
   return (
     <div className="panel links-panel">
       {SITE_CONTENT.links.map((l) => {
         const spec = ICONS[l.icon]
-        // A mailto and an in-page anchor must not open a tab; only a real
-        // outbound link does.
-        const external = l.href.startsWith('http')
-        return (
-          <a
-            key={l.label}
-            className="link-card"
-            href={l.href}
-            target={external ? '_blank' : undefined}
-            rel={external ? 'noreferrer noopener' : undefined}
-          >
+        const face = (
+          <>
             <svg
               className="link-icon"
               viewBox={spec.viewBox}
@@ -109,6 +116,41 @@ export default function LinksPanel() {
             </svg>
             <span className="link-card-label">{l.label}</span>
             <span className="link-card-value tw-dim">{l.value}</span>
+          </>
+        )
+
+        // The commission form opens as a panel over the stage, so its card is a
+        // button and not a link: an `<a href="#commission">` would put a junk
+        // fragment in the address bar and offer "open in new tab" on something
+        // that is not a page. Same class, so the two read identically.
+        if (l.href === COMMISSION_HREF) {
+          return (
+            <button
+              type="button"
+              key={l.label}
+              className="link-card"
+              // Measured at the click, not stored: the card moves with every
+              // resize, and a stale centre would open the panel out of where the
+              // card used to be.
+              onClick={(e) => onCommission(centreOf(e.currentTarget))}
+            >
+              {face}
+            </button>
+          )
+        }
+
+        // A mailto and an in-page anchor must not open a tab; only a real
+        // outbound link does.
+        const external = l.href.startsWith('http')
+        return (
+          <a
+            key={l.label}
+            className="link-card"
+            href={l.href}
+            target={external ? '_blank' : undefined}
+            rel={external ? 'noreferrer noopener' : undefined}
+          >
+            {face}
           </a>
         )
       })}

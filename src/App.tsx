@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { animate } from 'animejs'
 import BackgroundVideo from './components/BackgroundVideo'
 import TerminalWindow, { type TabId } from './components/TerminalWindow'
 import ArchivePanel from './components/ArchivePanel'
 import AboutPanel, { preloadAboutObject } from './components/AboutPanel'
 import LinksPanel from './components/LinksPanel'
+import CommissionPanel from './components/CommissionPanel'
 import BootSequence from './components/BootSequence'
 import Wordmark from './components/Wordmark'
 import Desktop from './components/Desktop'
-import { readPerfTier, prefersReducedMotion } from './lib/perfTier'
+import { readPerfTier } from './lib/perfTier'
+import { openFrom, type OpenOrigin } from './lib/openFrom'
 import { MAX_WINDOWS } from './lib/windowManager'
 import { ArchiveSelectionProvider, useArchiveSelection } from './lib/selection'
 import { WindowRegistryProvider, useWindowView } from './lib/windowRegistry'
@@ -55,14 +56,35 @@ function AppShell() {
   const [tab, setTabState] = useState<TabId>('archive')
   const { selectedId } = useArchiveSelection()
   const bodyRef = useRef<HTMLDivElement | null>(null)
+  /**
+   * The commission form: open, and the point it grows out of.
+   *
+   * One piece of state rather than a boolean plus a position, so "open" and
+   * "where from" cannot disagree. It is a panel over the stage and not a tab —
+   * it is reached from the COMMISSIONS card, and a fourth tab for a form nobody
+   * browses to put it in the top-level navigation where it does not belong.
+   */
+  const [commission, setCommission] = useState<{ origin: OpenOrigin | null } | null>(null)
 
-  const flashBody = useCallback(() => {
-    if (bodyRef.current && !prefersReducedMotion()) {
-      animate(bodyRef.current, { opacity: [0.15, 1], duration: 180, ease: 'outQuad' })
-    }
+  /**
+   * The body opens out of the tab that was pressed, the same gesture the
+   * commission panel makes out of its card — one `openFrom` behind both.
+   *
+   * It used to be a flat opacity blink from 0.15. The scale is 0.96 and not the
+   * panel's 0.88 deliberately: the panel opens once, and a tab is pressed twenty
+   * times in a session. At the panel's depth the whole terminal appears to jump
+   * on every press; at 0.96 it reads as the content unfolding from the tab and
+   * stays comfortable at that rate. Same easing and duration, so the two are
+   * recognisably the same move.
+   */
+  const flashBody = useCallback((origin: OpenOrigin | null) => {
+    if (bodyRef.current) openFrom(bodyRef.current, origin, { scale: 0.96 })
   }, [])
 
-  const setTab = useCallback((t: TabId) => { setTabState(t); flashBody() }, [flashBody])
+  const setTab = useCallback(
+    (t: TabId, origin: OpenOrigin) => { setTabState(t); flashBody(origin) },
+    [flashBody],
+  )
 
   // The ABOUT object is a 590kB chunk plus an SVG it cannot build without, and
   // fetching both on the click meant the column sat empty for a beat the first
@@ -80,7 +102,8 @@ function AppShell() {
   // registers it (§4.6). App only says what a tab shift means.
   const shiftTab = useCallback((dir: 1 | -1) => {
     setTabState((cur) => TAB_ORDER[(TAB_ORDER.indexOf(cur) + dir + TAB_ORDER.length) % TAB_ORDER.length])
-    flashBody()
+    // No pointer, so nothing to grow from: it opens from the body's own centre.
+    flashBody(null)
   }, [flashBody])
 
   return (
@@ -96,9 +119,17 @@ function AppShell() {
           <TerminalWindow tab={tab} onTab={setTab} bodyRef={bodyRef} tier={tier}>
             {tab === 'archive' && <ArchivePanel />}
             {tab === 'about' && <AboutPanel tier={tier} />}
-            {tab === 'links' && <LinksPanel />}
+            {tab === 'links' && (
+              <LinksPanel onCommission={(origin) => setCommission({ origin })} />
+            )}
           </TerminalWindow>
         </Desktop>
+      )}
+      {/* Outside the terminal, because it is not one of its panels: it portals
+          to `document.body` and covers the whole stage. Only after boot — there
+          is nothing to open it from until the terminal exists. */}
+      {booted && commission && (
+        <CommissionPanel origin={commission.origin} onClose={() => setCommission(null)} />
       )}
       <span className="build-tag" aria-hidden="true">{__BUILD_ID__}</span>
     </div>

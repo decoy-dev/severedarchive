@@ -2,17 +2,36 @@
 # static build on GitHub Pages, and this Worker exists only because a passcode
 # the browser checks is a passcode a visitor can read.
 #
-# Secrets are NOT here. Set them with `wrangler secret put <NAME>`, which stores
-# them encrypted on Cloudflare and never writes them to the repo:
+# Secrets are NOT here. Set them with `secret put`, which stores them encrypted
+# on Cloudflare and never writes them to the repo. `npx`, because wrangler is a
+# devDependency of this project and is not installed globally — a bare
+# `wrangler` here is `command not found`. Run these from the repo root, where
+# wrangler picks up the worker name from this file:
 #
-#   wrangler secret put ADMIN_PASSCODE_HASH   # output of scripts/hash-passcode.mjs
-#   wrangler secret put SESSION_SECRET        # openssl rand -base64 32
-#   wrangler secret put GITHUB_TOKEN          # fine-grained, this repo only
+#   npx wrangler secret put ADMIN_PASSCODE_HASH   # output of scripts/hash-passcode.mjs
+#   npx wrangler secret put SESSION_SECRET        # openssl rand -base64 32
+#   npx wrangler secret put GITHUB_TOKEN          # fine-grained, this repo only
+#   npx wrangler secret put RESEND_API_KEY        # commission form delivery
+#
+# Each prompts for the value, so nothing lands in shell history. The dashboard's
+# Settings > Variables and Secrets does the same job if you prefer it. Secrets
+# set either way survive `worker:deploy`; the `[vars]` below do NOT — those are
+# declared here, so a deploy overwrites whatever the dashboard says they are.
 #
 # The token needs exactly two permissions on decoy-dev/severedarchive:
 #   Contents: read and write   (commit renditions and content.json)
 #   Actions:  read and write   (dispatch the ingest workflow)
 # Nothing else. It cannot reach another repo, and it is never sent to a browser.
+#
+# RESEND_API_KEY is what makes the public commission form actually send. Without
+# it the endpoint answers 503 and the form says it is not connected yet, rather
+# than accepting an enquiry and dropping it. Resend and not Cloudflare's own
+# Email Sending because severedarchive.com's zone lives in a different Cloudflare
+# account than this Worker, so the `send_email` binding has no verified sender to
+# use; an API key crosses that boundary and a binding does not.
+#
+# The sending domain must be verified in Resend before the first send. Until it
+# is, COMMISSION_FROM has to be a domain that IS verified there.
 
 name = "severedarchive-admin"
 main = "server/worker.ts"
@@ -21,6 +40,23 @@ compatibility_date = "2026-01-01"
 [vars]
 GITHUB_OWNER = "decoy-dev"
 GITHUB_REPO = "severedarchive"
+# Where commission enquiries go, and the verified Resend sender they come from.
+# Vars and not secrets: neither is confidential, and a change to either should be
+# a config edit rather than a deploy of new code.
+COMMISSION_TO = "chris@severedarchive.com"
+COMMISSION_FROM = "Severed Archive <commissions@severedarchive.com>"
+# Hostnames whose Turnstile tokens this deployment accepts. Deliberately NOT the
+# widget's own domain list: the widget carries localhost so the form can be worked
+# on locally, and production accepting a token minted on localhost would defeat
+# the check entirely — anyone can serve a page on their own localhost. For local
+# work, override it on the command line rather than adding it here:
+#
+#   npx wrangler dev --var TURNSTILE_HOSTNAMES:localhost
+#
+# and pair it with Cloudflare's always-passes testing keys so no real challenge
+# is issued: sitekey 1x00000000000000000000AA via VITE_TURNSTILE_SITE_KEY, and
+# secret 1x0000000000000000000000000000000AA via --var TURNSTILE_SECRET.
+TURNSTILE_HOSTNAMES = "severedarchive.com,www.severedarchive.com,decoy-dev.github.io"
 # Exact origin allowed to call the API. No wildcard: this is the only site that
 # may hold a session for it.
 ALLOWED_ORIGIN = "https://severedarchive.com,https://decoy-dev.github.io,http://localhost:5173,http://localhost:4173"
