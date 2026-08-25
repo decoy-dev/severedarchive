@@ -1,22 +1,6 @@
 {
-  "patch": {
-    "file01": {
-      "name": "CHROME_SEQ",
-      "kind": "video",
-      "ext": "MP4",
-      "tagline": "liquid metal study",
-      "description": "",
-      "date": "2026-01-01",
-      "year": "2026",
-      "postUrl": "https://instagram.com/severedarchive",
-      "thumb": {
-        "custom": false,
-        "cx": 0.107,
-        "cy": 0.254,
-        "time": 1,
-        "zoom": 2.8
-      }
-    }
-  },
-  "removed": []
+  "patch": {},
+  "removed": [
+    "file01"
+  ]
 }

@@ -5,7 +5,6 @@
 export type MediaMeta = { width: number; height: number; durationSec: number }
 
 export const MEDIA_META: Record<string, MediaMeta> = {
-  file01: { width: 1280, height: 720, durationSec: 10.43 },
   file02: { width: 1280, height: 720, durationSec: 10 },
   file03: { width: 1280, height: 720, durationSec: 12 },
   file04: { width: 1280, height: 720, durationSec: 12 },
@@ -22,7 +21,6 @@ export const MEDIA_META: Record<string, MediaMeta> = {
 
 /** The 240p encode's box. Only its aspect ratio matters, and only as a guard. */
 export const THUMB_META: Record<string, { width: number; height: number }> = {
-  file01: { width: 416, height: 234 },
   file02: { width: 416, height: 234 },
   file03: { width: 416, height: 234 },
   file04: { width: 416, height: 234 },
@@ -46,7 +44,6 @@ export const THUMB_META: Record<string, { width: number; height: number }> = {
  * broken frame. This is the field that decides what is rendered.
  */
 export const MEDIA_KIND: Record<string, 'video' | 'photo'> = {
-  file01: 'video',
   file02: 'video',
   file03: 'video',
   file04: 'video',
@@ -67,7 +64,6 @@ export const MEDIA_KIND: Record<string, 'video' | 'photo'> = {
  * so without this an edited poster stays invisible until the cache expires.
  */
 export const MEDIA_VERSION: Record<string, { full: string; thumb: string; poster: string }> = {
-  file01: { full: '0b35797a', thumb: 'ec097efd', poster: '964f8ee2' },
   file02: { full: 'ff8df29a', thumb: 'b6b5a62d', poster: '36c38728' },
   file03: { full: 'e60eed79', thumb: 'f588b91e', poster: 'cef4515b' },
   file04: { full: 'f66f40a9', thumb: '532698e0', poster: 'd49f2041' },
