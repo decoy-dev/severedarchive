@@ -17,6 +17,7 @@ export const MEDIA_META: Record<string, MediaMeta> = {
   file10: { width: 540, height: 720, durationSec: 5.03 },
   file11: { width: 1280, height: 720, durationSec: 9.97 },
   file12: { width: 1280, height: 720, durationSec: 12 },
+  scary_monsters_remake: { width: 1080, height: 1440, durationSec: 0 },
 }
 
 /** The 240p encode's box. Only its aspect ratio matters, and only as a guard. */
@@ -33,6 +34,7 @@ export const THUMB_META: Record<string, { width: number; height: number }> = {
   file10: { width: 180, height: 240 },
   file11: { width: 416, height: 234 },
   file12: { width: 416, height: 234 },
+  scary_monsters_remake: { width: 312, height: 416 },
 }
 
 /**
@@ -56,6 +58,7 @@ export const MEDIA_KIND: Record<string, 'video' | 'photo'> = {
   file10: 'video',
   file11: 'video',
   file12: 'video',
+  scary_monsters_remake: 'photo',
 }
 
 /**
@@ -76,4 +79,5 @@ export const MEDIA_VERSION: Record<string, { full: string; thumb: string; poster
   file10: { full: 'a7913ab4', thumb: 'fbbf41a0', poster: '47c260b0' },
   file11: { full: 'd0e70b44', thumb: 'b538ffcd', poster: '37fb111c' },
   file12: { full: 'd104fe7c', thumb: 'b9a48d99', poster: '5d3cabde' },
+  scary_monsters_remake: { full: 'd107cca6', thumb: 'f3f020ff', poster: 'baafa1e6' },
 }
