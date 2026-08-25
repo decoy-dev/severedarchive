@@ -2,6 +2,7 @@
   "patch": {},
   "removed": [
     "file01",
-    "file02"
+    "file02",
+    "file03"
   ]
 }
