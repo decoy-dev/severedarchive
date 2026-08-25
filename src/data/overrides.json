@@ -1,6 +1,7 @@
 {
   "patch": {},
   "removed": [
-    "file01"
+    "file01",
+    "file02"
   ]
 }
