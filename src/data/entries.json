@@ -11,6 +11,17 @@
     "postUrl": "https://instagram.com/severedarchive"
   },
   {
+    "id": "psp_mockup",
+    "name": "PSP_MOCKUP",
+    "ext": "JPG",
+    "kind": "photo",
+    "tagline": "RDR2 Start Menu",
+    "description": "I came across a photo of someone's PSP on their desk surrounded by random items, and it really stuck with me. So when I was working on a batch of edits inspired by the game Red Dead Redemption, I knew i had to combine the two ideas together.",
+    "date": "2026-08-17",
+    "year": "2026",
+    "postUrl": "https://instagram.com/severedarchive"
+  },
+  {
     "id": "sony_edit",
     "name": "SONY_EDIT",
     "ext": "JPG",
