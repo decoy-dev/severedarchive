@@ -9,5 +9,16 @@
     "date": "2026-08-25",
     "year": "2026",
     "postUrl": "https://instagram.com/severedarchive"
+  },
+  {
+    "id": "sony_edit",
+    "name": "SONY_EDIT",
+    "ext": "JPG",
+    "kind": "photo",
+    "tagline": "Y2K Poster Exploration",
+    "description": "One of my favorite edits I made, was a part of a bigger project where we aimed to capture the vibe of old Sony product ads from the late 90s and early 2000s.",
+    "date": "2026-06-25",
+    "year": "2026",
+    "postUrl": "https://instagram.com/severedarchive"
   }
 ]
