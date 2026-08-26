@@ -6,6 +6,7 @@ export type MediaMeta = { width: number; height: number; durationSec: number }
 
 export const MEDIA_META: Record<string, MediaMeta> = {
   psp_mockup: { width: 1080, height: 1440, durationSec: 0 },
+  scary_monsters: { width: 1080, height: 1440, durationSec: 0 },
   skrillex12: { width: 1080, height: 1440, durationSec: 0 },
   sony_edit: { width: 1080, height: 1440, durationSec: 0 },
 }
@@ -13,6 +14,7 @@ export const MEDIA_META: Record<string, MediaMeta> = {
 /** The 240p encode's box. Only its aspect ratio matters, and only as a guard. */
 export const THUMB_META: Record<string, { width: number; height: number }> = {
   psp_mockup: { width: 312, height: 416 },
+  scary_monsters: { width: 312, height: 416 },
   skrillex12: { width: 312, height: 416 },
   sony_edit: { width: 312, height: 416 },
 }
@@ -27,6 +29,7 @@ export const THUMB_META: Record<string, { width: number; height: number }> = {
  */
 export const MEDIA_KIND: Record<string, 'video' | 'photo'> = {
   psp_mockup: 'photo',
+  scary_monsters: 'photo',
   skrillex12: 'photo',
   sony_edit: 'photo',
 }
@@ -38,6 +41,7 @@ export const MEDIA_KIND: Record<string, 'video' | 'photo'> = {
  */
 export const MEDIA_VERSION: Record<string, { full: string; thumb: string; poster: string }> = {
   psp_mockup: { full: 'e8744e21', thumb: '78845232', poster: 'c4e955be' },
+  scary_monsters: { full: 'd107cca6', thumb: 'f3f020ff', poster: 'baafa1e6' },
   skrillex12: { full: 'f4c0e919', thumb: 'ce078353', poster: '9719cb06' },
   sony_edit: { full: '51b7002a', thumb: '5a9a8b09', poster: '77ed262e' },
 }

@@ -31,5 +31,16 @@
     "date": "2026-06-25",
     "year": "2026",
     "postUrl": "https://instagram.com/severedarchive"
+  },
+  {
+    "id": "scary_monsters",
+    "name": "SCARY_MONSTERS",
+    "ext": "JPG",
+    "kind": "photo",
+    "tagline": "Album Art Study",
+    "description": "Been listening to a lot of Skrillex's earlier releases, and just loved the attention put into all of the artwork. Very inspiring.",
+    "date": "2026-05-03",
+    "year": "2026",
+    "postUrl": "https://instagram.com/severedarchive"
   }
 ]
