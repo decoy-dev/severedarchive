@@ -1,6 +1,6 @@
 # CONTEXT.md — severedarchive portfolio (resume point)
 
-Last updated: 2026-08-12, end of the session that found ABOUT/LINKS edits had never reached the site (the Worker wrote `content.json`; nothing imported it). Everything is committed and live; the last change to the app is `f0b42fa`. The CONTEXT commit after it touches no app code, but it does trigger its own deploy — so the live build stamp will read one commit later than that, which is normal and not evidence of unpushed work. **Read this first when picking the project back up.**
+Last updated: 2026-09-08, end of the session that added the **R+D tab** and its console publishing, plus a window-feel pass (materialize on open, drag momentum without rubberband, z-order fix). Everything is committed and live; the last change to the app is `4d9a0d9`, the Worker is at `e30dd278…`. The CONTEXT commit after it touches no app code, but it does trigger its own deploy — so the live build stamp will read one commit later than that, which is normal and not evidence of unpushed work. **Read this first when picking the project back up.** Feature detail lives in `docs/RND-HANDOFF.md`.
 
 ## What this is
 
@@ -25,6 +25,32 @@ The v2 archive-stack build was replaced by a desktop window manager. Work was re
 | F — deploy | ✅ done |
 
 All six slices are complete and deployed. The owner's 2026-08-03 revision pass (wordmark fit, thumbnail LIST, standby pane, refusal blowout, About ASCII object, close-button target) is also in and live.
+
+### Session of 2026-09-08 — the R+D tab, and how windows feel
+
+Live at `4d9a0d9`; Worker at `e30dd278-440a-413e-ad9c-31f06e864d2c`. 394 vitest passed / 9 skipped, clean lint (the six warnings are in the vendored `docs/prototypes/…/SVGLoader.js` and predate everything). **e2e was NOT run this session** — see the open item. One commit for the whole pass. Detail, decisions and the "will bite" list are in **`docs/RND-HANDOFF.md`**; this is the resume-point summary.
+
+**What shipped.** A fourth tab, **R+D**, between ARCHIVE and ABOUT: a six-wide wall of `_thumb` stills scrolling inside the body, opening into a focus view (full still loaded on demand, caption in a side column, ◄ ► paging by side arrows / keys / touch row + swipe, unfold on open and retract on close). It **ships empty** by the owner's call — the designed empty state (`00 INDEXED`, `FIRST TRANSMISSION PENDING`, six `NO SIGNAL` tiles) is what is live. Publishing is an **R+D tab inside the existing PUBLISH console**, not a second uploader: it posts `collection=rnd` to the same `/api/upload`, and the Worker → `ingest.yml`/`edit.yml` → `write-entry.mjs`/`edit-entry.mjs` thread that one field to `src/data/rnd.json` and `rnd_`-prefixed renditions through the unchanged photo ladder. EDIT / REMOVE per entry is in the focus view when signed in. Admin is reachable on a phone via a compact ◈ at the end of the bottom tab strip (it never was before — the footer that held the login is `display:none` under 640px). A build-time plugin (`rndSeo` in `vite.config.ts`) bakes an `ImageGallery` JSON-LD block, a `<noscript>` gallery and an image sitemap from `rnd.json` on every deploy.
+
+**The data-model call, so it is not re-argued:** a *parallel* collection (`rnd.json` + `rnd.ts`) sharing `public/media/` under a `rnd_` prefix — not a `collection` column on `entries.json`, not a media subdirectory. `archive.ts` throws at load on an id without metadata and would have had to filter a column out of every surface; the prefix is what lets `gen-media-meta.mjs` discover the new renditions with **zero changes** and rules out an id collision. `mediaMeta.generated.ts` is therefore shared, and `archive.test.ts`'s invariant is now "every generated id is claimed by ARCHIVE **or** RND".
+
+**Three archive bugs found on the way, all owner-reported, all fixed at the source:**
+- *A dragged window covered the next one opened.* anime's Draggable writes an inline `z-index` from a **library-global counter on every grab**, and React had no reason to rewrite `zIndex` when the logical rank had not changed. The rank is now handed over as `--fw-z` and `.file-window` resolves `z-index: calc(10 + var(--fw-z)) !important` — the `!important` is the whole fix.
+- *Drag felt gelatinous.* `containerFriction 0.82 / releaseContainerFriction 0.55` plus a low-damped spring let a window stretch past the bound and rubberband back. Now hard containment while dragging and **`releaseContainerFriction: 1`**, which is load-bearing: anime only animates past the edge and back when it is below 1. Momentum kept (`maxVelocity 5`, duration spring `200/28`, `outCubic`) — the owner tuned the feel by hand. **Do not judge this with the desktop-automation harness**: it can pause before `mouseup`, zeroing the captured velocity, and reads as "no glide" when the tuning is fine.
+- *The title bar could be flicked off the top.* `containerPadding: -24` applied to every edge. It is per-edge now, `[0, -24, -24, -24]` — top hard, since the handle is the title bar.
+- Plus: the (i) note inside a window now spans the bar (it hung 300px off a trigger near the right edge of a ~250px portrait bar and the root's `overflow:hidden` cut it); and `edit.yml`'s poster-only step `test -f`'d `_full.mp4`, so **every caption-only edit of a still had been failing** — it now picks whichever ladder exists.
+
+**Windows materialize on open** (owner asked; they "snapped in" while everything else animated): a 520ms `mask-image` of 24×14 dithered cells resolving over the *real* panel — no clone, no canvas, no decoder change, and it writes nothing but the mask (transform belongs to the drag/recede/lock-on, opacity/filter to the recede). The glass blur stays on throughout; a first cut switched it off for the beat and the blur returning at the end was exactly the pop the owner had ruled out. `src/lib/materialize.ts`, pure math tested like `recede`/`lockOn`.
+
+**Test debt paid.** `npm test` was red on `main` before any of this: 17 failures in `windowManager.test.ts` / `archive.test.ts` still fixtured on `file01`–`file12`, which the owner deleted through the console on 2026-08-26. `windowManager.test.ts` now mocks `isArchiveId` (its cap tests need four valid ids; the live archive has three), `archive.test.ts` asserts over whatever is live. That also settles the old "still not verified end to end" note above: **archive ingest and removal have both completed through the live pipeline** — the owner's own `Add psp_mockup from admin upload` … `remove file12 from admin` commits are the proof.
+
+**Open items:**
+- **Run `npm run e2e` before the next deploy.** 13 specs; `about.spec`, `responsive.spec`, `admin.spec`, `window.spec` reference the tab strip, which now has four tabs in a new order. Some assertions will need updating.
+- **First live R+D upload / edit / remove is unexercised.** Treat it as the test, and confirm the row is *read* on the site (the 2026-08-12 lesson), not just that the deploy went green. `rndSeo` is `apply:'build'`, so verify SEO in `dist/index.html`, never in the dev server.
+- Mobile was verified in Firefox Responsive Design Mode only (320×480 / 390 / 768); no real-device or Mobile Safari pass on the compact login popover.
+- `docs/COMMISSION-FORM-HANDOFF.md` (2026-08-24) had been sitting untracked; committed with this entry.
+
+Account map this session: `gh` had **both** identities logged in with `decoy-dev` active, so the push needed no switch; wrangler was already on chris@hvddox.com (as the 08-11 entry says it was left). Both are unchanged at session end.
 
 ### Session of 2026-08-11 (custom domain cutover)
 
@@ -226,6 +252,8 @@ The owner reported the site getting heavy with three videos open. Measured facts
 - `docs/superpowers/specs/2026-07-31-desktop-windows-design.md` — the v3 feature spec.
 - `docs/superpowers/plans/2026-07-31-desktop-windows.md` — Tasks 1–9 are accurate history. **Tasks 10–17 are marked superseded and must not be implemented** — they crash the page.
 - `docs/CODEX-REVIEW.md` — external review that triggered the re-plan.
+- `docs/RND-HANDOFF.md` — the R+D tab, console publishing for it, the window-feel pass (2026-09-08). Decisions, pipeline, "will bite" list.
+- `docs/COMMISSION-FORM-HANDOFF.md` — the commission form, Turnstile, panel motion (2026-08-24).
 - `.superpowers/sdd/2026-07-31-desktop-windows/progress.md` — the ledger (gitignored, local only). Every ruling and deferred finding.
 
 ## Why the plan changed
@@ -336,8 +364,8 @@ Note the login limit is **8 attempts per IP per hour** — a locked-out owner wa
 
 ## Workflows
 
-- Dev: `npm run dev` → http://localhost:5173/severedarchive/
-- Tests: `npm test` (288 vitest, 98 e2e). E2e: `npm run e2e` (Playwright, **ALWAYS headless**, projects desktop 1440 / tablet 768 / mobile 390).
+- Dev: `npm run dev` → http://localhost:5173/ (base is `/` since the domain cutover; the old `/severedarchive/` path is gone).
+- Tests: `npm test` (394 vitest + 9 skipped as of 2026-09-08). E2e: `npm run e2e` (Playwright, **ALWAYS headless**, projects desktop 1440 / tablet 768 / mobile 390; 13 specs — not re-run since the R+D tab landed, see that session's open items).
 - Deploy: **a push to `main` DOES trigger the Pages deploy.** This entry previously said the opposite ("verified suppressed platform-side"), and acting on it is how two sessions were told they were looking at a stale build when they were not. Corrected 2026-08-04 after watching four consecutive pushes each queue a `Deploy to Pages` run keyed to the pushed SHA and reach `completed success`. A manual run still works and is the fallback:
   `gh workflow run deploy.yml --ref main --repo decoy-dev/severedarchive`
   Either way, verify the live build stamp matches HEAD — `.build-tag` carries the short SHA. Note the **dev server's `__BUILD_ID__` is frozen at server start**, so a stale stamp locally means nothing.
