@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { createDraggable } from 'animejs'
 import { ARCHIVE } from '../data/archive'
+import { RND } from '../data/rnd'
 import { SITE_CONTENT } from '../data/content'
 import { ADMIN_API } from '../lib/adminSession'
 import { normaliseContentHrefs } from '../lib/contentDraft'
@@ -14,9 +15,10 @@ import { watchForDeploy } from '../lib/deployWatch'
 /**
  * What the passcode was for: publishing.
  *
- * Two jobs, which are the two things the Worker can do — upload a file with its
- * fields, and edit the ABOUT copy and LINKS rows. Both go through the session
- * cookie the login set, which is httpOnly, so nothing here has or needs a token.
+ * Three jobs, which are the three things the Worker can do — upload a file with
+ * its fields (to the archive, or as a still to the R&D collection), and edit
+ * the ABOUT copy and LINKS rows. Both go through the session cookie the login
+ * set, which is httpOnly, so nothing here has or needs a token.
  *
  * It reports what the backend said rather than interpreting it. An upload
  * answers 202, not 200: the Worker has staged the file and asked Actions to
@@ -25,13 +27,22 @@ import { watchForDeploy } from '../lib/deployWatch'
  */
 type Status = { kind: 'idle' | 'busy' | 'ok' | 'error' | 'live'; message?: string }
 
+/** The non-202 upload answers, translated the same way on both upload tabs. */
+const uploadFailure = (res: Response, body: { details?: string[] }): Status =>
+  res.status === 422 ? { kind: 'error', message: (body.details ?? ['INVALID ENTRY']).join(' · ').toUpperCase() }
+  : res.status === 401 ? { kind: 'error', message: 'SESSION EXPIRED. LOG IN AGAIN.' }
+  : res.status === 413 ? { kind: 'error', message: 'FILE IS TOO LARGE' }
+  : { kind: 'error', message: `REFUSED (${res.status})` }
+
 export default function AdminPanel({ onClose }: { onClose: () => void }) {
   // ABOUT and LINKS are separate tabs at the owner's request — they are edited on
   // different occasions, and a combined page made each visit scroll past the
   // other's fields. Both still edit the ONE `content.json`: the string and its
   // sha are shared state here, so a change made under ABOUT is still in the
   // payload when LINKS commits, and the two tabs can never race each other.
-  const [tab, setTab] = useState<'upload' | 'about' | 'links'>('upload')
+  // ARCHIVE and R+D are the two upload destinations; each keeps its own draft,
+  // so switching tabs never leaks half a form into the other collection.
+  const [tab, setTab] = useState<'archive' | 'rnd' | 'about' | 'links'>('archive')
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
 
   /** Same watch the edit panel runs — see `deployWatch`. Dies with the panel. */
@@ -60,6 +71,13 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
    */
   const [localUrl, setLocalUrl] = useState<string | null>(null)
   const [localMeta, setLocalMeta] = useState<{ aspect: number; duration: number } | null>(null)
+
+  // The R+D upload's own fields. A separate draft, not a `collection` switch on
+  // the archive one: the two are different shapes (R&D is stills only, no
+  // thumbnail conversation), and a shared draft would carry a half-typed archive
+  // entry into the R&D form the moment the tab changed.
+  const [rndFile, setRndFile] = useState<File | null>(null)
+  const [rndDraft, setRndDraft] = useState<EntryDraft>(() => ({ ...emptyDraft(), kind: 'photo' }))
 
   useEffect(() => {
     if (!file) { setLocalUrl(null); setLocalMeta(null); return }
@@ -123,7 +141,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   // Loaded on demand rather than at mount: it is a GitHub round trip, and most
   // sessions are an upload.
   useEffect(() => {
-    if (tab === 'upload' || sha !== null || content) return
+    if (tab === 'archive' || tab === 'rnd' || sha !== null || content) return
     setStatus({ kind: 'busy', message: 'READING content.json' })
     fetch(`${ADMIN_API}/api/content`, { credentials: 'include' })
       .then((r) => r.json())
@@ -167,12 +185,48 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
         // Reset to a fresh draft, keeping the date: a run of uploads from one
         // shoot all carry the same one.
         setFile(null); setThumbImage(null); setDraft((d) => ({ ...emptyDraft(), date: d.date }))
-      } else if (res.status === 422) {
-        setStatus({ kind: 'error', message: (body.details ?? ['INVALID ENTRY']).join(' · ').toUpperCase() })
-      } else if (res.status === 401) {
-        setStatus({ kind: 'error', message: 'SESSION EXPIRED. LOG IN AGAIN.' })
       } else {
-        setStatus({ kind: 'error', message: `REFUSED (${res.status})` })
+        setStatus(uploadFailure(res, body))
+      }
+    } catch {
+      setStatus({ kind: 'error', message: 'BACKEND UNREACHABLE' })
+    }
+  }
+
+  /**
+   * The R+D upload. The same Worker endpoint as the archive's, with
+   * `collection: 'rnd'` doing the routing — no second publishing mechanism.
+   * Stills only, so `kind` is fixed and there is no thumbnail conversation:
+   * the poster is the whole image.
+   */
+  const uploadRnd = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!rndFile) return
+    setStatus({ kind: 'busy', message: 'STAGING UPLOAD' })
+    const form = new FormData()
+    form.set('file', rndFile)
+    form.set('name', rndDraft.name)
+    form.set('kind', 'photo')
+    form.set('tagline', rndDraft.tagline)
+    form.set('description', rndDraft.description)
+    form.set('date', rndDraft.date)
+    form.set('postUrl', rndDraft.postUrl)
+    form.set('thumb', serialiseThumb(rndDraft.thumb))
+    form.set('collection', 'rnd')
+    form.set('existingNames', JSON.stringify(RND.map((f) => f.name)))
+    try {
+      const res = await fetch(`${ADMIN_API}/api/upload`, { method: 'POST', credentials: 'include', body: form })
+      const body = await res.json().catch(() => ({}))
+      if (res.status === 202) {
+        setStatus({
+          kind: 'ok',
+          message: 'STAGED. TRANSCODE AND DEPLOY RUNNING — A FEW MINUTES.',
+        })
+        watchDeploy()
+        // Reset to a fresh draft, keeping the date — same habit as the archive.
+        setRndFile(null); setRndDraft((d) => ({ ...emptyDraft(), kind: 'photo', date: d.date }))
+      } else {
+        setStatus(uploadFailure(res, body))
       }
     } catch {
       setStatus({ kind: 'error', message: 'BACKEND UNREACHABLE' })
@@ -237,14 +291,15 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
       <header className="admin-head">
         <span className="admin-title" data-admin-drag>PUBLISH</span>
         <nav className="admin-tabs">
-          <button className={tab === 'upload' ? 'is-active' : ''} onClick={() => setTab('upload')}>UPLOAD</button>
+          <button className={tab === 'archive' ? 'is-active' : ''} onClick={() => setTab('archive')}>ARCHIVE</button>
+          <button className={tab === 'rnd' ? 'is-active' : ''} onClick={() => setTab('rnd')}>R+D</button>
           <button className={tab === 'about' ? 'is-active' : ''} onClick={() => setTab('about')}>ABOUT</button>
           <button className={tab === 'links' ? 'is-active' : ''} onClick={() => setTab('links')}>LINKS</button>
         </nav>
         <button className="admin-close" onClick={onClose} aria-label="Close admin">✕</button>
       </header>
 
-      {tab === 'upload' ? (
+      {tab === 'archive' ? (
         <form className="admin-body" onSubmit={upload}>
           <label className="admin-field">
             <span>FILE</span>
@@ -285,6 +340,29 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
           />
           <UploadLimitsHint file={file} />
           <button className="admin-submit" type="submit" disabled={!file || status.kind === 'busy'}>
+            {status.kind === 'busy' ? '···' : 'UPLOAD'}
+          </button>
+        </form>
+      ) : tab === 'rnd' ? (
+        <form className="admin-body" onSubmit={uploadRnd}>
+          <label className="admin-field admin-field-wide"><span>IMAGE</span>
+            {/* Stills only — the R&D wall is a photo collection, and the still
+                pipeline is the only ladder the Worker runs for it. */}
+            <FilePicker
+              file={rndFile}
+              accept="image/*"
+              emptyLabel="SELECT AN IMAGE"
+              onPick={(picked) => {
+                setRndFile(picked)
+                // Same habit as the archive picker: a plausible name from the
+                // filename, still editable.
+                if (picked && !rndDraft.name) setRndDraft((d) => ({ ...d, name: nameFromFile(picked.name) }))
+              }}
+            />
+          </label>
+          <EntryFields draft={rndDraft} onChange={setRndDraft} hideKind />
+          <UploadLimitsHint file={rndFile} kind="photo" />
+          <button className="admin-submit" type="submit" disabled={!rndFile || status.kind === 'busy'}>
             {status.kind === 'busy' ? '···' : 'UPLOAD'}
           </button>
         </form>

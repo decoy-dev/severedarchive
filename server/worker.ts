@@ -78,6 +78,21 @@ const SESSION_COOKIE = 'sa_admin'
  */
 const ENTRY_ID_RE = /^[a-z0-9][a-z0-9_]{0,40}$/
 
+/**
+ * The collections an entry can belong to: `archive` is the original gallery,
+ * `rnd` the stills-only R&D board. An allow-list rather than a pattern because
+ * the value picks which data file the workflows rewrite — an unexpected value
+ * must die here as a 422, not become a surprise path in an Actions shell step.
+ */
+const COLLECTIONS = ['archive', 'rnd'] as const
+type Collection = (typeof COLLECTIONS)[number]
+
+/** Absent or empty means the archive, so requests that predate R&D are unchanged. */
+const readCollection = (raw: unknown): Collection | null => {
+  if (raw == null || raw === '') return 'archive'
+  return (COLLECTIONS as readonly string[]).includes(raw as string) ? (raw as Collection) : null
+}
+
 /** The allow-list, parsed. Empty entries dropped so a trailing comma is harmless. */
 const allowedOrigins = (env: Env): string[] =>
   env.ALLOWED_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean)
@@ -214,9 +229,14 @@ async function handleUpload(req: Request, env: Env): Promise<Response> {
   if (!(file instanceof File)) return json({ error: 'file is required' }, 400, env, {}, req)
   if (file.size > MAX_UPLOAD_BYTES) return json({ error: 'file is too large' }, 413, env, {}, req)
 
+  // Which gallery this lands in — read before validation because R&D is
+  // stills-only, so the collection decides the kind rather than the form.
+  const collection = readCollection(form?.get('collection'))
+  if (!collection) return json({ error: 'invalid entry', details: ['unknown collection'] }, 422, env, {}, req)
+
   const fields = validateEntry({
     name: form?.get('name'),
-    kind: form?.get('kind'),
+    kind: collection === 'rnd' ? 'photo' : form?.get('kind'),
     tagline: form?.get('tagline'),
     description: form?.get('description'),
     date: form?.get('date'),
@@ -249,6 +269,7 @@ async function handleUpload(req: Request, env: Env): Promise<Response> {
     asset: { id: asset.id, url: asset.url },
     thumbAsset,
     entry: fields.value,
+    collection,
   })
   return json({ ok: true, staged: asset.name, entry: fields.value }, 202, env, {}, req)
 }
@@ -286,9 +307,14 @@ async function handleEntryEdit(req: Request, env: Env, id: string): Promise<Resp
     }
   }
 
+  // Same rule as upload: the collection is validated here and R&D entries are
+  // stills whatever the form claims — an R&D edit can never turn one into a clip.
+  const collection = readCollection(form.get('collection'))
+  if (!collection) return json({ error: 'invalid entry', details: ['unknown collection'] }, 422, env, {}, req)
+
   const fields = validateEntryEdit({
     name: form.get('name'),
-    kind: form.get('kind'),
+    kind: collection === 'rnd' ? 'photo' : form.get('kind'),
     tagline: form.get('tagline'),
     description: form.get('description'),
     date: form.get('date'),
@@ -310,7 +336,7 @@ async function handleEntryEdit(req: Request, env: Env, id: string): Promise<Resp
 
   const thumbAsset = await stageThumb(env, thumbImage, `${Date.now()}-${id}-thumb`)
 
-  await dispatchEdit(ghConfig(env), { op: 'edit', id, entry: fields.value, asset, thumbAsset })
+  await dispatchEdit(ghConfig(env), { op: 'edit', id, entry: fields.value, asset, thumbAsset, collection })
   // 202 whether or not there is a file: either way the change is committed by a
   // workflow run and is not live when this returns.
   return json({
@@ -329,14 +355,20 @@ async function handleEntryDelete(req: Request, env: Env, id: string): Promise<Re
   if (!(await requireSession(req, env))) return json({ error: 'unauthorized' }, 401, env, {}, req)
   if (!ENTRY_ID_RE.test(id)) return json({ error: 'bad id' }, 400, env, {}, req)
 
-  const body = (await req.json().catch(() => null)) as { confirm?: unknown; name?: unknown } | null
+  const body = (await req.json().catch(() => null)) as
+    { confirm?: unknown; name?: unknown; collection?: unknown } | null
   const name = typeof body?.name === 'string' ? body.name : ''
   if (!name) return json({ error: 'name is required' }, 400, env, {}, req)
   if (!deletionConfirmed(body?.confirm, name)) {
     return json({ error: 'confirmation does not match', details: ['type the name to confirm'] }, 422, env, {}, req)
   }
 
-  await dispatchEdit(ghConfig(env), { op: 'remove', id, entry: { name } })
+  // Validated even on a removal: the workflow picks which data file to splice
+  // from this value, so a bad one must stop here rather than no-op over there.
+  const collection = readCollection(body?.collection)
+  if (!collection) return json({ error: 'unknown collection' }, 422, env, {}, req)
+
+  await dispatchEdit(ghConfig(env), { op: 'remove', id, entry: { name }, collection })
   return json({ ok: true, id, removed: name }, 202, env, {}, req)
 }
 

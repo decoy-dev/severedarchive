@@ -1,10 +1,17 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+// Window-state behavior needs a stable set of valid identities, not whichever
+// client pieces currently happen to be published. Archive validation itself is
+// covered in data/archive.test.ts; this fixture keeps cap/slot assertions from
+// becoming false failures when the owner rotates the live collection.
+vi.mock('../data/archive', () => ({
+  isArchiveId: (id: string) => /^file0[1-5]$/.test(id),
+}))
+
 import { openWindow, focusWindow, closeWindow, cascadePosition, freeSlot, windowBox, windowWidthCss, FW_TITLEBAR_H, FW_BORDER, MAX_WINDOWS } from './windowManager'
 import type { WinState, Geometry } from './windowManager'
 
 const GEOM: Geometry = { area: { w: 1440, h: 900 }, size: { w: 640, h: 360 } }
-
-/** Every id used here must exist in ARCHIVE — openWindow validates. */
 const IDS = ['file01', 'file02', 'file03', 'file04', 'file05'] as const
 
 const openAll = (ids: readonly string[], geom: Geometry = GEOM): WinState[] => {

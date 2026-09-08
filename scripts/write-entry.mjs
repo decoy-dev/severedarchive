@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Append an uploaded entry to the archive's data file.
+ * Append an uploaded entry to a collection's data file.
  *
  * Run by `.github/workflows/ingest.yml` with `ENTRY` (the JSON the Worker
- * validated) and `ID` (the derived file id) in the environment. It writes JSON
- * and nothing else — no media, no code — so a bad entry is a bad line in a data
- * file rather than a broken build.
+ * validated), `ID` (the derived file id) and optionally `COLLECTION` in the
+ * environment. It writes JSON and nothing else — no media, no code — so a bad
+ * entry is a bad line in a data file rather than a broken build.
  *
  * The file is the source of truth for the archive going forward. `archive.ts`
  * still holds the twelve hand-authored entries; the migration that has the app
@@ -15,7 +15,10 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 
-const PATH = 'src/data/entries.json'
+// R&D rows live in their own file so the archive's data never has to know the
+// other collection exists. Absent means archive, matching the Worker's default,
+// so every dispatch from before R&D existed still lands where it always did.
+const PATH = process.env.COLLECTION === 'rnd' ? 'src/data/rnd.json' : 'src/data/entries.json'
 
 const entry = JSON.parse(process.env.ENTRY ?? '{}')
 const id = process.env.ID ?? ''

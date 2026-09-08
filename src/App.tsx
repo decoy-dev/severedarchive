@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import BackgroundVideo from './components/BackgroundVideo'
 import TerminalWindow, { type TabId } from './components/TerminalWindow'
 import ArchivePanel from './components/ArchivePanel'
+import RndPanel from './components/RndPanel'
 import AboutPanel, { preloadAboutObject } from './components/AboutPanel'
 import LinksPanel from './components/LinksPanel'
 import CommissionPanel from './components/CommissionPanel'
@@ -16,7 +17,23 @@ import { ArchiveSelectionProvider, useArchiveSelection } from './lib/selection'
 import { WindowRegistryProvider, useWindowView } from './lib/windowRegistry'
 import { AdminSessionProvider } from './lib/adminSession'
 
-const TAB_ORDER: TabId[] = ['archive', 'about', 'links']
+const TAB_ORDER: TabId[] = ['archive', 'rnd', 'about', 'links']
+
+/**
+ * The URL hash a tab is shareable as. Only R&D actually needs one — the R&D
+ * gallery's structured data points at `severedarchive.com/#rnd`, so that link
+ * must land on the R&D tab — but syncing every tab keeps one rule instead of a
+ * special case. `archive` is the default and carries no hash, so the bare URL
+ * stays clean.
+ */
+const tabFromHash = (): TabId | null => {
+  const h = window.location.hash.replace(/^#/, '')
+  return (TAB_ORDER as string[]).includes(h) ? (h as TabId) : null
+}
+const syncHash = (t: TabId): void => {
+  const next = t === 'archive' ? window.location.pathname + window.location.search : `#${t}`
+  window.history.replaceState(null, '', next)
+}
 
 export default function App() {
   // Selection, activation and view mode live above everything that reads them,
@@ -54,7 +71,7 @@ function AppShell() {
   const { windows: openWindows, enlargedId } = useWindowView()
   const backdropHeld = enlargedId !== null || openWindows.length >= MAX_WINDOWS
   const [booted, setBooted] = useState(false)
-  const [tab, setTabState] = useState<TabId>('archive')
+  const [tab, setTabState] = useState<TabId>(() => tabFromHash() ?? 'archive')
   const { selectedId } = useArchiveSelection()
   const bodyRef = useRef<HTMLDivElement | null>(null)
   /**
@@ -120,7 +137,7 @@ function AppShell() {
   }, [])
 
   const setTab = useCallback(
-    (t: TabId, origin: OpenOrigin) => { setTabState(t); flashBody(origin) },
+    (t: TabId, origin: OpenOrigin) => { setTabState(t); syncHash(t); flashBody(origin) },
     [flashBody],
   )
 
@@ -139,9 +156,22 @@ function AppShell() {
   // The application has exactly one window-level keydown listener and Desktop
   // registers it (§4.6). App only says what a tab shift means.
   const shiftTab = useCallback((dir: 1 | -1) => {
-    setTabState((cur) => TAB_ORDER[(TAB_ORDER.indexOf(cur) + dir + TAB_ORDER.length) % TAB_ORDER.length])
+    setTabState((cur) => {
+      const next = TAB_ORDER[(TAB_ORDER.indexOf(cur) + dir + TAB_ORDER.length) % TAB_ORDER.length]
+      syncHash(next)
+      return next
+    })
     // No pointer, so nothing to grow from: it opens from the body's own centre.
     flashBody(null)
+  }, [flashBody])
+
+  // A shared or bookmarked `#rnd` (the R&D gallery's canonical link), or a
+  // back/forward across one, moves the tab to match. App owns this because it
+  // owns the tab state; the hash is only ever a reflection of it.
+  useEffect(() => {
+    const onHash = () => { const t = tabFromHash(); if (t) { setTabState(t); flashBody(null) } }
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
   }, [flashBody])
 
   return (
@@ -160,6 +190,7 @@ function AppShell() {
             {tab === 'links' && (
               <LinksPanel onCommission={openCommission} />
             )}
+            {tab === 'rnd' && <RndPanel />}
           </TerminalWindow>
         </Desktop>
       )}

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { ARCHIVE, DEFAULT_FRONT_ID, fileById, isArchiveId, formatDuration, formatResolution, aspectRatio } from './archive'
 import { MEDIA_META, THUMB_META } from './mediaMeta.generated'
+import { RND } from './rnd'
 
 describe('archive metadata', () => {
   // The guard §4.8 asks for: a clip added to raw/ without re-running the
@@ -11,26 +12,35 @@ describe('archive metadata', () => {
     }
   })
 
-  it('every generated entry is claimed by an archive id', () => {
-    const ids = new Set(ARCHIVE.map((f) => f.id))
+  it('every generated entry is claimed by an archive or R&D id', () => {
+    // MEDIA_META is generated from everything in public/media and now serves two
+    // collections — the archive and the R&D gallery (rnd_-prefixed ids). A
+    // generated id that belongs to neither is an orphan rendition.
+    const ids = new Set([...ARCHIVE.map((f) => f.id), ...RND.map((f) => f.id)])
     for (const id of Object.keys(MEDIA_META)) {
-      expect(ids.has(id), `${id} is encoded but missing from ARCHIVE`).toBe(true)
+      expect(ids.has(id), `${id} is encoded but claimed by neither ARCHIVE nor RND`).toBe(true)
     }
   })
 
-  it('carries usable width, height and durationSec on every file', () => {
+  it('carries usable dimensions and kind-appropriate duration on every file', () => {
     for (const f of ARCHIVE) {
       expect(f.width).toBeGreaterThan(0)
       expect(f.height).toBeGreaterThan(0)
-      expect(f.durationSec).toBeGreaterThan(0)
+      // Stills legitimately have no timeline; clips must expose the duration
+      // their focused player displays.
+      expect(f.durationSec).toBeGreaterThanOrEqual(0)
+      if (f.kind === 'photo') expect(f.durationSec).toBe(0)
+      else expect(f.durationSec).toBeGreaterThan(0)
     }
   })
 
-  it('includes the non-16:9 files the true-frame rule exists for', () => {
-    // Portrait and square. If these ever read 16:9 the aspect pipeline is broken.
-    expect(aspectRatio(fileById('file08')!)).toBeLessThan(1)
-    expect(aspectRatio(fileById('file09')!)).toBe(1)
-    expect(aspectRatio(fileById('file01')!)).toBeCloseTo(16 / 9, 2)
+  it('preserves the non-16:9 source aspect ratios present in the archive', () => {
+    // The current collection is portrait-heavy. If a still ever silently falls
+    // back to 16:9, its focused frame and thumbnail box would be wrong.
+    expect(ARCHIVE.some((f) => Math.abs(aspectRatio(f) - 16 / 9) > 0.01)).toBe(true)
+    for (const f of ARCHIVE) {
+      expect(aspectRatio(f)).toBeCloseTo(MEDIA_META[f.id].width / MEDIA_META[f.id].height, 8)
+    }
   })
 
   // The window's box comes from the FULL encode's ratio, and an unfocused window
@@ -62,8 +72,10 @@ describe('archive metadata', () => {
 })
 
 describe('isArchiveId / fileById', () => {
-  it('accepts known ids and rejects everything else', () => {
-    expect(isArchiveId('file01')).toBe(true)
+  it('accepts a live archive id and rejects strangers', () => {
+    const live = ARCHIVE[0]
+    expect(isArchiveId(live.id)).toBe(true)
+    expect(fileById(live.id)).toEqual(live)
     expect(isArchiveId('file99')).toBe(false)
     expect(isArchiveId('')).toBe(false)
     expect(fileById('file99')).toBeUndefined()
@@ -85,7 +97,8 @@ describe('formatDuration', () => {
 })
 
 describe('formatResolution', () => {
-  it('reads WxH from the generated metadata', () => {
-    expect(formatResolution(fileById('file09')!)).toBe('720×720')
+  it('reads WxH from a live entry’s generated metadata', () => {
+    const live = ARCHIVE[0]
+    expect(formatResolution(live)).toBe(`${live.width}×${live.height}`)
   })
 })

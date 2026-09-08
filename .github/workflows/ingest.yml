@@ -41,11 +41,16 @@ jobs:
         id: ids
         env:
           NAME: ${{ github.event.client_payload.entry.name }}
+          COLLECTION: ${{ github.event.client_payload.collection }}
         run: |
           set -euo pipefail
           # Lower-cased name is the id; the numbered fileNN scheme is gone along
           # with the index, and the name is unique by validation.
           id="$(printf '%s' "$NAME" | tr '[:upper:]' '[:lower:]')"
+          # R&D shares public/media/ with the archive, so the collection lives
+          # in the id itself: the rnd_ prefix is what keeps the two galleries'
+          # renditions and data rows from ever colliding.
+          if [ "$COLLECTION" = "rnd" ]; then id="rnd_$id"; fi
           echo "id=$id" >> "$GITHUB_OUTPUT"
 
       - name: Download the staged raw
@@ -85,6 +90,8 @@ jobs:
         env:
           ENTRY: ${{ toJSON(github.event.client_payload.entry) }}
           ID: ${{ steps.ids.outputs.id }}
+          # Picks rnd.json over entries.json in write-entry.mjs; absent means archive.
+          COLLECTION: ${{ github.event.client_payload.collection }}
         run: |
           set -euo pipefail
           node scripts/write-entry.mjs

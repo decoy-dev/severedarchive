@@ -1034,6 +1034,13 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   display: flex; flex-direction: column;
   overflow: hidden;
   will-change: transform;   /* dragged via anime.js transforms */
+  /* anime.js Draggable raises its target by writing an inline z-index on grab.
+     React deliberately owns stacking through --fw-z instead, and !important is
+     required to beat that library write. Without this, a dragged window can
+     retain a higher library-global rank and paint over the next window even
+     though windowManager correctly focused the newcomer. Enlarged windows use
+     a more-specific z-index:60 !important rule below and still win. */
+  z-index: calc(10 + var(--fw-z)) !important;
 }
 /* No cursor and no drag here any more: the bar is a container, and the title
    inside it is the handle. */
@@ -1203,6 +1210,16 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 }
 .admin-tabs button.is-active { color: var(--acid); border-color: var(--hair-bright); background: rgba(182, 255, 46, 0.05); }
 .admin-tabs button:hover:not(.is-active) { color: var(--text); }
+/* Four tabs (ARCHIVE / R+D / ABOUT / LINKS) no longer fit beside the title on a
+   phone. Let the bar wrap there — title and ✕ on the first row, tabs on their
+   own row below — rather than pushing the ✕ (the only way out) off the edge.
+   `order: 1` sends the tabs after the ✕ in flex order so the close button stays
+   on the top row. */
+@media (max-width: 480px) {
+  .admin-head { flex-wrap: wrap; height: auto; padding: 8px 14px; row-gap: 6px; }
+  .admin-tabs { order: 1; margin-left: 0; flex: 1 1 100%; }
+  .admin-tabs button { flex: 1 1 auto; }
+}
 .admin-close { width: 34px; height: 34px; color: var(--dim); }
 .admin-close:hover, .admin-close:focus-visible { color: var(--acid); outline: none; }
 .admin-body {
@@ -1211,6 +1228,10 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   position: relative; z-index: 2;
 }
 .admin-body-content { grid-template-columns: minmax(0, 1fr); }
+/* Two ~140px columns on a phone truncate what is being typed — the same 560px
+   that collapses the thumb stage collapses the form to one column. The
+   `.admin-field-wide` 1 / -1 span degrades to that single column on its own. */
+@media (max-width: 560px) { .admin-body { grid-template-columns: minmax(0, 1fr); } }
 .admin-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .admin-field-wide { grid-column: 1 / -1; }
 .admin-field > span { font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--dim); }
@@ -1669,6 +1690,19 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
    opens rightward from the dashboard's left control column. */
 .info-panel[data-align='end'] { right: -6px; }
 .info-panel[data-align='start'] { left: -6px; }
+/* Inside a FILE WINDOW the note spans the bar instead of hanging off the
+   trigger. The trigger sits near the right edge of a bar that can be ~250px
+   wide, so a 300px panel anchored to it ran past the window's left edge and the
+   root's overflow:hidden cut the text off. Anchored to the bar (the trigger's
+   own box is made static so the bar becomes the containing block) it cannot
+   leave the frame at any window width; a long note scrolls inside it rather than
+   running out the bottom of a short window. The dashboard's `start` panel is
+   not in a bar and keeps the trigger-anchored rule above. */
+.fw-titlebar .info { position: static; }
+.fw-titlebar .info-panel[data-align='end'] {
+  left: 8px; right: 8px; width: auto; max-width: none;
+  max-height: 50vh; overflow-y: auto;
+}
 .info-panel-head { font-size: var(--fs-sm); color: var(--bright); letter-spacing: 0.02em; }
 .info-panel-date { font-size: var(--fs-xs); letter-spacing: 0.08em; }
 .info-panel-body {
@@ -2024,3 +2058,239 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   .commission-sub { font-size: var(--fs-base); }
   .commission-form { gap: 12px; }
 }
+
+/* ══ R&D ══
+   A parallel to the archive, built on the same tokens and the same accent-on-
+   hover rule. Squares, an internal scroll, and a focus overlay that stays
+   inside the terminal body — nothing here reaches for a new colour or a fourth
+   hover device. */
+
+/* The panel drops the default .panel padding: the scroll region owns it, so the
+   focus overlay can sit inset:0 and cover the whole body. */
+.rnd-panel { padding: 0; }
+/* The one scroll region — header and grid live in it, the page never moves. The
+   stable gutter stops the themed scrollbar reflowing every tile when it appears
+   (the same ruling as the dashboard list). */
+.rnd-scroll {
+  position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden;
+  padding: clamp(16px, 3vw, 32px); scrollbar-gutter: stable;
+}
+
+.rnd-head { margin-bottom: 14px; }
+.rnd-head-line { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+/* An h2 for the outline and for crawlers; VT323 is single-weight, so the browser
+   bold is turned off explicitly like every other heading here. */
+.rnd-head-title { font-size: var(--fs-base); font-weight: normal; color: var(--bright); letter-spacing: 0.06em; }
+.rnd-head-count { font-size: var(--fs-xs); color: var(--dim); letter-spacing: 0.08em; white-space: nowrap; }
+.rnd-head-sub { font-size: var(--fs-sm); color: var(--dim); margin-top: 2px; }
+.rnd-head-pending { color: var(--dim); }
+.rnd-head-pending::after {
+  content: '▌'; margin-left: 3px; color: var(--acid); animation: rnd-blink 1s steps(1) infinite;
+}
+@keyframes rnd-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .rnd-head-pending::after { animation: none; } }
+
+/* Uniform square wall: 6 across on desktop, stepping to 4/3/2 as the viewport
+   narrows — denser than the archive grid, which it can afford because it
+   scrolls rather than paginating. DOM order == visual order == the focus
+   view's paging order. */
+.rnd-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+@media (max-width: 1280px) { .rnd-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 1024px) { .rnd-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 640px) { .rnd-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; } }
+
+/* The tile is a .file-card (so the hover accent is the site's, unchanged),
+   squared. object-fit: cover on the media keeps whatever the client uploads from
+   ever letterboxing in the index — the whole image is one click away in focus. */
+.rnd-tile { aspect-ratio: 1 / 1; }
+.rnd-tile .file-card-media img { object-fit: cover; }
+
+/* Empty-wall placeholders: dashed, inert, replaced one-for-one as real entries
+   arrive so the first upload visibly colonises the grid. */
+.rnd-tile--empty {
+  display: flex; align-items: center; justify-content: center;
+  border: 1px dashed var(--hair); background: var(--void);
+  color: var(--dim); font-size: var(--fs-xs); letter-spacing: 0.14em;
+}
+
+/* ── R&D focus view ──
+   An overlay INSIDE the body (the archive's focus precedent), not a fixed modal:
+   the title bar, tabs and footer stay lit around it. */
+.rnd-focus { position: absolute; inset: 0; z-index: 5; }
+/* Mid-retract the view is halfway gone; nothing in it should still take a
+   click (the commission overlay's precedent). */
+.rnd-focus[data-closing='true'] { pointer-events: none; }
+.rnd-focus-scrim { position: absolute; inset: 0; background: rgba(7, 9, 11, 0.92); }
+/* The stage is click-through except its own controls, so a click on the empty
+   area around the image falls to the scrim and closes. */
+.rnd-focus-stage {
+  position: absolute; inset: 16px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  pointer-events: none;
+}
+.rnd-focus-viewport {
+  position: relative; flex: 1 1 auto; min-height: 0; width: 100%;
+  display: flex; align-items: center; justify-content: center; pointer-events: none;
+}
+/* The frame fills the viewport area; the image is contained within it at its own
+   aspect (never cropped, never letterboxed by a forced ratio) and the BRT corner
+   brackets mark the stage. A click on the frame's own letterbox area — not the
+   image or a control — closes, so "click outside the picture" still works. */
+.rnd-focus-frame {
+  position: absolute; inset: 0; overflow: hidden; pointer-events: auto;
+}
+.rnd-focus-frame::before, .rnd-focus-frame::after {
+  content: ''; position: absolute; width: 14px; height: 14px; z-index: 3; pointer-events: none;
+}
+.rnd-focus-frame::before { top: 0; left: 0; border-top: 2px solid var(--acid); border-left: 2px solid var(--acid); }
+.rnd-focus-frame::after { bottom: 0; right: 0; border-bottom: 2px solid var(--acid); border-right: 2px solid var(--acid); }
+.rnd-focus-media { position: absolute; inset: 0; }
+.rnd-focus-thumb, .rnd-focus-full {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block;
+}
+/* The full fades in over the proxy thumbnail once it has decoded. */
+.rnd-focus-full { opacity: 0; transition: opacity 200ms ease-out; }
+.rnd-focus-full[data-loaded='true'] { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .rnd-focus-full { transition: none; } }
+
+/* Side arrows beside the image (desktop). Dead-ended, not wrapping. */
+.rnd-arrow {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 44px; height: 72px; display: flex; align-items: center; justify-content: center;
+  font-size: var(--fs-lg); color: var(--text);
+  border: 1px solid var(--hair-bright); background: var(--panel-solid); pointer-events: auto;
+}
+.rnd-arrow--prev { left: 0; }
+.rnd-arrow--next { right: 0; }
+.rnd-arrow:hover:not(:disabled), .rnd-arrow:focus-visible:not(:disabled) {
+  color: var(--acid); border-color: var(--acid); background: var(--panel-solid);
+}
+.rnd-arrow:disabled { opacity: 1; color: var(--dim); border-color: var(--hair); background: var(--panel-solid); pointer-events: none; }
+.rnd-focus-close {
+  position: absolute; top: 0; right: 0; width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--fs-base); color: var(--text);
+  border: 1px solid var(--hair-bright); background: var(--panel-solid); pointer-events: auto;
+}
+.rnd-focus-close:hover, .rnd-focus-close:focus-visible { color: var(--acid); border-color: var(--acid); }
+
+/* The caption, below the frame — never burned onto the image (the site already
+   learned overlaid text on bright renders washes out). It "pops" up on open and
+   on each page (the animation lives in the component).
+   A column flex with a hard 50% stage budget: the media keeps roughly half the
+   stage even on a short phone viewport, and it is the BODY that yields and
+   scrolls — never below two readable lines — while the head, kicker and pager
+   row never leave reach. */
+.rnd-caption {
+  flex: 0 1 auto; min-height: 0; max-height: 50%;
+  display: flex; flex-direction: column;
+  width: min(100%, 720px); pointer-events: auto;
+  background: var(--panel-solid); border-top: 1px solid var(--hair-bright); padding-top: 10px; color: var(--text);
+}
+.rnd-caption-head { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.rnd-caption-title { font-size: var(--fs-base); color: var(--bright); letter-spacing: 0.05em; }
+.rnd-caption-year { font-size: var(--fs-xs); color: var(--text); white-space: nowrap; }
+.rnd-caption-kicker { flex: 0 0 auto; font-size: var(--fs-xs); color: var(--text); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 2px; }
+.rnd-caption-body {
+  flex: 1 1 auto; min-height: 2.6em; font-size: var(--fs-sm); color: var(--text); margin-top: 6px;
+  overflow-y: auto; overscroll-behavior: contain; padding-right: 6px;
+}
+.rnd-caption-body[data-state='loading'] { color: var(--text); }
+.rnd-caption-body[data-state='error'] { color: var(--alert); }
+.rnd-caption-foot { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 10px; }
+.rnd-caption-actions { display: flex; align-items: center; gap: 12px; }
+.rnd-caption-edit {
+  font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--text);
+  border: 1px solid var(--hair-bright); background: var(--panel-solid); padding: 3px 10px;
+}
+.rnd-caption-edit:hover, .rnd-caption-edit:focus-visible { color: var(--acid); border-color: var(--acid); }
+/* On desktop the counter shows; its arrows do not — the side arrows page. */
+.rnd-pager { display: flex; align-items: center; gap: 12px; font-size: var(--fs-sm); color: var(--text); }
+.rnd-pager-count { white-space: nowrap; }
+.rnd-pager-arrow { display: none; }
+
+/* Desktop stands the caption BESIDE the media — every orientation, not just
+   portrait: the side column gives the image the full stage height and gives a
+   long caption a lane of its own to scroll in. Narrow screens always stack —
+   there is no room to stand it beside. */
+@media (min-width: 861px) {
+  .rnd-focus-stage { flex-direction: row; align-items: stretch; gap: 16px; }
+  .rnd-focus-viewport { min-width: 0; }
+  .rnd-caption {
+    flex: 0 0 300px; width: 300px; align-self: stretch; min-height: 0; max-height: none;
+    justify-content: center;
+    border-top: none; border-left: 1px solid var(--hair-bright);
+    padding-top: 0; padding-left: 16px;
+  }
+  /* The side column centres its content; the body reverts to yield-and-scroll
+     without the stacked two-line floor (the column has height to spare). */
+  .rnd-caption-body { flex: 0 1 auto; min-height: 0; }
+}
+
+/* Short stacked viewports: shave the chrome the stage spends between media and
+   caption so the image keeps its half of a 480-600px screen. */
+@media (max-width: 860px) and (max-height: 600px) {
+  .rnd-focus-stage { gap: 8px; }
+  .rnd-caption { padding-top: 6px; }
+  .rnd-caption-foot { margin-top: 6px; }
+}
+
+/* Tablet + phone: no room for side arrows, so paging moves into a touch-target
+   row in the caption, and a swipe on the image pages too (wired in the
+   component). The 861px line is the site's own desktop/handheld split. */
+@media (max-width: 860px) {
+  .rnd-focus-stage { inset: 12px; }
+  .rnd-arrow { display: none; }
+  .rnd-caption-foot { flex-wrap: wrap; }
+  .rnd-pager { flex: 1 1 100%; justify-content: space-between; }
+  .rnd-pager-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 44px; min-height: 44px; font-size: var(--fs-lg);
+    color: var(--text); border: 1px solid var(--hair-bright); background: var(--panel-solid);
+  }
+  .rnd-pager-arrow:hover:not(:disabled), .rnd-pager-arrow:focus-visible:not(:disabled) {
+    color: var(--acid); border-color: var(--acid); background: var(--panel-solid);
+  }
+  .rnd-pager-arrow:disabled { opacity: 1; color: var(--dim); border-color: var(--hair); background: var(--panel-solid); pointer-events: none; }
+}
+
+/* A visible keyboard focus ring for the focus-view controls, inset so it sits
+   over their dark backing rather than bright artwork and never runs off a
+   viewport-edge control. Accent stays reserved for this and hover/focus. */
+.rnd-arrow:focus-visible:not(:disabled),
+.rnd-focus-close:focus-visible,
+.rnd-pager-arrow:focus-visible:not(:disabled),
+.rnd-caption-edit:focus-visible {
+  outline: 2px solid var(--acid); outline-offset: -3px;
+}
+@media (max-width: 640px) { .rnd-focus-stage { inset: 10px; } }
+
+/* The mobile admin trigger in the tab strip. Hidden where the footer login is
+   the way in; shown only under the mobile breakpoint, where the footer is gone.
+   The strip goes one z step above the body here: the compact login's popover
+   hangs upward over `.tw-body`, and both were z-index 2 — a tie the body won by
+   DOM order, which painted the archive over the passcode form. */
+.tw-tab-admin { display: none; }
+@media (max-width: 640px) {
+  .tw-tab-admin { display: inline-flex; align-items: center; flex: 0 0 auto; padding: 0 8px; }
+  .tw-tabs { z-index: 3; }
+}
+
+/* The compact login itself: a glyph-only trigger (the full "◈ ADMIN LOGIN"
+   label was a fifth tab's width of text in a strip that must hold four real
+   tabs at 320px) and a popover above it for the prompt — the strip sits at the
+   bottom of the terminal on mobile, so up is where the room is. */
+.admin-compact { position: relative; display: inline-flex; align-items: center; }
+.admin-open-glyph { font-size: var(--fs-base); padding: 6px 8px; }
+.admin-open-glyph[aria-expanded='true'] { color: var(--acid); border-color: var(--hair); }
+.admin-pop {
+  position: absolute; bottom: calc(100% + 14px); right: 0; z-index: 4;
+  display: flex; flex-direction: column; align-items: stretch; gap: 10px;
+  width: max-content; max-width: min(280px, calc(100vw - 24px));
+  padding: 12px; background: rgba(9, 12, 15, 0.96); border: 1px solid var(--hair-bright);
+}
+/* The shared form, restacked for the narrow box: label over field over button,
+   each taking the full width, instead of the footer's one-line row. */
+.admin-pop .admin-form { flex-direction: column; align-items: stretch; gap: 8px; }
+.admin-pop .admin-input { width: 100%; }
+.admin-pop .admin-result { display: flex; justify-content: space-between; align-items: center; }

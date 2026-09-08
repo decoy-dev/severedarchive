@@ -1,5 +1,5 @@
 import { createContext, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { createScope, createDraggable, createSpring, animate } from 'animejs'
+import { createScope, createDraggable, animate } from 'animejs'
 import { isStill, aspectRatio, fileById } from '../data/archive'
 import { openWindow, focusWindow, closeWindow, windowBox, type WinState } from '../lib/windowManager'
 import { prefersReducedMotion, type PerfTier } from '../lib/perfTier'
@@ -421,15 +421,39 @@ export default function Desktop({
     const scope = createScope({ root, mediaQueries: { desktop: '(min-width: 861px)' } })
       .add((self) => {
         if (!self?.matches.desktop) return
-        const reduce = prefersReducedMotion()
         const drag = createDraggable(el, {
           trigger: el.querySelector('[data-drag-handle]') as HTMLElement,
           container: root,
-          containerPadding: -24,
-          containerFriction: 0.82,
-          // below containerFriction ⇒ the window overshoots and springs back
-          releaseContainerFriction: reduce ? 1 : 0.55,
-          releaseEase: reduce ? 'outQuad' : createSpring({ stiffness: 120, damping: 14 }),
+          // [top, right, bottom, left]. The sides and bottom may hang 24px past
+          // the desktop — a window nudged half off an edge is fine, its handle is
+          // still on screen. The TOP is hard at 0: the drag handle is the title
+          // bar, and letting the window ride 24px above the viewport left only a
+          // 16px sliver of a 40px bar to grab after an upward flick.
+          containerPadding: [0, -24, -24, -24],
+          // Momentum without elasticity. The pointer is tracked 1:1 and the
+          // window is clamped HARD at the desktop edge while dragging
+          // (containerFriction 1 — no stretch past the bound). On release it
+          // carries the flick's velocity and decelerates once, on a plain
+          // ease-out, to a destination anime clamps inside the desktop.
+          //
+          // releaseContainerFriction 1 is the load-bearing value: anime only
+          // animates PAST the edge and back (the rubberband) when this is below
+          // 1 and the release lands out of bounds. At 1 that branch is skipped
+          // and the glide stops flush against the edge. This is what the old
+          // 0.55 got wrong — it was the whole "wonky" feel, not the momentum.
+          //
+          // The glide length comes from the flick speed through a duration
+          // spring; stiffer/heavier-damped than anime's 80/20 default so a
+          // flick reads as a short throw, not a slide across the room, and
+          // maxVelocity caps how far a hard flick can travel before it stops.
+          dragSpeed: 1,
+          containerFriction: 1,
+          releaseContainerFriction: 1,
+          velocityMultiplier: 1,
+          maxVelocity: 5,
+          releaseStiffness: 200,
+          releaseDamping: 28,
+          releaseEase: 'outCubic',
           onGrab: () => setWindows((cur) => focusWindow(cur, id)),
         })
         // Kept so enlarging can put the drag back where it found it — see

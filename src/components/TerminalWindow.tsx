@@ -5,9 +5,10 @@ import { centreOf, type OpenOrigin } from '../lib/openFrom'
 import AdminLogin from './AdminLogin'
 import SessionPulse from './SessionPulse'
 
-export type TabId = 'archive' | 'about' | 'links'
+export type TabId = 'archive' | 'about' | 'links' | 'rnd'
 const TABS: { id: TabId; label: string }[] = [
   { id: 'archive', label: 'ARCHIVE' },
+  { id: 'rnd', label: 'R+D' },
   { id: 'about', label: 'ABOUT' },
   { id: 'links', label: 'LINKS' },
 ]
@@ -60,6 +61,15 @@ export default function TerminalWindow({
             {t.label}
           </button>
         ))}
+        {/* The footer — and the admin login inside it — is hidden entirely on a
+            phone (the frame has no room for it there). This trailing slot brings
+            the way in back at the end of the bottom tab strip so the owner can
+            still sign in and upload from a phone. Shown only under the mobile
+            breakpoint; a second AdminLogin is harmless because the session flag
+            it reads is shared and CSS shows exactly one instance per width.
+            `compact`: the strip has four tabs to hold at 320px, so the trigger
+            is the glyph alone and the prompt opens in a popover above it. */}
+        <span className="tw-tab-admin"><AdminLogin compact /></span>
       </nav>
       <div className="tw-body" ref={bodyRef}>{children}</div>
       <footer className="tw-footer">

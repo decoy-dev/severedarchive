@@ -94,17 +94,24 @@ jobs:
             "${{ steps.check.outputs.thumb == 'yes' && 'raw/thumb.bin' || '' }}"
 
       - name: Re-render the poster only
-        # The cheap path, and the common one: the clip is untouched and the still
-        # is regenerated from the committed `_full.mp4`. Changing which frame is
-        # the poster must not cost a re-encode of the work.
+        # The cheap path, and the common one: the source is untouched and the
+        # still is regenerated from the committed full rendition. Changing which
+        # frame (or crop) is the poster must not cost a re-encode of the work.
         if: steps.check.outputs.replace == 'no' && github.event.client_payload.op == 'edit'
         env:
           THUMB_SPEC: ${{ toJSON(github.event.client_payload.entry.thumb) }}
         run: |
           set -euo pipefail
           id="${{ github.event.client_payload.id }}"
-          test -f "public/media/${id}_full.mp4"
-          ./scripts/render-poster.sh "$id" "public/media/${id}_full.mp4" "$THUMB_SPEC" \
+          # A clip's full is _full.mp4, a still's is _full.jpg — probe both,
+          # because hard-coding .mp4 here failed every photo edit (including all
+          # of R&D). render-poster.sh handles either ladder from the path given.
+          full=""
+          for ext in mp4 jpg; do
+            if [ -f "public/media/${id}_full.$ext" ]; then full="public/media/${id}_full.$ext"; break; fi
+          done
+          test -n "$full"
+          ./scripts/render-poster.sh "$id" "$full" "$THUMB_SPEC" \
             "${{ steps.check.outputs.thumb == 'yes' && 'raw/thumb.bin' || '' }}"
 
       - name: Apply the edit
@@ -112,6 +119,8 @@ jobs:
           OP: ${{ github.event.client_payload.op }}
           ID: ${{ github.event.client_payload.id }}
           ENTRY: ${{ toJSON(github.event.client_payload.entry) }}
+          # Picks rnd.json over entries.json in edit-entry.mjs; absent means archive.
+          COLLECTION: ${{ github.event.client_payload.collection }}
         run: |
           set -euo pipefail
           node scripts/edit-entry.mjs

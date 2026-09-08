@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { aspectRatio, fullSrc, isStill, type ArchiveFile } from '../data/archive'
 import { RECEDE_MS, recedeAt, recedeFilter, recedeTransform } from '../lib/recede'
 import { prefersReducedMotion } from '../lib/perfTier'
 import { windowWidthCss } from '../lib/windowManager'
+import { playMaterialize } from '../lib/materialize'
 import { useAdminSession } from '../lib/adminSession'
 import { Suspense, lazy } from 'react'
 
@@ -95,6 +96,30 @@ export default function FileWindow({
     }
   }, [receding, enlarged])
 
+  // The open: the panel materializes — columns of the frame resolve out of
+  // nothing, dithered, until the window is solid. See `lib/materialize` for the
+  // math and for why the whole effect is one mask property (it composes with
+  // everything: transform stays the drag's, opacity and filter stay the
+  // recede's). A LAYOUT effect, so progress 0 paints in the mount frame — the
+  // same pre-paint argument as `playLockOn` — and mount-only, so focus,
+  // enlarge and ordinary re-renders never replay it. This component is keyed
+  // by window id in Desktop, so "mount" is exactly "the window opened".
+  const materializeCancel = useRef<(() => void) | null>(null)
+  useLayoutEffect(() => {
+    const root = rootRef.current
+    if (!root) return
+    const cancel = playMaterialize(root)
+    materializeCancel.current = cancel
+    return () => { materializeCancel.current = null; cancel() }
+  }, [])
+  // A close landing mid-arrival ends the arrival on the spot: the recede is
+  // about to write opacity/filter on this element, and a half-revealed mask
+  // under that would read as the window tearing rather than leaving. Cancel is
+  // idempotent and a no-op once the arrival has finished on its own.
+  useEffect(() => {
+    if (receding) materializeCancel.current?.()
+  }, [receding])
+
   return (
     <div
       className="file-window glass"
@@ -102,7 +127,12 @@ export default function FileWindow({
       data-focused={focused ? 'true' : 'false'}
       ref={(el) => { rootRef.current = el; registerEl(el) }}
       style={{
-        left: x, top: y, zIndex: 10 + z,
+        left: x, top: y,
+        // React owns the z-rank through a custom property rather than `zIndex`
+        // itself. anime.js Draggable writes an inline z-index on every grab;
+        // `.file-window` resolves this variable with !important so that hidden
+        // library counter can never outrank the next state-owned window.
+        ['--fw-z' as string]: `${z}`,
         // True-frame: the ratio is on the BODY, and the root's height falls out
         // of it. A root that carries `aspect-ratio` has to bar the media on one
         // axis, which is the pillarboxing the rulings rule out.

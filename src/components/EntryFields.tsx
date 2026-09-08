@@ -46,20 +46,25 @@ export const emptyDraft = (): EntryDraft => ({
 export const nameFromFile = (filename: string): string =>
   filename.replace(/\.[^.]+$/, '').toUpperCase().replace(/[^A-Z0-9]+/g, '_')
 
-/** What the backend accepts, stated rather than discovered through a rejection. */
-export function UploadLimitsHint({ file }: { file: File | null }) {
+/**
+ * What the backend accepts, stated rather than discovered through a rejection.
+ * `kind` narrows it to one medium where only one is legal — the R&D forms are
+ * stills only, and quoting clip formats there advertises uploads that would be
+ * rejected.
+ */
+export function UploadLimitsHint({ file, kind }: { file: File | null; kind?: 'video' | 'photo' }) {
   return (
     <p className="admin-hint">
-      CLIP {UPLOAD_LIMITS.video.join(' / ')}
-      {' · STILL '}{UPLOAD_LIMITS.photo.join(' / ')}
-      {' · UP TO '}{formatBytes(UPLOAD_LIMITS.maxBytes)}{' EACH'}
+      {kind !== 'photo' && <>CLIP {UPLOAD_LIMITS.video.join(' / ')}{' · '}</>}
+      {kind !== 'video' && <>STILL {UPLOAD_LIMITS.photo.join(' / ')}{' · '}</>}
+      UP TO {formatBytes(UPLOAD_LIMITS.maxBytes)}{kind ? '' : ' EACH'}
       {file ? ` · SELECTED ${formatBytes(file.size)}` : ''}
     </p>
   )
 }
 
 export default function EntryFields({
-  draft, onChange, nameHint, allowPhoto = true,
+  draft, onChange, nameHint, allowPhoto = true, hideKind = false,
 }: {
   draft: EntryDraft
   onChange: (next: EntryDraft) => void
@@ -72,6 +77,12 @@ export default function EntryFields({
    * existed, because a still would have published as broken video renditions.
    */
   allowPhoto?: boolean
+  /**
+   * Drop the KIND row entirely. The R&D collection is stills only, so its
+   * uploader fixes `kind: 'photo'` in the draft and never offers the choice —
+   * a select with one legal option is a control that only misleads.
+   */
+  hideKind?: boolean
 }) {
   const set = <K extends keyof EntryDraft>(key: K, value: EntryDraft[K]) =>
     onChange({ ...draft, [key]: value })
@@ -82,13 +93,15 @@ export default function EntryFields({
         <input value={draft.name} onChange={(e) => set('name', e.target.value)} placeholder="CHROME_SEQ" />
         {nameHint && <em className="admin-note">{nameHint}</em>}
       </label>
-      <label className="admin-field"><span>KIND</span>
-        <select value={draft.kind} onChange={(e) => set('kind', e.target.value as 'video' | 'photo')}>
-          <option value="video">VIDEO</option>
-          <option value="photo" disabled={!allowPhoto}>PHOTO</option>
-        </select>
-        {!allowPhoto && <em className="admin-note">STILLS AS ENTRIES ARE NOT AVAILABLE HERE</em>}
-      </label>
+      {!hideKind && (
+        <label className="admin-field"><span>KIND</span>
+          <select value={draft.kind} onChange={(e) => set('kind', e.target.value as 'video' | 'photo')}>
+            <option value="video">VIDEO</option>
+            <option value="photo" disabled={!allowPhoto}>PHOTO</option>
+          </select>
+          {!allowPhoto && <em className="admin-note">STILLS AS ENTRIES ARE NOT AVAILABLE HERE</em>}
+        </label>
+      )}
       <label className="admin-field"><span>DATE</span>
         <input type="date" value={draft.date} onChange={(e) => set('date', e.target.value)} />
       </label>

@@ -287,6 +287,107 @@ describe('/api/entry/:id', () => {
   })
 })
 
+describe('collections', () => {
+  let env: Env
+  let cookie: string
+  // Every dispatch body the Worker sends to GitHub, so a test can assert on the
+  // exact client_payload without caring about the staging calls before it.
+  let dispatched: Array<{ event_type: string; client_payload: Record<string, unknown> }>
+
+  beforeEach(async () => {
+    env = await makeEnv()
+    const login = await worker.fetch(post('/api/session', { passcode: PASSCODE }), env)
+    cookie = cookieFrom(login)
+    dispatched = []
+    // The staging calls (release lookup, asset upload) answer with the minimum
+    // GitHub shape stageRaw reads; the dispatch call is captured instead.
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.endsWith('/dispatches')) {
+        dispatched.push(JSON.parse(String(init?.body)))
+        return new Response(null, { status: 204 })
+      }
+      if (url.includes('/releases/tags/')) {
+        return new Response(JSON.stringify({ id: 1, upload_url: 'https://uploads.example/assets{?name,label}' }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ id: 2, url: 'https://api.example/asset/2', name: 'x.upload' }), { status: 200 })
+    })
+  })
+
+  afterEach(() => { vi.restoreAllMocks() })
+
+  const upload = (fields: Record<string, string>) => {
+    const form = new FormData()
+    for (const [k, v] of Object.entries(fields)) form.set(k, v)
+    form.set('file', new File(['x'], 'a.jpg'))
+    return new Request('https://api.example/api/upload', {
+      method: 'POST', headers: { origin: ORIGIN, cookie }, body: form,
+    })
+  }
+
+  const validFields = {
+    name: 'FIRST_LIGHT', kind: 'photo', tagline: 'test still',
+    description: 'note', date: '2026-09-01', postUrl: 'https://instagram.com/p/x',
+  }
+
+  it('threads collection rnd through an upload dispatch', async () => {
+    const res = await worker.fetch(upload({ ...validFields, collection: 'rnd' }), env)
+    expect(res.status).toBe(202)
+    expect(dispatched).toHaveLength(1)
+    expect(dispatched[0].client_payload.collection).toBe('rnd')
+  })
+
+  it('defaults an upload with no collection to the archive', async () => {
+    // The admin UI from before R&D existed sends no collection at all; those
+    // requests must keep meaning exactly what they always meant.
+    const res = await worker.fetch(upload({ ...validFields, kind: 'video' }), env)
+    expect(res.status).toBe(202)
+    expect(dispatched[0].client_payload).toMatchObject({ collection: 'archive', entry: { kind: 'video' } })
+  })
+
+  it('rejects an unknown collection before touching GitHub', async () => {
+    const res = await worker.fetch(upload({ ...validFields, collection: 'vault' }), env)
+    expect(res.status).toBe(422)
+    expect(dispatched).toHaveLength(0)
+  })
+
+  it('forces an R&D upload to kind photo — R&D is stills-only', async () => {
+    const res = await worker.fetch(upload({ ...validFields, kind: 'video', collection: 'rnd' }), env)
+    expect(res.status).toBe(202)
+    expect(dispatched[0].client_payload).toMatchObject({ entry: { kind: 'photo' } })
+  })
+
+  it('threads collection through an edit dispatch and forces kind photo', async () => {
+    const form = new FormData()
+    for (const [k, v] of Object.entries({
+      ...validFields, kind: 'video', collection: 'rnd',
+      currentName: 'FIRST_LIGHT', existingNames: JSON.stringify(['FIRST_LIGHT']),
+    })) form.set(k, v)
+    const res = await worker.fetch(new Request('https://api.example/api/entry/rnd_first_light', {
+      method: 'POST', headers: { origin: ORIGIN, cookie }, body: form,
+    }), env)
+    expect(res.status).toBe(202)
+    expect(dispatched[0].client_payload).toMatchObject({
+      op: 'edit', id: 'rnd_first_light', collection: 'rnd', entry: { kind: 'photo' },
+    })
+  })
+
+  it('threads collection through a removal, and rejects an unknown one', async () => {
+    const del = (body: unknown) => new Request('https://api.example/api/entry/rnd_first_light', {
+      method: 'DELETE',
+      headers: { origin: ORIGIN, cookie, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const bad = await worker.fetch(del({ name: 'FIRST_LIGHT', confirm: 'first_light', collection: 'vault' }), env)
+    expect(bad.status).toBe(422)
+    expect(dispatched).toHaveLength(0)
+
+    const res = await worker.fetch(del({ name: 'FIRST_LIGHT', confirm: 'first_light', collection: 'rnd' }), env)
+    expect(res.status).toBe(202)
+    expect(dispatched[0].client_payload).toMatchObject({ op: 'remove', id: 'rnd_first_light', collection: 'rnd' })
+  })
+})
+
 describe('POST /api/content', () => {
   let env: Env
   let cookie: string
