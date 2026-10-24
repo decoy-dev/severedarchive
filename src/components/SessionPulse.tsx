@@ -48,6 +48,11 @@ export default function SessionPulse({ tier }: { tier: PerfTier }) {
     // `fire` so it cannot drift away from the wave.
     dot.style.animation = 'none'
 
+    // The accent, read once from the dot that wears it, so the wave and the dot
+    // cannot disagree and index.css stays the only place the colour is set.
+    // Computed style is always normalised to `rgb(r, g, b)`.
+    const [accentR = 0, accentG = 0, accentB = 0] = (getComputedStyle(dot).backgroundColor.match(/\d+/g) ?? []).map(Number)
+
     let raf = 0
     let timer: number | undefined
     let blinkTimer: number | undefined
@@ -125,11 +130,11 @@ export default function SessionPulse({ tier }: { tier: PerfTier }) {
           })
           if (value <= 0) continue
           const o = i * 4
-          // The accent, #b6ff2e, as light rather than as paint: alpha carries
-          // the brightness so it adds to whatever the glass is already showing.
-          data[o] = 182
-          data[o + 1] = 255
-          data[o + 2] = 46
+          // The accent as light rather than as paint: alpha carries the
+          // brightness so it adds to whatever the glass is already showing.
+          data[o] = accentR
+          data[o + 1] = accentG
+          data[o + 2] = accentB
           // Low ceiling: this is a hint of light under the chrome, not a wash over
           // it. At 235 it read as a lit panel rather than as something passing
           // through one; 110 leaves the bar's own text firmly on top.

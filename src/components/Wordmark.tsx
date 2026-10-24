@@ -21,7 +21,7 @@ const DRAW_MS = 900
  * Two layers of the same paths: the filled one is the wordmark as it has always
  * looked, and a stroked copy on top traces itself across the letters every
  * fourteen seconds and fades out. Subtle by construction — the stroke is thin,
- * barely-there acid, and it is gone for most of the cycle.
+ * barely-there white, and it is gone for most of the cycle.
  *
  * Still below the terminal window in z-order, so the glass keeps blurring and
  * refracting it. That refraction is the whole point of the overprint.

@@ -15,7 +15,10 @@
   --dim: #6e7a83;
   --hair: rgba(201, 210, 216, 0.16);
   --hair-bright: rgba(201, 210, 216, 0.34);
-  --acid: #b6ff2e;
+  /* A grey, deliberately: the interface stays monochrome so the artwork is the
+     only colour on the page. Lighter than --dim so active states still read,
+     well short of --text so it never competes with the work. */
+  --accent: #9aa4ab;
   --alert: #ff3524;
   --mono: 'VT323', ui-monospace, monospace;
   /* Type scale. The floor is a hard 12px of APPARENT size and no literal sits
@@ -81,7 +84,7 @@ body {
 a { color: inherit; text-decoration: none; }
 /* Selection in the accent rather than the browser's blue, which is the one
    colour on the page that belongs to nothing else here. */
-::selection { background: var(--acid); color: var(--void); text-shadow: none; }
+::selection { background: var(--accent); color: var(--void); text-shadow: none; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 video { display: block; width: 100%; height: 100%; object-fit: cover; }
 
@@ -155,8 +158,8 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 }
 .wordmark-fill path { fill: rgba(201, 210, 216, 0.13); }
 /* The traced outline. White rather than the accent: on the overprint it reads
-   as the letters catching light, where acid read as a second, differently
-   coloured wordmark laid over the first. Barely there by design. Width is in
+   as the letters catching light, where the old lime accent read as a second,
+   differently coloured wordmark laid over the first. Barely there by design. Width is in
    user units against a 712-unit-tall viewBox, so it stays a hairline at any
    viewport. */
 .wordmark-stroke path { fill: none; stroke: rgba(238, 244, 248, 0.42); stroke-width: 4; }
@@ -302,9 +305,9 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
    and under reduced motion, where the canvas never runs. */
 .tw-dot {
   flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%;
-  background: var(--acid); box-shadow: 0 0 6px rgba(182, 255, 46, 0.5);
+  background: var(--accent); box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 50%, transparent);
   animation: session-blink 5s linear infinite;
-  /* The RECHARGE: out of the blink, the dot climbs back to full green over
+  /* The RECHARGE: out of the blink, the dot climbs back to full brightness over
      ~1.6s instead of snapping. Ease-out, because that is what charging looks
      like — most of the level early, the last of it asymptotic. The blink
      itself must stay a snap (it is a blink, not a fade), which is why the
@@ -347,7 +350,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   color: var(--dim); border: 1px solid var(--hair); border-bottom: 0; margin-right: -1px;
   background: rgba(10, 13, 16, 0.35);
 }
-.tw-tab.is-active { color: var(--acid); background: rgba(182, 255, 46, 0.05); border-color: var(--hair-bright); }
+.tw-tab.is-active { color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, transparent); border-color: var(--hair-bright); }
 .tw-tab:hover:not(.is-active) { color: var(--text); }
 
 .tw-body { flex: 1 1 auto; min-height: 0; border: 1px solid var(--hair-bright); margin: 0 14px; position: relative; z-index: 2; overflow: hidden; }
@@ -434,7 +437,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
    and a branded font changes the sampling width per browser. */
 .ascii-object {
   position: relative; min-width: 0; height: 100%; min-height: 0;
-  color: var(--acid); background: transparent;
+  color: var(--accent); background: transparent;
   /* `layout style`, NOT `strict`. Strict includes PAINT containment, which
      clips to this box — and the mark is translated to centre itself in the gap
      between the copy and the panel edge, which is wider than this column. When
@@ -452,7 +455,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
      on purpose when the gap it has to centre in is wider than the column. */
   overflow: visible;
   color: inherit !important; background: transparent !important;
-  text-shadow: 0 0 7px rgba(182, 255, 46, 0.22);
+  text-shadow: 0 0 7px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 /* Left-aligned on purpose, or rather unavoidably: AsciiEffect's character grid
    does not divide the box evenly (measured at 1440px: 561px of columns in a
@@ -527,10 +530,10 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .link-card-label { font-size: var(--fs-lg); letter-spacing: 0.06em; color: var(--bright); }
 .link-card-value { font-size: var(--fs-xs); letter-spacing: 0.06em; overflow-wrap: anywhere; }
 .link-card:hover, .link-card:focus-visible {
-  border-color: var(--acid); background: rgba(182, 255, 46, 0.05); outline: none;
+  border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, transparent); outline: none;
 }
-.link-card:hover .link-icon, .link-card:focus-visible .link-icon { color: var(--acid); }
-.link-card:hover .link-card-label, .link-card:focus-visible .link-card-label { color: var(--acid); }
+.link-card:hover .link-icon, .link-card:focus-visible .link-icon { color: var(--accent); }
+.link-card:hover .link-card-label, .link-card:focus-visible .link-card-label { color: var(--accent); }
 /* Icon behaviour on hover. Transform and opacity only, per the binding rules,
    and every one of them keyed to `transform-box: fill-box` so the origin is the
    shape's own box rather than the whole 32-unit canvas. */
@@ -618,7 +621,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .file-card-name { display: inline-flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-card-kind { display: inline-flex; flex: 0 0 auto; color: var(--dim); }
 .file-card:hover .file-card-kind, .file-card:focus-visible .file-card-kind,
-.file-card.is-selected .file-card-kind { color: var(--acid); }
+.file-card.is-selected .file-card-kind { color: var(--accent); }
 .file-card-label {
   display: flex; justify-content: space-between; gap: 8px;
   padding: 8px 10px; font-size: var(--fs-xs); letter-spacing: 0.04em;
@@ -628,24 +631,24 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
    the same way: the poster resolves, the frame takes the accent, the name goes
    with it. Accent on hover/focus only, never at rest. */
 .file-card:hover, .file-card:focus-visible, .file-card.is-selected {
-  border-color: var(--acid); background: rgba(182, 255, 46, 0.05); outline: none;
+  border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, transparent); outline: none;
 }
 .file-card:hover .file-card-media img,
 .file-card:focus-visible .file-card-media img,
 .file-card.is-selected .file-card-media img { opacity: 1; }
 .file-card:hover .file-card-label,
 .file-card:focus-visible .file-card-label,
-.file-card.is-selected .file-card-label { color: var(--acid); border-top-color: var(--acid); }
+.file-card.is-selected .file-card-label { color: var(--accent); border-top-color: var(--accent); }
 .file-card:hover .file-card-label .tw-dim,
 .file-card:focus-visible .file-card-label .tw-dim,
-.file-card.is-selected .file-card-label .tw-dim { color: var(--acid); }
+.file-card.is-selected .file-card-label .tw-dim { color: var(--accent); }
 
 .grid-pager {
   display: flex; align-items: center; gap: 14px; justify-content: center;
   padding-top: 10px; flex: 0 0 auto; font-size: var(--fs-sm); color: var(--dim);
 }
 .grid-pager button { color: var(--text); padding: 2px 8px; border: 1px solid var(--hair); }
-.grid-pager button:hover { color: var(--acid); border-color: var(--acid); }
+.grid-pager button:hover { color: var(--accent); border-color: var(--accent); }
 
 /* focus mode: focused card becomes the stage, others form a strip below */
 .archive-grid.has-focus .grid-cards {
@@ -655,7 +658,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .archive-grid.has-focus .file-card { grid-row: 2; aspect-ratio: 16 / 10; }
 .archive-grid.has-focus .file-card.is-focus {
   grid-row: 1; grid-column: 1 / -1; aspect-ratio: auto;
-  border-color: var(--acid);
+  border-color: var(--accent);
 }
 .file-card.is-focus .file-card-label { color: var(--bright); }
 
@@ -664,8 +667,8 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .file-card.is-focus::before, .file-card.is-focus::after {
   content: ''; position: absolute; width: 14px; height: 14px; z-index: 2; pointer-events: none;
 }
-.file-card.is-focus::before { top: -1px; left: -1px; border-top: 2px solid var(--acid); border-left: 2px solid var(--acid); }
-.file-card.is-focus::after { bottom: -1px; right: -1px; border-bottom: 2px solid var(--acid); border-right: 2px solid var(--acid); }
+.file-card.is-focus::before { top: -1px; left: -1px; border-top: 2px solid var(--accent); border-left: 2px solid var(--accent); }
+.file-card.is-focus::after { bottom: -1px; right: -1px; border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent); }
 
 .focus-hud {
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
@@ -674,7 +677,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .focus-meta, .focus-controls { position: relative; z-index: 2; }
 .focus-controls { display: flex; gap: 8px; }
 .focus-controls button { border: 1px solid var(--hair); padding: 4px 10px; }
-.focus-controls button:hover { color: var(--acid); border-color: var(--acid); }
+.focus-controls button:hover { color: var(--accent); border-color: var(--accent); }
 
 @media (max-width: 640px) {
   .archive-grid.has-focus .grid-cards { grid-template-columns: repeat(2, 1fr); }
@@ -689,7 +692,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .archive-panel-body > .archive-grid { padding: 0; } /* outer panel already pads */
 .view-toggle { display: flex; gap: 0; justify-content: flex-end; flex: 0 0 auto; padding-bottom: 8px; }
 .view-toggle button { padding: 7px 14px; font-size: var(--fs-xs); letter-spacing: 0.06em; color: var(--dim); border: 1px solid var(--hair); margin-left: -1px; }
-.view-toggle button.is-active { color: var(--acid); background: rgba(182, 255, 46, 0.05); border-color: var(--hair-bright); }
+.view-toggle button.is-active { color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, transparent); border-color: var(--hair-bright); }
 .view-toggle button:hover:not(.is-active) { color: var(--text); }
 
 /* ── archive explorer (list view) ── */
@@ -745,17 +748,17 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .explorer-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 /* Accent marks the hovered/selected tile only (spec §2) — never a resting default. */
 .explorer-row:hover, .explorer-row:focus-visible, .explorer-row.is-selected {
-  color: var(--acid); background: rgba(182, 255, 46, 0.05); outline: none;
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, transparent); outline: none;
 }
 .explorer-row:hover .explorer-thumb,
 .explorer-row:focus-visible .explorer-thumb,
-.explorer-row.is-selected .explorer-thumb { border-color: var(--acid); }
+.explorer-row.is-selected .explorer-thumb { border-color: var(--accent); }
 .explorer-row:hover .explorer-thumb img,
 .explorer-row:focus-visible .explorer-thumb img,
 .explorer-row.is-selected .explorer-thumb img { opacity: 1; }
 .explorer-row:hover .explorer-row-kind,
 .explorer-row:focus-visible .explorer-row-kind,
-.explorer-row.is-selected .explorer-row-kind { color: var(--acid); }
+.explorer-row.is-selected .explorer-row-kind { color: var(--accent); }
 
 /* `min-width: 0` is not decoration: a grid item's default `min-width: auto`
    sizes the 1fr track to its min-content, and the dashboard strip's cards made
@@ -781,7 +784,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .standby-line { font-size: var(--fs-sm); letter-spacing: 0.06em; line-height: 1.7; }
 .standby-caret {
   display: inline-block; width: 0.55em; height: 1em; margin-left: 0.4em;
-  background: var(--acid); vertical-align: text-bottom;
+  background: var(--accent); vertical-align: text-bottom;
   animation: standby-blink 1.1s steps(1, end) infinite;
 }
 @keyframes standby-blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0; } }
@@ -858,7 +861,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
    every animation frame, and proportional digits would make the numbers jitter
    sideways as they tick. The accent marks them as the moving ones. */
 .dash-grid.is-live { margin-top: 6px; }
-.dash-grid.is-live .dash-stat-value { font-variant-numeric: tabular-nums; color: var(--acid); opacity: 0.85; }
+.dash-grid.is-live .dash-stat-value { font-variant-numeric: tabular-nums; color: var(--accent); opacity: 0.85; }
 .dash-stat { display: flex; gap: 8px; justify-content: space-between; min-width: 0; border-bottom: 1px solid var(--hair); padding-bottom: 2px; }
 .dash-stat-label { flex: 0 0 auto; }
 .dash-stat-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -874,11 +877,11 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .dash-close { color: var(--dim); width: 100%; }
 /* Accent marks the top window and whatever the pointer is on — never a resting
    default, same rule as the file tiles. */
-.dash-row.is-focused { border-color: var(--hair-bright); background: rgba(182, 255, 46, 0.07); }
-.dash-row.is-focused .dash-rank, .dash-row.is-focused .dash-name { color: var(--acid); }
-.dash-row-main:hover, .dash-row-main:focus-visible { color: var(--acid); outline: none; }
-.dash-row-main:hover .dash-rank, .dash-row-main:focus-visible .dash-rank { color: var(--acid); }
-.dash-close:hover, .dash-close:focus-visible { color: var(--acid); outline: none; }
+.dash-row.is-focused { border-color: var(--hair-bright); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.dash-row.is-focused .dash-rank, .dash-row.is-focused .dash-name { color: var(--accent); }
+.dash-row-main:hover, .dash-row-main:focus-visible { color: var(--accent); outline: none; }
+.dash-row-main:hover .dash-rank, .dash-row-main:focus-visible .dash-rank { color: var(--accent); }
+.dash-close:hover, .dash-close:focus-visible { color: var(--accent); outline: none; }
 .preview-meta { flex: 0 0 auto; border-top: 1px solid var(--hair); margin-top: 18px; padding-top: 12px; }
 .preview-meta-head { font-size: var(--fs-lg); color: var(--bright); letter-spacing: 0.02em; }
 .preview-meta-sub { font-size: var(--fs-sm); margin-top: 4px; letter-spacing: 0.03em; }
@@ -949,15 +952,15 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   display: flex; padding: 2px;
   color: var(--text); background: rgba(4, 6, 8, 0.62);
 }
-.mobile-tile.is-selected .mobile-tile-kind { color: var(--acid); }
+.mobile-tile.is-selected .mobile-tile-kind { color: var(--accent); }
 .mobile-tile-index {
   position: absolute; left: 4px; bottom: 3px; font-size: var(--fs-xs); color: var(--text);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
 }
 /* Accent marks the selected tile only — never a resting default. */
-.mobile-tile.is-selected { border-color: var(--acid); }
+.mobile-tile.is-selected { border-color: var(--accent); }
 .mobile-tile.is-selected img { opacity: 1; }
-.mobile-tile.is-selected .mobile-tile-index { color: var(--acid); }
+.mobile-tile.is-selected .mobile-tile-index { color: var(--accent); }
 
 /* terminal volume slider */
 .vol-control { display: flex; align-items: center; gap: 8px; }
@@ -974,12 +977,12 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   background: var(--text); border: 1px solid var(--hair-bright);
 }
 .vol-control input[type='range']:hover::-webkit-slider-thumb,
-.vol-control input[type='range']:focus-visible::-webkit-slider-thumb { background: var(--acid); }
+.vol-control input[type='range']:focus-visible::-webkit-slider-thumb { background: var(--accent); }
 .vol-control input[type='range']::-moz-range-track { height: 4px; background: var(--hair-bright); }
 .vol-control input[type='range']::-moz-range-thumb {
   width: 10px; height: 14px; border-radius: 0; background: var(--text); border: 1px solid var(--hair-bright);
 }
-.vol-control input[type='range']:hover::-moz-range-thumb { background: var(--acid); }
+.vol-control input[type='range']:hover::-moz-range-thumb { background: var(--accent); }
 
 /* ── boot ── */
 .boot { position: absolute; inset: var(--frame); z-index: 4; padding: 24px; background: var(--panel-solid); border: 1px solid var(--hair-bright); font-size: var(--fs-base); }
@@ -989,13 +992,13 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 /* ── volume control ── */
 .vol { display: inline-flex; align-items: center; gap: 8px; }
 .vol-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); }
-.vol-toggle:hover .tw-dim, .vol[data-open='true'] .tw-dim { color: var(--acid); }
+.vol-toggle:hover .tw-dim, .vol[data-open='true'] .tw-dim { color: var(--accent); }
 .vol-bars { display: inline-flex; gap: 2px; align-items: flex-end; }
 .vol-bars i { width: 3px; background: var(--dim); display: block; }
 .vol-bars i:nth-child(1) { height: 5px; }
 .vol-bars i:nth-child(2) { height: 8px; }
 .vol-bars i:nth-child(3) { height: 11px; }
-.vol-bars i[data-on='true'] { background: var(--acid); }
+.vol-bars i[data-on='true'] { background: var(--accent); }
 
 .vol-expand {
   display: inline-flex; align-items: center; gap: 8px;
@@ -1015,13 +1018,13 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   background: var(--text); border: 1px solid var(--hair-bright);
 }
 .vol-expand input[type='range']:hover::-webkit-slider-thumb,
-.vol-expand input[type='range']:focus-visible::-webkit-slider-thumb { background: var(--acid); }
+.vol-expand input[type='range']:focus-visible::-webkit-slider-thumb { background: var(--accent); }
 .vol-expand input[type='range']::-moz-range-track { height: 4px; background: var(--hair-bright); }
 .vol-expand input[type='range']::-moz-range-thumb {
   width: 10px; height: 14px; border-radius: 0; background: var(--text); border: 1px solid var(--hair-bright);
 }
 .vol-expand input[type='range']:hover::-moz-range-thumb,
-.vol-expand input[type='range']:focus-visible::-moz-range-thumb { background: var(--acid); }
+.vol-expand input[type='range']:focus-visible::-moz-range-thumb { background: var(--accent); }
 .vol .vol-readout { color: var(--text); font-size: var(--fs-xs); min-width: 3ch; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1082,7 +1085,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   width: 40px; height: 40px; margin-right: -10px;
   display: inline-flex; align-items: center; justify-content: center;
 }
-.fw-close:hover, .fw-close:focus-visible { color: var(--acid); background: rgba(182, 255, 46, 0.08); outline: none; }
+.fw-close:hover, .fw-close:focus-visible { color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); outline: none; }
 /* Admin login, in the footer. Dim until wanted — it is for one person, and it
    must not compete with the archive for attention. */
 .tw-footer-left { display: inline-flex; align-items: center; gap: 14px; min-width: 0; }
@@ -1092,7 +1095,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 }
 .admin-open:hover, .admin-open:focus-visible,
 .admin-again:hover, .admin-again:focus-visible {
-  color: var(--acid); border-color: var(--hair); outline: none;
+  color: var(--accent); border-color: var(--hair); outline: none;
 }
 /* ── the file picker ──
    A styled row over a visually-hidden native input. The input keeps the OS
@@ -1111,10 +1114,10 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   padding: 8px 10px; cursor: pointer;
   background: rgba(0, 0, 0, 0.45); border: 1px solid var(--hair-bright);
 }
-.file-picker-row:hover { border-color: var(--acid); }
-.file-picker-row:hover .file-picker-cta { color: var(--acid); border-color: var(--acid); }
+.file-picker-row:hover { border-color: var(--accent); }
+.file-picker-row:hover .file-picker-cta { color: var(--accent); border-color: var(--accent); }
 /* The input is where focus actually lands; the row is what shows it. */
-.file-picker-input:focus-visible + .file-picker-row { border-color: var(--acid); }
+.file-picker-input:focus-visible + .file-picker-row { border-color: var(--accent); }
 .file-picker-cta {
   flex: 0 0 auto; padding: 3px 10px;
   font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--text);
@@ -1136,17 +1139,17 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   color: var(--bright); background: rgba(0, 0, 0, 0.5);
   border: 1px solid var(--hair-bright);
 }
-.admin-input:focus-visible { outline: none; border-color: var(--acid); }
+.admin-input:focus-visible { outline: none; border-color: var(--accent); }
 .admin-go {
   font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--text);
   border: 1px solid var(--hair-bright); padding: 3px 10px;
 }
 .admin-go:hover:not(:disabled), .admin-go:focus-visible:not(:disabled) {
-  color: var(--acid); border-color: var(--acid); outline: none;
+  color: var(--accent); border-color: var(--accent); outline: none;
 }
 .admin-go:disabled { color: var(--dim); cursor: default; }
 .admin-result { display: inline-flex; align-items: center; gap: 10px; font-size: var(--fs-xs); letter-spacing: 0.06em; }
-.admin-result[data-result='ok'] { color: var(--acid); }
+.admin-result[data-result='ok'] { color: var(--accent); }
 .admin-result[data-result='denied'], .admin-result[data-result='limited'] { color: var(--text); }
 .admin-result[data-result='offline'] { color: var(--dim); }
 /* No room for it beside the tab bar on a phone, and publishing from one is not
@@ -1208,7 +1211,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   padding: 6px 12px; font-size: var(--fs-xs); letter-spacing: 0.06em;
   color: var(--dim); border: 1px solid var(--hair); margin-left: -1px;
 }
-.admin-tabs button.is-active { color: var(--acid); border-color: var(--hair-bright); background: rgba(182, 255, 46, 0.05); }
+.admin-tabs button.is-active { color: var(--accent); border-color: var(--hair-bright); background: color-mix(in srgb, var(--accent) 5%, transparent); }
 .admin-tabs button:hover:not(.is-active) { color: var(--text); }
 /* Four tabs (ARCHIVE / R+D / ABOUT / LINKS) no longer fit beside the title on a
    phone. Let the bar wrap there — title and ✕ on the first row, tabs on their
@@ -1221,7 +1224,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   .admin-tabs button { flex: 1 1 auto; }
 }
 .admin-close { width: 34px; height: 34px; color: var(--dim); }
-.admin-close:hover, .admin-close:focus-visible { color: var(--acid); outline: none; }
+.admin-close:hover, .admin-close:focus-visible { color: var(--accent); outline: none; }
 .admin-body {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
   padding: 16px; overflow-y: auto; min-height: 0;
@@ -1241,12 +1244,12 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   border: 1px solid var(--hair-bright); padding: 6px 8px; min-width: 0;
 }
 .admin-field input:focus-visible, .admin-field select:focus-visible,
-.admin-field textarea:focus-visible, .admin-json:focus-visible { outline: none; border-color: var(--acid); }
+.admin-field textarea:focus-visible, .admin-json:focus-visible { outline: none; border-color: var(--accent); }
 .admin-json { grid-column: 1 / -1; min-height: 300px; resize: vertical; line-height: 1.5; }
 
 /* ── the ABOUT/LINKS editor ──
    Fields over `content.json`, in the same idiom as the rest of the panel: hairline
-   boxes, VT323, uppercase labels, acid only on focus and hover. It replaced a raw
+   boxes, VT323, uppercase labels, accent only on focus and hover. It replaced a raw
    JSON textarea (`.admin-json`, still used for the RAW view and for a file the form
    cannot model) — see `ContentEditor`.
 
@@ -1259,12 +1262,12 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--dim);
   border: 1px solid var(--hair); padding: 3px 10px;
 }
-.ce-modes button.is-active { color: var(--acid); border-color: var(--acid); }
+.ce-modes button.is-active { color: var(--accent); border-color: var(--accent); }
 .ce-modes button:hover:not(:disabled), .ce-modes button:focus-visible:not(:disabled) {
   color: var(--bright); border-color: var(--hair-bright); outline: none;
 }
 .ce-modes button:disabled { color: rgba(255, 255, 255, 0.18); border-color: var(--hair); cursor: default; }
-.ce-note { font-size: var(--fs-xs); letter-spacing: 0.06em; color: var(--acid); }
+.ce-note { font-size: var(--fs-xs); letter-spacing: 0.06em; color: var(--accent); }
 
 .ce-scroll {
   display: flex; flex-direction: column; gap: 18px;
@@ -1291,8 +1294,8 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   color: var(--bright); background: rgba(0, 0, 0, 0.45);
   border: 1px solid var(--hair-bright); padding: 3px 6px;
 }
-.ce-inline input[type='checkbox'] { accent-color: var(--acid); }
-.ce-inline select:focus-visible, .ce-inline input:focus-visible { outline: none; border-color: var(--acid); }
+.ce-inline input[type='checkbox'] { accent-color: var(--accent); }
+.ce-inline select:focus-visible, .ce-inline input:focus-visible { outline: none; border-color: var(--accent); }
 /* Pushed to the end of the bar: reordering and deleting are the destructive pair,
    and they should not sit next to the field the eye lands on first. */
 .ce-ctl { margin-left: auto; display: inline-flex; gap: 4px; }
@@ -1301,7 +1304,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   border: 1px solid var(--hair);
 }
 .ce-ctl button:hover:not(:disabled), .ce-ctl button:focus-visible:not(:disabled) {
-  color: var(--acid); border-color: var(--acid); outline: none;
+  color: var(--accent); border-color: var(--accent); outline: none;
 }
 .ce-ctl button:disabled { color: rgba(255, 255, 255, 0.16); cursor: default; }
 .ce-ctl .ce-del:hover, .ce-ctl .ce-del:focus-visible { color: #ff5b5b; border-color: #ff5b5b; }
@@ -1323,7 +1326,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   border: 1px solid var(--hair-bright); padding: 6px 8px; min-width: 0;
   resize: vertical;
 }
-.ce-field input:focus-visible, .ce-field textarea:focus-visible { outline: none; border-color: var(--acid); }
+.ce-field input:focus-visible, .ce-field textarea:focus-visible { outline: none; border-color: var(--accent); }
 .ce-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
 @media (max-width: 560px) { .ce-pair { grid-template-columns: minmax(0, 1fr); } }
 .ce-add {
@@ -1331,14 +1334,14 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--dim);
   border: 1px dashed var(--hair-bright);
 }
-.ce-add:hover, .ce-add:focus-visible { color: var(--acid); border-color: var(--acid); outline: none; }
+.ce-add:hover, .ce-add:focus-visible { color: var(--accent); border-color: var(--accent); outline: none; }
 .admin-submit {
   grid-column: 1 / -1; justify-self: start;
   padding: 8px 20px; font-size: var(--fs-xs); letter-spacing: 0.1em;
   color: var(--text); border: 1px solid var(--hair-bright);
 }
 .admin-submit:hover:not(:disabled), .admin-submit:focus-visible:not(:disabled) {
-  color: var(--acid); border-color: var(--acid); outline: none;
+  color: var(--accent); border-color: var(--accent); outline: none;
 }
 .admin-submit:disabled { color: var(--dim); cursor: default; }
 .admin-hint {
@@ -1348,16 +1351,16 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   flex: 0 0 auto; padding: 10px 16px; font-size: var(--fs-xs); letter-spacing: 0.05em;
   border-top: 1px solid var(--hair); position: relative; z-index: 2;
 }
-.admin-status[data-kind='ok'] { color: var(--acid); }
+.admin-status[data-kind='ok'] { color: var(--accent); }
 /* LIVE is the one status that carries a control: the deploy with this edit in
    it is being served, and the reload is what shows it. */
-.admin-status[data-kind='live'] { color: var(--acid); }
+.admin-status[data-kind='live'] { color: var(--accent); }
 .admin-reload {
   margin-left: 12px; padding: 2px 10px;
-  font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--acid);
-  border: 1px solid var(--acid);
+  font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--accent);
+  border: 1px solid var(--accent);
 }
-.admin-reload:hover, .admin-reload:focus-visible { background: rgba(182, 255, 46, 0.12); outline: none; }
+.admin-reload:hover, .admin-reload:focus-visible { background: color-mix(in srgb, var(--accent) 12%, transparent); outline: none; }
 .admin-status[data-kind='error'] { color: var(--bright); }
 .admin-status[data-kind='busy'] { color: var(--dim); }
 /* The file being edited, named in the panel's header beside the mode. */
@@ -1429,7 +1432,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   touch-action: none;
 }
 .thumb-frame[data-grabbable='true'] { cursor: grab; }
-.thumb-frame[data-dragging='true'] { cursor: grabbing; border-color: var(--acid); }
+.thumb-frame[data-dragging='true'] { cursor: grabbing; border-color: var(--accent); }
 .thumb-media {
   display: block; width: 100%; height: 100%; object-fit: cover;
   /* transform and transform-origin are set inline from `previewStyle` — the same
@@ -1445,14 +1448,14 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   position: absolute; width: 15px; height: 15px; translate: -50% -50%;
   pointer-events: none;
   background:
-    linear-gradient(var(--acid), var(--acid)) center / 100% 1px no-repeat,
-    linear-gradient(var(--acid), var(--acid)) center / 1px 100% no-repeat;
+    linear-gradient(var(--accent), var(--accent)) center / 100% 1px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) center / 1px 100% no-repeat;
   opacity: 0.85;
 }
 .thumb-controls { display: grid; gap: 10px; }
 .thumb-slider { display: grid; gap: 4px; }
 .thumb-slider > span { font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--dim); }
-.thumb-slider input[type='range'] { width: 100%; accent-color: var(--acid); }
+.thumb-slider input[type='range'] { width: 100%; accent-color: var(--accent); }
 .thumb-slider input[type='range']:disabled { opacity: 0.35; }
 .thumb-readout { font-size: var(--fs-xs); letter-spacing: 0.05em; color: var(--dim); }
 .thumb-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -1463,7 +1466,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--text);
   border: 1px solid var(--hair-bright); padding: 6px 12px; cursor: pointer;
 }
-.thumb-pick:hover, .thumb-pick:focus-within { color: var(--acid); border-color: var(--acid); }
+.thumb-pick:hover, .thumb-pick:focus-within { color: var(--accent); border-color: var(--accent); }
 .thumb-pick input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .thumb-reset {
   font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--dim); padding: 6px 10px;
@@ -1482,7 +1485,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   height: 40px; padding: 0 8px;
   display: inline-flex; align-items: center;
 }
-.fw-edit:hover, .fw-edit:focus-visible { color: var(--acid); background: rgba(182, 255, 46, 0.08); outline: none; }
+.fw-edit:hover, .fw-edit:focus-visible { color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); outline: none; }
 
 /* ENLARGE / MINIMIZE, in the title bar. Same 40px-tall target as ✕ and EDIT, and
    for the same reason. */
@@ -1491,7 +1494,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   width: 34px; height: 40px;
   display: inline-flex; align-items: center; justify-content: center;
 }
-.fw-scale:hover, .fw-scale:focus-visible { color: var(--acid); background: rgba(182, 255, 46, 0.08); outline: none; }
+.fw-scale:hover, .fw-scale:focus-visible { color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); outline: none; }
 /* Enlarged is a state, so the control that holds it reads as held. */
 .fw-scale[aria-pressed='true'] { color: var(--bright); }
 .scale-icon { display: block; }
@@ -1552,16 +1555,16 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   overflow: hidden; opacity: 0;
   background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.42) 0 1px, transparent 1px 3px);
 }
-/* The roll band: acid at its edges, near-white at its core, because that is the
+/* The roll band: accent at its edges, near-white at its core, because that is the
    accent this interface flashes with. Travels top to bottom exactly once. */
 .fw-lock::after {
   content: ''; position: absolute; left: 0; right: 0; height: 26%;
   background: linear-gradient(
     180deg,
     transparent 0%,
-    rgba(182, 255, 46, 0.16) 34%,
+    color-mix(in srgb, var(--accent) 16%, transparent) 34%,
     rgba(255, 255, 255, 0.3) 50%,
-    rgba(182, 255, 46, 0.16) 66%,
+    color-mix(in srgb, var(--accent) 16%, transparent) 66%,
     transparent 100%
   );
   transform: translateY(-140%);
@@ -1674,7 +1677,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   border: 1px solid var(--hair);
 }
 .info-trigger:hover, .info-trigger:focus-visible,
-.info-trigger[aria-expanded='true'] { color: var(--acid); border-color: var(--acid); outline: none; }
+.info-trigger[aria-expanded='true'] { color: var(--accent); border-color: var(--accent); outline: none; }
 /* Above the window's own chrome and its media. The panel hangs below and to the
    left of the trigger, because the trigger is near the right edge of a bar that
    may be only ~250px wide — opening rightward would put it off the frame. */
@@ -1782,7 +1785,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
    Inverting fixes it at the same point it broke. The differenced fill is white
    going into the filter, so the invert flips it to black at exactly the instant it
    flips the near-black interface to near-white: black type, light page, maximum
-   contrast, and the acid green reads as violet for the beat — the inversion is the
+   contrast, and the accent inverts with it for the beat — the inversion is the
    effect rather than a side effect of it.
 
    Portalling the type out of `.stage` to escape the filter was tried first and is
@@ -1860,7 +1863,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   .terminal-window { flex-direction: column; }
   .tw-tabs { order: 3; padding: 0; border-top: 1px solid var(--hair-bright); }
   .tw-tab { flex: 1 1 0; text-align: center; padding: 13px 0; border: 0; margin: 0; background: transparent; }
-  .tw-tab.is-active { background: rgba(182, 255, 46, 0.06); }
+  .tw-tab.is-active { background: color-mix(in srgb, var(--accent) 6%, transparent); }
   .tw-body { order: 2; margin: 10px 10px 0; }
   /* The object gets the band the copy leaves — measured at 194px on a 390x844
      phone, so this stays inside it with room to spare. Capped rather than
@@ -1884,7 +1887,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 /* ── commission form ──
    The public counterpart to the admin editors, so it speaks the same language
-   as `.ce-*`: hairline boxes, near-black fills, uppercase dim labels, acid only
+   as `.ce-*`: hairline boxes, near-black fills, uppercase dim labels, accent only
    on focus and hover. What it cannot borrow is their layout: those live inside
    a fixed admin window with their own scroll list, while this is a dialog opened
    over the whole stage from the COMMISSIONS card.
@@ -1959,7 +1962,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   padding: 6px 9px;
 }
 .commission-close:hover, .commission-close:focus-visible {
-  color: var(--acid); border-color: var(--acid); outline: none;
+  color: var(--accent); border-color: var(--accent); outline: none;
 }
 .commission-scroll {
   flex: 1 1 auto; min-height: 0; overflow-y: auto;
@@ -1974,15 +1977,15 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   text-transform: uppercase;
 }
 /* The asterisk is the visible half of the contract; `required`/`aria-required`
-   on the control is the other. Acid, since it marks what must happen next. */
-.commission-req { color: var(--acid); }
+   on the control is the other. Accent, since it marks what must happen next. */
+.commission-req { color: var(--accent); }
 .commission-input {
   font: inherit; font-size: var(--fs-sm); letter-spacing: 0.04em; line-height: 1.5;
   color: var(--bright); background: rgba(0, 0, 0, 0.45);
   border: 1px solid var(--hair-bright); padding: 8px 10px; min-width: 0;
   resize: vertical;
 }
-.commission-input:focus-visible { outline: none; border-color: var(--acid); }
+.commission-input:focus-visible { outline: none; border-color: var(--accent); }
 /* The alert token, not the accent: green here would read as "done right". */
 .commission-input[aria-invalid='true'] { border-color: var(--alert); }
 .commission-error {
@@ -2004,7 +2007,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 }
 .commission-drop:hover, .commission-drop:focus-within,
 .commission-drop[data-drag='true'] {
-  border-color: var(--acid); background: rgba(182, 255, 46, 0.05);
+  border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, transparent);
 }
 .commission-drop[aria-invalid='true'] { border-color: var(--alert); }
 .commission-file {
@@ -2015,7 +2018,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   text-transform: uppercase;
 }
 .commission-drop:hover .commission-drop-label,
-.commission-drop:focus-within .commission-drop-label { color: var(--acid); }
+.commission-drop:focus-within .commission-drop-label { color: var(--accent); }
 .commission-drop-hint {
   font-size: var(--fs-sm); letter-spacing: 0.04em; color: var(--text);
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
@@ -2034,7 +2037,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   border: 1px solid var(--hair-bright); background: rgba(0, 0, 0, 0.4);
 }
 .commission-submit:hover:not(:disabled), .commission-submit:focus-visible:not(:disabled) {
-  color: var(--acid); border-color: var(--acid); outline: none;
+  color: var(--accent); border-color: var(--accent); outline: none;
 }
 .commission-submit:disabled { color: var(--dim); cursor: default; }
 
@@ -2042,7 +2045,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .commission-status {
   font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--dim);
 }
-.commission-status[data-kind='ok'] { color: var(--acid); }
+.commission-status[data-kind='ok'] { color: var(--accent); }
 .commission-status[data-kind='error'] { color: var(--alert); }
 
 @media (max-width: 640px) {
@@ -2085,7 +2088,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .rnd-head-sub { font-size: var(--fs-sm); color: var(--dim); margin-top: 2px; }
 .rnd-head-pending { color: var(--dim); }
 .rnd-head-pending::after {
-  content: '▌'; margin-left: 3px; color: var(--acid); animation: rnd-blink 1s steps(1) infinite;
+  content: '▌'; margin-left: 3px; color: var(--accent); animation: rnd-blink 1s steps(1) infinite;
 }
 @keyframes rnd-blink { 50% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .rnd-head-pending::after { animation: none; } }
@@ -2142,8 +2145,8 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .rnd-focus-frame::before, .rnd-focus-frame::after {
   content: ''; position: absolute; width: 14px; height: 14px; z-index: 3; pointer-events: none;
 }
-.rnd-focus-frame::before { top: 0; left: 0; border-top: 2px solid var(--acid); border-left: 2px solid var(--acid); }
-.rnd-focus-frame::after { bottom: 0; right: 0; border-bottom: 2px solid var(--acid); border-right: 2px solid var(--acid); }
+.rnd-focus-frame::before { top: 0; left: 0; border-top: 2px solid var(--accent); border-left: 2px solid var(--accent); }
+.rnd-focus-frame::after { bottom: 0; right: 0; border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent); }
 .rnd-focus-media { position: absolute; inset: 0; }
 .rnd-focus-thumb, .rnd-focus-full {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block;
@@ -2163,7 +2166,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .rnd-arrow--prev { left: 0; }
 .rnd-arrow--next { right: 0; }
 .rnd-arrow:hover:not(:disabled), .rnd-arrow:focus-visible:not(:disabled) {
-  color: var(--acid); border-color: var(--acid); background: var(--panel-solid);
+  color: var(--accent); border-color: var(--accent); background: var(--panel-solid);
 }
 .rnd-arrow:disabled { opacity: 1; color: var(--dim); border-color: var(--hair); background: var(--panel-solid); pointer-events: none; }
 .rnd-focus-close {
@@ -2172,7 +2175,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   font-size: var(--fs-base); color: var(--text);
   border: 1px solid var(--hair-bright); background: var(--panel-solid); pointer-events: auto;
 }
-.rnd-focus-close:hover, .rnd-focus-close:focus-visible { color: var(--acid); border-color: var(--acid); }
+.rnd-focus-close:hover, .rnd-focus-close:focus-visible { color: var(--accent); border-color: var(--accent); }
 
 /* The caption, below the frame — never burned onto the image (the site already
    learned overlaid text on bright renders washes out). It "pops" up on open and
@@ -2203,7 +2206,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   font-size: var(--fs-xs); letter-spacing: 0.08em; color: var(--text);
   border: 1px solid var(--hair-bright); background: var(--panel-solid); padding: 3px 10px;
 }
-.rnd-caption-edit:hover, .rnd-caption-edit:focus-visible { color: var(--acid); border-color: var(--acid); }
+.rnd-caption-edit:hover, .rnd-caption-edit:focus-visible { color: var(--accent); border-color: var(--accent); }
 /* On desktop the counter shows; its arrows do not — the side arrows page. */
 .rnd-pager { display: flex; align-items: center; gap: 12px; font-size: var(--fs-sm); color: var(--text); }
 .rnd-pager-count { white-space: nowrap; }
@@ -2249,7 +2252,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
     color: var(--text); border: 1px solid var(--hair-bright); background: var(--panel-solid);
   }
   .rnd-pager-arrow:hover:not(:disabled), .rnd-pager-arrow:focus-visible:not(:disabled) {
-    color: var(--acid); border-color: var(--acid); background: var(--panel-solid);
+    color: var(--accent); border-color: var(--accent); background: var(--panel-solid);
   }
   .rnd-pager-arrow:disabled { opacity: 1; color: var(--dim); border-color: var(--hair); background: var(--panel-solid); pointer-events: none; }
 }
@@ -2261,7 +2264,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .rnd-focus-close:focus-visible,
 .rnd-pager-arrow:focus-visible:not(:disabled),
 .rnd-caption-edit:focus-visible {
-  outline: 2px solid var(--acid); outline-offset: -3px;
+  outline: 2px solid var(--accent); outline-offset: -3px;
 }
 @media (max-width: 640px) { .rnd-focus-stage { inset: 10px; } }
 
@@ -2282,7 +2285,7 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
    bottom of the terminal on mobile, so up is where the room is. */
 .admin-compact { position: relative; display: inline-flex; align-items: center; }
 .admin-open-glyph { font-size: var(--fs-base); padding: 6px 8px; }
-.admin-open-glyph[aria-expanded='true'] { color: var(--acid); border-color: var(--hair); }
+.admin-open-glyph[aria-expanded='true'] { color: var(--accent); border-color: var(--hair); }
 .admin-pop {
   position: absolute; bottom: calc(100% + 14px); right: 0; z-index: 4;
   display: flex; flex-direction: column; align-items: stretch; gap: 10px;
