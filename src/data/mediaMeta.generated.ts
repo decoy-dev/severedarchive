@@ -5,12 +5,12 @@
 export type MediaMeta = { width: number; height: number; durationSec: number }
 
 export const MEDIA_META: Record<string, MediaMeta> = {
-  scary_monsters: { width: 1080, height: 1440, durationSec: 0 },
+
 }
 
 /** The 240p encode's box. Only its aspect ratio matters, and only as a guard. */
 export const THUMB_META: Record<string, { width: number; height: number }> = {
-  scary_monsters: { width: 312, height: 416 },
+
 }
 
 /**
@@ -22,7 +22,7 @@ export const THUMB_META: Record<string, { width: number; height: number }> = {
  * broken frame. This is the field that decides what is rendered.
  */
 export const MEDIA_KIND: Record<string, 'video' | 'photo'> = {
-  scary_monsters: 'photo',
+
 }
 
 /**
@@ -31,5 +31,5 @@ export const MEDIA_KIND: Record<string, 'video' | 'photo'> = {
  * so without this an edited poster stays invisible until the cache expires.
  */
 export const MEDIA_VERSION: Record<string, { full: string; thumb: string; poster: string }> = {
-  scary_monsters: { full: 'd107cca6', thumb: 'f3f020ff', poster: 'baafa1e6' },
+
 }
