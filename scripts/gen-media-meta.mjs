@@ -23,6 +23,10 @@
 //
 // A rendition that is missing its companions is a hard error — that is exactly
 // the silent skip rule 1 is about.
+//
+// Finding no renditions at all is NOT an error: removing the last entry is a
+// legitimate admin action, and refusing to emit the empty maps failed exactly
+// that removal at the "Apply the edit" step, leaving the entry live.
 
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -65,11 +69,6 @@ for (const file of files) {
 }
 
 const ids = [...found.keys()].sort()
-
-if (ids.length === 0) {
-  console.error(`gen-media-meta: no *_full.mp4 or *_full.jpg in ${MEDIA}`)
-  process.exit(1)
-}
 
 /**
  * Width, height and duration of a shipped rendition.

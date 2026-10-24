@@ -29,10 +29,15 @@ export default function ArchiveMobile() {
     [controller],
   )
 
-  const selectedFile = fileById(selectedId) ?? ARCHIVE[0]
-  const index = ARCHIVE.findIndex((f) => f.id === selectedFile.id)
+  // Undefined only when the archive is empty — removing the last entry is a
+  // real admin action, so this surface must survive it.
+  const selectedFile = fileById(selectedId) ?? ARCHIVE.at(0)
+  const index = ARCHIVE.findIndex((f) => f.id === selectedFile?.id)
 
-  const step = (dir: 1 | -1) => select(ARCHIVE[(index + dir + ARCHIVE.length) % ARCHIVE.length].id)
+  const step = (dir: 1 | -1) => {
+    if (ARCHIVE.length === 0) return
+    select(ARCHIVE[(index + dir + ARCHIVE.length) % ARCHIVE.length].id)
+  }
 
   // Swiping left advances, matching the direction the row itself moves.
   const swipe = useSwipe(() => step(1), () => step(-1))
@@ -41,13 +46,27 @@ export default function ArchiveMobile() {
   // rather than from a tap. `nearest` so a tap on a half-visible tile does not
   // yank the row, and inline-only so the page itself is never a scroll target.
   useEffect(() => {
+    if (!selectedFile) return
     const el = tileRefs.current.get(selectedFile.id)
     if (!el || !rowRef.current) return
     const tile = el.getBoundingClientRect()
     const row = rowRef.current.getBoundingClientRect()
     if (tile.left >= row.left && tile.right <= row.right) return
     rowRef.current.scrollBy({ left: tile.left - row.left - (row.width - tile.width) / 2, behavior: 'smooth' })
-  }, [selectedFile.id])
+  }, [selectedFile?.id])
+
+  // Below every hook, so the early return cannot change hook order. The primary
+  // slot is not registered: with nothing to play, the media layer has nowhere
+  // to put anything.
+  if (!selectedFile) {
+    return (
+      <div className="archive-mobile">
+        <div className="primary-meta">
+          <div className="primary-meta-head">&gt; NO FILES INDEXED.</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="archive-mobile">

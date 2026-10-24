@@ -33,9 +33,12 @@ export default function ArchiveExplorer() {
   useEffect(() => { if (openWindows.length > 0) setDashMounted(true) }, [openWindows.length])
   const onShutdownComplete = useCallback(() => setDashMounted(false), [])
 
-  const selectedFile = fileById(selectedId) ?? ARCHIVE[0]
+  // Undefined only when the archive is empty — removing the last entry is a
+  // real admin action, so the readout must survive it.
+  const selectedFile = fileById(selectedId) ?? ARCHIVE.at(0)
 
   const moveSelection = (dir: 1 | -1) => {
+    if (ARCHIVE.length === 0) return
     const i = ARCHIVE.findIndex((f) => f.id === selectedId)
     const next = ARCHIVE[((i < 0 ? 0 : i) + dir + ARCHIVE.length) % ARCHIVE.length]
     select(next.id)
@@ -106,19 +109,23 @@ export default function ArchiveExplorer() {
           />
         ) : (
           <div className="preview-standby" data-preview-standby>
-            <p className="standby-line">&gt; AWAITING SELECTION.</p>
-            <p className="standby-line tw-dim">
-              &gt; PLEASE CHOOSE A SUBJECT FROM THE LIST ON THE RIGHT.
-              <span className="standby-caret" aria-hidden="true" />
-            </p>
-            <div className="preview-meta">
-              <div className="preview-meta-head">
-                {selectedFile.name}<span className="tw-dim">.{selectedFile.ext}</span>
-              </div>
-              <div className="preview-meta-sub tw-dim">
-                {selectedFile.tagline.toUpperCase()} · {formatDuration(selectedFile.durationSec)} · {selectedFile.year} · {formatResolution(selectedFile)}
-              </div>
-            </div>
+            <p className="standby-line">&gt; {selectedFile ? 'AWAITING SELECTION.' : 'NO FILES INDEXED.'}</p>
+            {selectedFile && (
+              <>
+                <p className="standby-line tw-dim">
+                  &gt; PLEASE CHOOSE A SUBJECT FROM THE LIST ON THE RIGHT.
+                  <span className="standby-caret" aria-hidden="true" />
+                </p>
+                <div className="preview-meta">
+                  <div className="preview-meta-head">
+                    {selectedFile.name}<span className="tw-dim">.{selectedFile.ext}</span>
+                  </div>
+                  <div className="preview-meta-sub tw-dim">
+                    {selectedFile.tagline.toUpperCase()} · {formatDuration(selectedFile.durationSec)} · {selectedFile.year} · {formatResolution(selectedFile)}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
