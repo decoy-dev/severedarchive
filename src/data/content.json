@@ -1,12 +1,14 @@
 {
   "about": [
     {
-      "label": "OPERATOR",
-      "body": "SEVEREDARCHIVE"
+      "label": "",
+      "body": "SEVEREDARCHIVE",
+      "big": true
     },
     {
-      "label": "FIELD",
-      "body": "3D Generalist + Art Director"
+      "label": "",
+      "body": "3D Generalist + Art Director",
+      "big": true
     },
     {
       "label": "NAME",
