@@ -3,7 +3,7 @@ import BackgroundVideo from './components/BackgroundVideo'
 import TerminalWindow, { type TabId } from './components/TerminalWindow'
 import ArchivePanel from './components/ArchivePanel'
 import RndPanel from './components/RndPanel'
-import AboutPanel, { preloadAboutObject } from './components/AboutPanel'
+import AboutPanel from './components/AboutPanel'
 import LinksPanel from './components/LinksPanel'
 import CommissionPanel from './components/CommissionPanel'
 import BootSequence from './components/BootSequence'
@@ -141,18 +141,6 @@ function AppShell() {
     [flashBody],
   )
 
-  // The ABOUT object is a 590kB chunk plus an SVG it cannot build without, and
-  // fetching both on the click meant the column sat empty for a beat the first
-  // time. Warmed here instead: after boot, on idle, so it costs the first paint
-  // nothing and the tab is instant when it is finally opened.
-  useEffect(() => {
-    if (!booted) return
-    const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 300))
-    const cancel = window.cancelIdleCallback ?? window.clearTimeout
-    const handle = idle(() => preloadAboutObject(tier))
-    return () => cancel(handle as number)
-  }, [booted, tier])
-
   // The application has exactly one window-level keydown listener and Desktop
   // registers it (§4.6). App only says what a tab shift means.
   const shiftTab = useCallback((dir: 1 | -1) => {
@@ -186,7 +174,7 @@ function AppShell() {
         <Desktop onTabShift={shiftTab} tier={tier}>
           <TerminalWindow tab={tab} onTab={setTab} bodyRef={bodyRef} tier={tier}>
             {tab === 'archive' && <ArchivePanel />}
-            {tab === 'about' && <AboutPanel tier={tier} />}
+            {tab === 'about' && <AboutPanel />}
             {tab === 'links' && (
               <LinksPanel onCommission={openCommission} />
             )}

@@ -364,117 +364,54 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .panel { position: absolute; inset: 0; padding: clamp(16px, 3vw, 32px); overflow: hidden; }
 .panel-block { border: 1px solid var(--hair); padding: 12px 16px; margin-bottom: 12px; max-width: 560px; }
 
-/* ── about: copy left, ASCII object right ──
-   The object is decorative and sized by its column; the copy keeps its own
-   max-width so the two never fight over the same space. */
-.about-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr); gap: clamp(12px, 2.5vw, 32px); align-items: center; }
-/* One column below the split, with the object beneath the copy rather than
-   beside it. It is mounted at every width now; what changes is the shape. */
-.about-panel[data-wide='false'] { grid-template-columns: minmax(0, 1fr); }
-.about-copy { min-width: 0; align-self: start; }
+/* ── about ──
+   The panel is the scroll region, the same arrangement as `.rnd-scroll`. The
+   document still never scrolls; this panel does, and only when it has to.
 
-/* Centre the stack in the panel instead of hanging it from the top.
-   The copy grew — SERVICES is a six-item list where TOOLING was one line — and
-   with the blocks pinned to the top all the slack pooled underneath: 32px above
-   against 140px below at 1440x900, and by 760px tall the last block was already
-   past the bottom edge and clipped by `.panel`'s `overflow: hidden`.
+   It was `.panel`'s `overflow: hidden`, and on a phone that clipped the copy
+   with no way to reach the rest: at 390x844 the owner's ABOUT paragraph ran
+   31px past the bottom of the panel. Scrolling and not tightening, because the
+   copy is the owner's own at the size they set it and has no fixed length —
+   there is no amount of padding that stays enough after their next edit.
 
-   Auto margins rather than the grid's own `align-items: center`, because the
-   copy does not always fit. Auto margins absorb POSITIVE free space and resolve
-   to zero when it is negative, so the stack centres while there is room and
-   top-aligns the moment there is not. Centring outright would push OPERATOR up
-   out of the panel on a short window, and clipping the top of the copy instead
-   of the bottom is not an improvement.
+   `.about-copy` is at least as tall as the panel so the stack has room to
+   centre in (below). The panel is a block container so its bottom padding is
+   part of what scrolls, and the last block never sits flush on the edge. */
+.about-panel { overflow-y: auto; }
+.about-copy { min-height: 100%; display: flex; flex-direction: column; }
 
-   Scoped to the two-column layout: below the split the panel top-aligns on
-   purpose (see the mobile rule) and the rows are content-sized anyway. */
-.about-panel[data-wide='true'] > .about-copy {
-  align-self: stretch; display: flex; flex-direction: column;
-  /* The last resort, below roughly 700px of window: the stack is 431px and the
-     tightening above cannot find another 90px, so under ~700px SERVICES was
-     simply cut off by `.panel`'s `overflow: hidden` — measured 12px gone at
-     700px, 92px at 620px, with no way to reach it.
+/* Centre the stack in the panel instead of hanging it from the top, above the
+   mobile breakpoint (a phone top-aligns, like its other panels). With the
+   blocks pinned to the top all the slack pooled underneath: 32px above against
+   140px below at 1440x900.
 
-     Scrolling and not a third tightening tier, because there is no honest amount
-     of padding left to take: the type would have to shrink, and this is the
-     client's own copy at the size they set it. The document still never scrolls
-     — only this column does, and only when it has to. When the stack fits, the
-     auto margins centre it and no scrollbar appears at all. */
-  min-height: 0; overflow-y: auto;
+   Auto margins rather than `justify-content: center`, because the copy does not
+   always fit. Auto margins absorb POSITIVE free space and resolve to zero when
+   it is negative, so the stack centres while there is room and top-aligns the
+   moment there is not. Centring outright would push OPERATOR up out of the
+   scroll range on a short window — overflow above a scroll container's start
+   cannot be scrolled to. The last block's auto margin also drops its trailing
+   12px, which would otherwise push the whole stack visibly off-centre. */
+@media (min-width: 641px) {
+  .about-copy > .panel-block:first-child { margin-top: auto; }
+  .about-copy > .panel-block:last-child { margin-bottom: auto; }
 }
-.about-panel[data-wide='true'] > .about-copy > .panel-block:first-child { margin-top: auto; }
-/* Also drops the last block's trailing 12px, which would otherwise sit inside
-   the centred box and push the whole stack visibly off-centre. */
-.about-panel[data-wide='true'] > .about-copy > .panel-block:last-child { margin-bottom: auto; }
 
 /* Short windows: reclaim the room the stack is missing.
 
-   Centring alone was not enough. The four blocks and their gaps come to 467px,
-   and a 1512x775 window — a 14" laptop, which is what this gets read on — leaves
-   462px inside the panel. Five pixels short is enough to collapse the auto
-   margins to zero, and SERVICES ends up with 27px under it against 32px over the
-   top of OPERATOR, tightening to 2px by 750px tall.
-
-   The boxes give, not the type: padding and the gaps between blocks come in, and
-   the copy itself is untouched at the size the client set. That buys 36px, which
-   is enough to centre with room to spare across the whole laptop band instead of
-   running out inside it.
+   A 1512x775 window — a 14" laptop, which is what this gets read on — left the
+   stack a few pixels short of fitting, which collapses the auto margins to zero
+   and parks it against the top edge. The boxes give, not the type: padding and
+   the gaps between blocks come in, and the copy itself is untouched at the size
+   the client set.
 
    A height query and not a `vh` clamp, so nothing moves at the heights where
-   there was never a problem — at 900px tall the stack already had 92px above and
-   below, and tightening it there would be a design change nobody asked for. */
-@media (max-height: 820px) {
-  .about-panel[data-wide='true'] > .about-copy > .panel-block {
+   there was never a problem. */
+@media (min-width: 641px) and (max-height: 820px) {
+  .about-copy > .panel-block {
     padding-block: 9px;
     margin-bottom: 8px;
   }
-}
-
-/* Ported from the prototype. The `!important`s are aimed at AsciiEffect's own
-   inline styles, which it writes on its container every resize — a plain rule
-   loses to them. Its `courier new` font declaration is deliberately NOT
-   overridden: the glyph advance is what the character grid is calibrated to,
-   and a branded font changes the sampling width per browser. */
-.ascii-object {
-  position: relative; min-width: 0; height: 100%; min-height: 0;
-  color: var(--accent); background: transparent;
-  /* `layout style`, NOT `strict`. Strict includes PAINT containment, which
-     clips to this box — and the mark is translated to centre itself in the gap
-     between the copy and the panel edge, which is wider than this column. When
-     the copy is narrow that translate is ~160px and the box has ~15px of slack,
-     so paint containment silently clamped it and the mark stayed off to the
-     right no matter what the fit computed. Size containment goes with it: the
-     height comes from the grid, and `strict` was also asserting this element has
-     no intrinsic size, which nothing depends on. */
-  contain: layout style; pointer-events: none;
-}
-.ascii-object > div {
-  position: absolute !important; inset: 0;
-  width: 100% !important; height: 100% !important;
-  /* Visible for the same reason: the glyph block is translated out of this box
-     on purpose when the gap it has to centre in is wider than the column. */
-  overflow: visible;
-  color: inherit !important; background: transparent !important;
-  text-shadow: 0 0 7px color-mix(in srgb, var(--accent) 22%, transparent);
-}
-/* Left-aligned on purpose, or rather unavoidably: AsciiEffect's character grid
-   does not divide the box evenly (measured at 1440px: 561px of columns in a
-   551px box) and the excess is clipped off the right, so the object reads a
-   couple of characters left of centre. It cannot be fixed from here — the
-   overflow is INSIDE this box, so centring the box moves nothing, and
-   `text-align` would centre each glyph row independently and deform the image.
-   The real fix is to hand `effect.setSize` a width that is a whole number of
-   cells, which means knowing the cell width AsciiEffect chose. */
-.ascii-object table { display: block; width: 100%; height: 100%; color: inherit !important; background: transparent !important; }
-.ascii-object td, .ascii-object span { color: inherit !important; background: transparent !important; }
-.ascii-fallback {
-  position: absolute; inset: 50% auto auto 50%; transform: translate(-50%, -50%);
-  width: min(70%, 260px);
-  filter: invert(87%) sepia(94%) saturate(874%) hue-rotate(31deg) brightness(111%);
-  opacity: 0.5;
-}
-@media (prefers-reduced-motion: reduce) {
-  .ascii-object > div { text-shadow: none; }
 }
 /* `margin` and `font-weight` written out, not just `margin-bottom`: the commission
    form uses this class on an `h2` so the panel has a real heading to navigate to,
@@ -1865,11 +1802,6 @@ video { display: block; width: 100%; height: 100%; object-fit: cover; }
   .tw-tab { flex: 1 1 0; text-align: center; padding: 13px 0; border: 0; margin: 0; background: transparent; }
   .tw-tab.is-active { background: color-mix(in srgb, var(--accent) 6%, transparent); }
   .tw-body { order: 2; margin: 10px 10px 0; }
-  /* The object gets the band the copy leaves — measured at 194px on a 390x844
-     phone, so this stays inside it with room to spare. Capped rather than
-     flexible: the page must not scroll, and the copy is the content here. */
-  .about-panel { align-items: start; }
-  .ascii-object { height: min(22vh, 168px); flex: 0 0 auto; }
   /* The primary player takes the room it needs and no more. It was stretching
      to fill a tall column — 179px of video floating in ~500px of empty panel —
      and that height is what pushed the whole terminal down over the wordmark.

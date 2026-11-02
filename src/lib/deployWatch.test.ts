@@ -14,7 +14,7 @@ describe('bundleMarker', () => {
   })
 
   it('ignores the other chunks — only the entry names the deploy', () => {
-    expect(bundleMarker(page('AboutAsciiObject-Csq3T0U2.js'))).toBeNull()
+    expect(bundleMarker(page('AdminPanel-Csq3T0U2.js'))).toBeNull()
   })
 })
 
